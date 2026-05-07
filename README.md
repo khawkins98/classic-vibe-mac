@@ -2,8 +2,8 @@
 
 A GitHub template for building a classic Macintosh app in C and serving it,
 running, in a browser. Push your source. The template compiles it for the 68k
-Mac, packs the binary into an HFS disk image, and (soon) boots it inside
-System 7.5.5 on a WebAssembly Basilisk II.
+Mac, packs the binary into an HFS disk image, and boots it inside System
+7.5.5 on a WebAssembly Basilisk II.
 
 It is, more or less, a 1993 Macintosh that lives at a URL.
 
@@ -27,19 +27,21 @@ It is, more or less, a 1993 Macintosh that lives at a URL.
 
 ## How to use it
 
-A live demo will live at the GitHub Pages URL once the emulator integration
-lands. Until then, run it locally:
+A live demo lives at the GitHub Pages URL once the first CI run finishes
+and Pages is enabled. To run locally:
 
 ```sh
 git clone https://github.com/your-fork/classic-vibe-mac.git
 cd classic-vibe-mac
 npm install
+npm run fetch:emulator   # downloads BasiliskII WASM + Quadra ROM
+bash scripts/build-boot-disk.sh   # builds the bootable System 7.5.5 disk
 npm run dev
 ```
 
-Open `http://localhost:5173`. Today you get the landing page with the
-emulator window stubbed; once the BasiliskII core is wired in, the app
-will boot inside it.
+Open `http://localhost:5173`. The page boots BasiliskII in a Web Worker,
+mounts the boot disk, and the Finder auto-launches Minesweeper from
+`System Folder/Startup Items`.
 
 ## Requirements
 
@@ -70,12 +72,13 @@ log of things we learned the hard way, see [LEARNINGS.md](./LEARNINGS.md).
 
 ## Coming soon
 
-- A working live demo at the GitHub Pages URL.
-- Real Basilisk II integration (the worker is sketched; the canvas is not
-  yet wired).
-- In-browser auto-launch of the user's app at boot. The mechanism is
-  understood (inject into the boot disk's blessed System Folder); the
-  implementation is on the list.
+- The first deployed CI run, which will publish a live demo at the
+  GitHub Pages URL with the real System 7.5.5 boot disk in place. Local
+  boot already works; this is just CI publishing the artifacts.
+- Polish on the period chrome — Chicago/Geneva web fonts, a real rainbow
+  Apple in the menu bar, a sound bite of the startup chime.
+- Stretch: Mac OS 9 / PPC support via SheepShaver and Retro68's PPC
+  toolchain (requires a non-redistributable ROM, complicating things).
 
 ## Credits
 
@@ -95,5 +98,8 @@ Built on the work of others who did the heavy lifting:
 
 ## License
 
-MIT. The vendored emulator core (when added) is Apache-2.0 and carries
-its own NOTICE file.
+MIT for our code. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for the
+attribution stack: BasiliskII (GPL-2.0), Infinite Mac (Apache-2.0),
+Retro68 (MIT-style), System 7.5.5 (Apple's 1998 free-redistribution
+release). When the emulator core ships next to a deploy, its own LICENSE
+and NOTICE files travel with it.
