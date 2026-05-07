@@ -30,6 +30,44 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — End-to-end deploy works; Minesweeper bombs with "unimplemented trap"
+**Context:** First successful deploy to GH Pages with the chunked boot
+disk, fixed `hls` Mac-path bug, BasiliskII coming up cleanly. Took a
+live screenshot.
+**Finding:** The full pipeline runs: page loads, COOP/COEP service
+worker installs, page reloads cross-origin-isolated, BasiliskII
+instantiates, ROM is read, first frame paints, System 7 boots, Finder
+runs through Startup Items and **launches our Minesweeper.bin** — at
+which point a classic Mac bomb dialog appears: "Sorry, a system error
+occurred. unimplemented trap." That's a runtime crash *inside* our
+demo app, not a pipeline problem. The proof is in
+`public/screenshot-deployed.png`.
+**Action:** Documented as the headline TODO on the deployed page and
+in the README. Likely candidates for the bug: (a) a Toolbox call the
+Quadra-650 ROM doesn't implement (we should check
+`TrapAvailable(_WaitNextEvent)` and similar before calling), (b) a
+missing `MoreMasters()` early in `main`, leaving the Memory Manager
+short on master pointers, (c) a `.r` resource ID collision (e.g.
+`SIZE -1` vs Finder defaults), (d) a `GetNewMBar(128)` call returning
+NULL because resources didn't load. Bisecting by ripping minesweeper.c
+down to a "draw a window, sleep on WaitNextEvent" hello-world is the
+fastest way to localise this — out of scope for the overnight session,
+queued for follow-up.
+
+### 2026-05-08 — `hls /` is wrong; hfsutils takes Mac-style paths
+**Context:** The first deployed build's boot disk step was failing
+silently — the `|| {` guard around `build-boot-disk.sh` swallowed an
+exit-1 and the chunked manifest never got written, so the loader
+stayed in STUB mode on Pages.
+**Finding:** `hls -a /` returns "no such file or directory" because
+hfsutils paths are Mac-style — the volume root after `hmount` is `:`
+or the empty string, NOT `/`. `/` is interpreted as a path on the
+SCSI device's namespace and resolves to nothing.
+**Action:** Dropped the leading `/` on both `hls -a` calls in the
+sanity-check block of `scripts/build-boot-disk.sh`. The next deploy
+emitted `dist/system755-vibe.dsk.json` + 96 chunks and the loader
+fetched them cleanly.
+
 ### 2026-05-08 — BasiliskII WASM init contract: ported, boots
 **Context:** Following up the previous "init contract is huge" entry —
 actually doing the port. Goal was a minimum-viable shim that drives the
