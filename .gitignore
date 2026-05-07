@@ -18,3 +18,12 @@ Makefile
 
 # macOS
 .DS_Store
+
+# Test artifacts
+test-results/
+test-results-visual/
+playwright-report/
+playwright/.cache/
+tests/unit/test_minesweeper
+tests/unit/*.dSYM/
+
