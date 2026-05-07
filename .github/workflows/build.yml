@@ -25,6 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Install hfsutils into the Retro68 container so scripts/build-disk-image.sh
+      # can produce our custom app.dsk. The Retro68 image is Debian-based and runs
+      # as root in GH Actions (no sudo needed / available). hfsutils is the classic
+      # HFS toolkit (hformat/hmount/hcopy); do NOT substitute hfsprogs — that is
+      # HFS+ and Basilisk II / classic Mac OS cannot read it (see LEARNINGS.md).
+      - name: Install hfsutils
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends hfsutils
+
       - name: Configure (CMake + Retro68 toolchain)
         run: |
           cmake -S src/app -B build \
@@ -43,6 +53,17 @@ jobs:
           test -s build/Minesweeper.bin
           test -s build/Minesweeper.dsk
 
+      # Pack the compiled MacBinary into our own HFS disk image. Feeds the
+      # .bin (MacBinary, both forks intact) — NOT the .APPL (data-fork-only,
+      # frequently 0 bytes for resource-only apps). hcopy -m inside the script
+      # decodes MacBinary back into a real two-fork HFS file on the volume.
+      - name: Build custom app.dsk (HFS disk image with Startup Items)
+        run: |
+          mkdir -p dist
+          ./scripts/build-disk-image.sh build/Minesweeper.bin dist/app.dsk
+          ls -la dist/
+          test -s dist/app.dsk
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -51,16 +72,14 @@ jobs:
             build/Minesweeper.bin
             build/Minesweeper.dsk
             build/Minesweeper.APPL
+            dist/app.dsk
           if-no-files-found: error
           retention-days: 14
 
 # TODO — remaining pipeline steps from PRD.md, to be wired up by follow-up PRs:
-#   1. Run scripts/build-disk-image.sh on the compiled binary to produce a
-#      custom HFS app.dsk with the binary placed in `System Folder/Startup
-#      Items/` so it auto-launches at boot. (owner: build-disk-image agent)
-#   2. Build the stripped Infinite Mac frontend in src/web/ with Vite,
+#   1. Build the stripped Infinite Mac frontend in src/web/ with Vite,
 #      embedding the path to app.dsk in the emulator config. (owner: web agent)
-#   3. Co-locate app.dsk into the Vite dist/ output.
-#   4. Deploy dist/ to GitHub Pages (likely via actions/deploy-pages on a
+#   2. Co-locate app.dsk into the Vite dist/ output.
+#   3. Deploy dist/ to GitHub Pages (likely via actions/deploy-pages on a
 #      separate `deploy` job that depends on this one and only runs on the
 #      default branch).

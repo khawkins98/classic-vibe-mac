@@ -100,17 +100,21 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   — Retro68 has not published a release tarball since 2019, and the rolling
   Docker image is the maintained distribution channel (see LEARNINGS.md).
 - Steps:
-  1. Compile C → Mac binary using CMake + Retro68 toolchain
+  1. `apt-get install -y hfsutils` into the container (Debian-based, runs as
+     root in GH Actions). Note: `hfsutils` is HFS, NOT `hfsprogs` (HFS+).
+  2. Compile C → Mac binary using CMake + Retro68 toolchain
      (`/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake`
      inside the container)
-  2. Create HFS disk image using `hfsutils` (`hcopy -m` preserves resource
-     forks via MacBinary)
-  3. Copy binary into disk image (placement depends on the auto-launch
-     approach chosen — see the Auto-launch goal above)
-  4. Output: `app.dsk`
-- Artifact validation: `.bin` and `.dsk` are sanity-checked with `test -s`;
-  Retro68's `.APPL` artifact is sometimes 0 bytes and is excluded from
-  release uploads (see LEARNINGS.md).
+  3. Create HFS disk image via `scripts/build-disk-image.sh`, which uses
+     `hfsutils` (`hcopy -m` preserves resource forks via MacBinary). Input is
+     the Retro68 `.bin` (MacBinary); output is `dist/app.dsk` with the app
+     placed under `Startup Items/` on the volume (placement is structurally
+     correct for a future bootable-disk pivot — see the Auto-launch goal).
+  4. Output: `dist/app.dsk` (uploaded as part of the workflow artifact
+     alongside Retro68's own `.bin`/`.dsk`/`.APPL`).
+- Artifact validation: `.bin`, `.dsk`, and our custom `dist/app.dsk` are
+  sanity-checked with `test -s`; Retro68's `.APPL` artifact is sometimes 0
+  bytes and is excluded from release uploads (see LEARNINGS.md).
 
 ### 3. Web Execution Layer (`src/web/`)
 - **Vite + TypeScript** (vanilla TS, no React for now — the original PRD

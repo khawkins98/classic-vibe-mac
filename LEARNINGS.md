@@ -30,6 +30,43 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Chicago web font: no clean CDN, fall back to a stack
+**Context:** Building the landing page chrome to feel period-authentic. The
+role brief suggested ChicagoFLF (GPL) or "Chikarego" as the header font.
+**Finding:** ChicagoFLF is real and GPL-licensed, but there is no canonical
+CDN that serves it — the usual sources are personal GitHub repos and
+abandonware archives, none of them pinnable in good conscience for a
+template that other people will fork. Chikarego is similarly hosted in
+fragmented places. Loading either properly means vendoring the .woff2 plus
+its LICENSE/NOTICE into `src/web/public/fonts/`.
+**Action:** For now we punt: `src/web/src/style.css` uses
+`"Chicago", "ChicagoFLF", "Charcoal", "Geneva", -apple-system, ...`. Visitors
+who happen to have Chicago installed locally see it; everyone else gets
+Geneva, Helvetica, or the system sans. If we want the period look
+guaranteed, the next step is to vendor a GPL-clean Chicago `.woff2` under
+`src/web/public/fonts/` with a `LICENSE.txt` alongside, and wire an
+`@font-face` rule. Logged so we don't accidentally pull a shady CDN copy
+later.
+
+### 2026-05-08 — Installing hfsutils inside the Retro68 container
+**Context:** Wiring `scripts/build-disk-image.sh` into `.github/workflows/build.yml`
+as a follow-on step to the CMake build. The script needs `hformat`/`hmount`/
+`hcopy` from the `hfsutils` Debian package, which is not preinstalled in
+`ghcr.io/autc04/retro68:latest`.
+**Finding:** The Retro68 image is Debian-based and the GH Actions job runs as
+root inside the container, so plain `apt-get update && apt-get install -y
+hfsutils` works — no `sudo` (sudo isn't even installed) and no extra repos
+required. `hfsutils` is in Debian main. The package is small (≈100KB) so the
+install adds negligible CI time. Critically, do NOT install `hfsprogs`
+instead — that's HFS+ tooling (`mkfs.hfs` there builds HFS+), and Basilisk
+II / classic Mac OS through 8.0 only read HFS. Mounting an HFS+ image
+silently fails on the emulator side.
+**Action:** Added an "Install hfsutils" step in `build.yml` before the CMake
+configure step, with an inline comment calling out the hfsutils-vs-hfsprogs
+trap. The disk-image step itself runs `./scripts/build-disk-image.sh
+build/Minesweeper.bin dist/app.dsk` after the build, and `dist/app.dsk` is
+appended to the existing workflow artifact alongside the Retro68 outputs.
+
 ### 2026-05-07 — Retro68 distribution: Docker image, not tarballs
 **Context:** Setting up CI to cross-compile a Mac 68k app. PRD suggested either
 prebuilt Retro68 tarballs or a Docker image; we needed to pick one.
