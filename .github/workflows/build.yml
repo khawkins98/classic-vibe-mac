@@ -1,0 +1,20 @@
+# TODO: CI/CD pipeline
+# Steps:
+#   1. Pull Retro68 Docker image
+#   2. Compile src/app/ → Mac 68k binary
+#   3. Run scripts/build-disk-image.sh → app.dsk
+#   4. Build src/web/ with Vite
+#   5. Deploy dist/ to gh-pages branch
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: echo "Pipeline not yet implemented — see PRD.md"
