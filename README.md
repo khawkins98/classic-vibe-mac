@@ -7,9 +7,19 @@ Mac, packs the binary into an HFS disk image, and boots it inside System
 
 It is, more or less, a 1993 Macintosh that lives at a URL.
 
+## Live at
+
+**https://khawkins98.github.io/classic-vibe-mac/**
+
 ## What it looks like
 
-![System 7 desktop with the Macintosh emulator window and Read Me window open over a pinstripe desktop, classic menu bar at the top.](public/screenshot.png)
+![Live deployed page: System 7 desktop chrome around the BasiliskII emulator window. System 7 has booted, Minesweeper has auto-launched from Startup Items, and a classic Mac bomb dialog is open showing 'unimplemented trap' — a runtime bug in the demo app, not the pipeline.](public/screenshot-deployed.png)
+
+The screenshot above is the deployed page right now: the full pipeline
+runs, BasiliskII boots, the Finder auto-launches our Minesweeper from
+`System Folder/Startup Items`, and we hit a Toolbox trap the ROM
+doesn't implement (a runtime bug to debug). The chrome is real, the
+boot is real, the auto-launch is real — the app is what needs fixing.
 
 ## What it does
 
@@ -72,11 +82,13 @@ log of things we learned the hard way, see [LEARNINGS.md](./LEARNINGS.md).
 
 ## Coming soon
 
-- The first deployed CI run, which will publish a live demo at the
-  GitHub Pages URL with the real System 7.5.5 boot disk in place. Local
-  boot already works; this is just CI publishing the artifacts.
-- Polish on the period chrome — Chicago/Geneva web fonts, a real rainbow
-  Apple in the menu bar, a sound bite of the startup chime.
+- Debug the "unimplemented trap" bomb the demo app hits right after
+  the Finder launches it. The pipeline is wired; the bug is in the C
+  code or the SIZE/MBAR/WIND resources. Likely candidates: a Toolbox
+  call the Quadra-650 ROM doesn't implement, a missing `MoreMasters`,
+  or a resource ID collision.
+- Polish on the period chrome — Chicago/Geneva web fonts, a real
+  rainbow Apple in the menu bar, the startup chime.
 - Stretch: Mac OS 9 / PPC support via SheepShaver and Retro68's PPC
   toolchain (requires a non-redistributable ROM, complicating things).
 

@@ -97,7 +97,7 @@ root.innerHTML = /* html */ `
         A GitHub template for building a classic Macintosh app in C and
         serving it, running, in a browser. Push your source. The template
         cross-compiles it for the 68k Mac, packs the binary into an HFS
-        disk image, and (soon) boots it inside System&nbsp;7.5.5 on a
+        disk image, and boots it inside System&nbsp;7.5.5 on a
         WebAssembly Basilisk&nbsp;II.
       </p>
       <p>
@@ -112,9 +112,9 @@ root.innerHTML = /* html */ `
         <li>Packs the binary into a small HFS disk image with
           <code>hfsutils</code>.</li>
         <li>Hosts a Vite + TypeScript page that mounts Basilisk&nbsp;II
-          (Apache-2.0, via
-          <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>)
-          and boots System&nbsp;7.5.5.</li>
+          (GPL-2.0, vendored from
+          <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>'s
+          Apache-2.0 build) and boots System&nbsp;7.5.5.</li>
         <li>Three-layer testing: host C unit tests, Playwright end-to-end,
           and AI vision assertions on canvas screenshots.</li>
       </ul>
