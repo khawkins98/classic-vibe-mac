@@ -9,10 +9,7 @@ It is, more or less, a 1993 Macintosh that lives at a URL.
 
 ## What it looks like
 
-<!-- TODO: replace with a real screenshot once the emulator is wired up.
-     Suggested capture: System 7 desktop, Read Me window open, our app
-     window in the foreground. Save to public/screenshot.png. -->
-![Screenshot placeholder](public/screenshot.png)
+![System 7 desktop with the Macintosh emulator window and Read Me window open over a pinstripe desktop, classic menu bar at the top.](public/screenshot.png)
 
 ## What it does
 
