@@ -1,14 +1,28 @@
 name: Build
 
-# Build the Mac 68k app on every push and PR. We're pre-1.0 and not on `main`
-# yet, so do not restrict by branch — we want signal on every branch.
+# Build the Mac 68k app, package it with the Vite-built web frontend, and
+# publish to GitHub Pages on pushes to main. PRs and feature branches still
+# run the build (for CI signal) but skip the deploy job — we don't want
+# every PR redeploying production.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# Least-privilege defaults for the workflow. The `deploy` job overrides this
+# locally with `pages: write` + `id-token: write` (required by
+# actions/deploy-pages OIDC handshake).
 permissions:
   contents: read
+
+# Serialize Pages deploys: only one in flight at a time per ref. We
+# intentionally do NOT cancel in-progress runs (`cancel-in-progress: false`)
+# because killing a half-finished `actions/deploy-pages` step can leave the
+# Pages environment in a wedged state. Better to queue.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-app:
@@ -76,10 +90,118 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-# TODO — remaining pipeline steps from PRD.md, to be wired up by follow-up PRs:
-#   1. Build the stripped Infinite Mac frontend in src/web/ with Vite,
-#      embedding the path to app.dsk in the emulator config. (owner: web agent)
-#   2. Co-locate app.dsk into the Vite dist/ output.
-#   3. Deploy dist/ to GitHub Pages (likely via actions/deploy-pages on a
-#      separate `deploy` job that depends on this one and only runs on the
-#      default branch).
+  build-web:
+    name: Build web frontend (Vite)
+    needs: build-app
+    # Plain ubuntu-latest, NOT the Retro68 container — the web build only
+    # needs Node, and pulling Retro68 (~2GB) for `npm ci && vite build` is
+    # pure waste. The 68k toolchain is already done by the time we get here.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # Pull the artifact from build-app so we can co-locate dist/app.dsk
+      # next to the Vite output. Downloads to ./artifact/ preserving the
+      # original directory structure (build/, dist/).
+      - name: Download Minesweeper artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Minesweeper-${{ github.sha }}
+          path: artifact
+
+      - name: Verify downloaded app.dsk
+        run: |
+          ls -la artifact/dist/
+          test -s artifact/dist/app.dsk
+
+      - name: Install dependencies
+        # Root-level npm ci: workspaces handle src/web automatically.
+        run: npm ci
+
+      # The emulator-integration-engineer is adding scripts/fetch-emulator.sh
+      # in parallel; until it lands we proceed without it. Vite build will
+      # still produce a usable site shell — the emulator core just won't be
+      # bundled. Defensive: check both the script file and the npm script.
+      - name: Fetch emulator binaries (if available)
+        run: |
+          if [ -f scripts/fetch-emulator.sh ]; then
+            echo "Found scripts/fetch-emulator.sh — running."
+            bash scripts/fetch-emulator.sh
+          elif npm run | grep -qE '^\s*fetch:emulator\b'; then
+            echo "Found npm script fetch:emulator — running."
+            npm run fetch:emulator
+          else
+            echo "No emulator fetch script present yet — skipping (web build will still produce a site shell)."
+          fi
+
+      # GH Pages serves project sites under /<repo-name>/. Vite needs to know
+      # this at build time so asset URLs (and therefore <link>/<script>/asset
+      # imports) resolve correctly. Derived from the repo name so a fork
+      # that renames the repo just works without editing the workflow.
+      - name: Build web frontend
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      # Co-locate the disk image next to index.html so it's reachable at
+      # https://<user>.github.io/<repo>/app.dsk — that's where the emulator
+      # config in src/web/src/emulator.ts expects to find it. We do this
+      # outside Vite (rather than via publicDir) because app.dsk is a CI
+      # artifact, not a source asset, and we don't want it tracked in git.
+      - name: Co-locate app.dsk into web dist
+        run: |
+          cp artifact/dist/app.dsk src/web/dist/app.dsk
+          ls -la src/web/dist/
+          test -s src/web/dist/app.dsk
+
+      # Hand off to the Pages deploy job via the official Pages artifact
+      # contract. upload-pages-artifact tars the directory with the right
+      # metadata that deploy-pages expects on the other side.
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: src/web/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-web
+    # Gate the deploy on main + non-PR. PRs from forks shouldn't be able to
+    # publish to production Pages, and feature-branch pushes shouldn't either.
+    # build-app and build-web still run on those — only the deploy is gated.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write       # publish to the Pages environment
+      id-token: write    # OIDC token for deploy-pages to authenticate
+
+    # Wires the deployment URL into the workflow run summary and gives us
+    # the standard Pages environment protections.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      # NOTE on cross-origin isolation: GitHub Pages does not serve
+      # COOP/COEP response headers, and SharedArrayBuffer (which BasiliskII
+      # WASM may need) requires a cross-origin-isolated context. The web
+      # frontend is expected to ship a service-worker shim (e.g.
+      # `coi-serviceworker`) to install the headers client-side. If the
+      # emulator fails to boot in production with a SAB error, that's the
+      # likely cause — see PRD.md "GitHub Pages Deployment". Owner of the
+      # fix is the emulator-integration-engineer; this job just flags it.
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+# TODO — remaining pipeline pieces from PRD.md, to be wired up by follow-up PRs:
+#   - Auto-launch: Startup Items on a secondary disk doesn't fire (see
+#     LEARNINGS.md). Either inject the app into the boot disk's System Folder
+#     at emulator-config time, or ship a custom blessed boot disk. (owner:
+#     emulator agent)

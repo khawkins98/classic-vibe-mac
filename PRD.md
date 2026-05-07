@@ -70,7 +70,7 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 │     └─ place binary in Startup Items                    │
 │  4. Build web frontend (Vite)                           │
 │     └─ embed app.dsk path in config                     │
-│  5. Deploy to gh-pages branch                           │
+│  5. Deploy via actions/deploy-pages (Pages env)         │
 └───────────────┬─────────────────────────────────────────┘
                 │ static files
                 ▼
@@ -166,10 +166,25 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   `npm run test:visual`.
 
 ### 4. GitHub Pages Deployment
-- Vite builds static output to `dist/`
-- `app.dsk` co-located in `dist/`
-- GitHub Actions pushes `dist/` to `gh-pages` branch
-- No server-side code needed (pure static)
+- Vite builds static output to `src/web/dist/` with `VITE_BASE=/<repo-name>/`
+  so asset URLs resolve under the project Pages subpath.
+- The CI-built `app.dsk` is copied into `src/web/dist/app.dsk` after Vite
+  runs, so it sits next to `index.html` and is served from the same base URL
+  as the rest of the site.
+- Deploy is via the official GitHub-hosted actions
+  (`actions/upload-pages-artifact` + `actions/deploy-pages`), NOT the older
+  `gh-pages`-branch / `peaceiris/actions-gh-pages` pattern. The Pages
+  environment is gated to `main` + non-PR; PRs run the build for CI signal
+  but never publish to production.
+- **Cross-origin isolation caveat:** GitHub Pages does NOT serve `COOP`/`COEP`
+  response headers, and BasiliskII WASM requires a cross-origin-isolated
+  context for `SharedArrayBuffer`. The web layer is expected to ship a
+  service-worker shim (e.g. `coi-serviceworker`, or the equivalent Vite
+  plugin) that intercepts navigations and installs the headers client-side.
+  If we ever hit a hard wall on this, fallback hosts that DO let us set
+  response headers are Cloudflare Pages (`_headers` file) or
+  Netlify (`netlify.toml`). Owner of the fix is the web/emulator agent;
+  the build pipeline only flags it at the deploy boundary.
 
 ---
 

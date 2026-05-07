@@ -30,6 +30,45 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — GitHub Pages can't set COOP/COEP; SAB needs a service-worker shim
+**Context:** Wiring the GH Pages deploy job for the Vite-built web frontend.
+BasiliskII WASM needs `SharedArrayBuffer`, which the browser only exposes
+in a cross-origin-isolated context (requires the response to carry
+`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: require-corp`).
+**Finding:** GitHub Pages serves a fixed set of headers and offers no way
+to configure custom response headers — there's no `_headers` file equivalent,
+no `web.config`, nothing. Confirmed by the long-running
+`isaacs/github` Pages issues and several upstream Emscripten threads. Vite's
+own dev server sets the headers (see `src/web/vite.config.ts`), so it works
+locally; production breaks silently when the emulator tries to allocate a
+`SharedArrayBuffer`.
+**Action:** Workaround is `coi-serviceworker` — a tiny service worker that
+re-fetches the page and injects the COOP/COEP headers on the way back, so
+the second load is cross-origin-isolated. There's a Vite plugin wrapper. The
+emulator-integration-engineer owns wiring it in; the build pipeline only
+flags the constraint via an inline comment in the deploy job and a note in
+PRD.md Component 4. If coi-serviceworker proves flaky, fallback is to host
+on Cloudflare Pages (`_headers` file) or Netlify (`netlify.toml`) — both let
+you set arbitrary response headers, GH Pages can't.
+
+### 2026-05-08 — Use the official Pages actions, not gh-pages branch pushes
+**Context:** PRD originally said "deploy to gh-pages branch." Decision point
+on which deploy mechanism to use.
+**Finding:** GitHub now ships first-party
+`actions/upload-pages-artifact` + `actions/deploy-pages` actions that
+publish via the Pages "environment" (not via a long-lived branch). They
+handle the OIDC handshake, surface the deploy URL on the run summary, and
+play nicely with environment protection rules. The third-party
+`peaceiris/actions-gh-pages` and the npm `gh-pages` package are both still
+common but require either a PAT or write access to a `gh-pages` branch and
+miss the environment integration.
+**Action:** Use the official actions in `.github/workflows/build.yml`. Repo
+must have Pages enabled with "Source: GitHub Actions" in the repo settings —
+this is a one-time manual step per fork. Document this in README when the
+template-polish milestone lands. Concurrency group `pages-${{ github.ref }}`
+with `cancel-in-progress: false` to avoid wedging deploy-pages mid-publish.
+
 ### 2026-05-08 — Chicago web font: no clean CDN, fall back to a stack
 **Context:** Building the landing page chrome to feel period-authentic. The
 role brief suggested ChicagoFLF (GPL) or "Chikarego" as the header font.
