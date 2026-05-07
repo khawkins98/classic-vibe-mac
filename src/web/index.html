@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>classic-vibe-mac</title>
+    <meta
+      name="description"
+      content="A GitHub template that compiles a classic Mac OS app from C and runs it in your browser."
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+    <!--
+      coi-serviceworker (MIT, gzuidhof/coi-serviceworker) — installs a
+      service worker that re-issues navigation responses with the
+      Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy
+      headers BasiliskII WASM needs for SharedArrayBuffer. GitHub Pages
+      cannot set those response headers itself; the SW shim is the
+      documented workaround. Vite dev sets the headers at the server
+      level (see vite.config.ts), so this is a no-op there.
+
+      Important: this MUST be loaded BEFORE the app script. The first
+      visit registers the SW and the page is reloaded once with the
+      headers in place — that's when crossOriginIsolated becomes true.
+    -->
+    <script src="./coi-serviceworker.min.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -10,11 +10,27 @@ node_modules/
 .env
 .env.local
 
-# Retro68 / CMake
+# Retro68 / CMake (in-source build leftovers; out-of-source build/ is
+# already covered above)
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+# but our hand-written test Makefile is real source and must be tracked
+!tests/unit/Makefile
+
+# Cache for the upstream System 7.5.5 image downloaded by
+# scripts/build-boot-disk.sh — never committed.
+.cache/
 
 # macOS
 .DS_Store
+
+# Test artifacts
+test-results/
+test-results-visual/
+playwright-report/
+playwright/.cache/
+tests/unit/test_minesweeper
+tests/unit/*.dSYM/
+
