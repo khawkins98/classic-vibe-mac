@@ -134,21 +134,57 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   bytes and is excluded from release uploads (see LEARNINGS.md).
 
 ### 3. Web Execution Layer (`src/web/`)
-- **Vite + TypeScript** (vanilla TS, no React for now — the original PRD
-  mention of React was speculative; we don't need a framework to mount one
-  emulator).
-- Uses pre-built `BasiliskII.wasm` from Infinite Mac. Infinite Mac does **not**
-  ship WASM via GitHub Releases or a documented CDN — the emulator cores live
-  committed at `src/emulator/worker/emscripten/` on `main` (see LEARNINGS.md).
-  Plan: a build-time fetch script pinning a specific Infinite Mac commit SHA
-  and pulling `BasiliskII.wasm`/`.js` via `raw.githubusercontent.com`.
-  Apache-2.0 license — redistribution OK with NOTICE preserved.
-- Configured to:
-  - Load base System 7.5.5 disk from Infinite Mac's CDN
-  - Mount our custom `app.dsk` as a second drive
-  - Boot and trigger our app (mechanism TBD — see Auto-launch goal)
+- **Vite + TypeScript** (vanilla TS, no framework). Page chrome is a
+  hand-rolled System 7 desktop (menu bar + windowed Read Me + a
+  "Macintosh" window where the emulator mounts), styled to period in
+  `src/web/src/style.css`.
+- Uses pre-built `BasiliskII.js` + `BasiliskII.wasm` from Infinite Mac.
+  The cores live committed at `src/emulator/worker/emscripten/` on
+  `main` — there's no GitHub Release or documented CDN. We pin a
+  specific Infinite Mac commit SHA and download via
+  `raw.githubusercontent.com` at build time in
+  `scripts/fetch-emulator.sh`, with size + SHA-256 verification per
+  file. Outputs land in `src/web/public/emulator/` (gitignored). License
+  posture: Infinite Mac glue is Apache-2.0 but the compiled BasiliskII
+  core itself is **GPL-2.0** from `mihaip/macemu` — the script vendors
+  both LICENSE files alongside a NOTICE that pins the upstream commit
+  (see LEARNINGS.md 2026-05-08). Run from the repo root:
+  `npm run fetch:emulator`.
+- Boot lifecycle is owned by `src/web/src/emulator-loader.ts`:
+  1. Renders a period-styled progress bar inside `#emulator-canvas-mount`
+     (the mount lives inside the marketer's `.inset` window).
+  2. Fetches `BasiliskII.js` and `BasiliskII.wasm` with streaming
+     progress.
+  3. HEAD-checks `app.dsk` (404 tolerated for fresh forks).
+  4. **Currently stubs the actual boot** because the System 7.5.5 boot
+     disk has no public single-file URL — Infinite Mac's worker consumes
+     a build-generated chunked-disk JSON manifest backed by a private
+     R2 bucket, with no documented public schema (see LEARNINGS.md
+     2026-05-08, "Boot disk plumbing"). The loader cleanly enters a
+     STUB phase that keeps the chrome visually complete and surfaces
+     the blocker. Once unblocked (recommended path: self-host a chunked
+     manifest of System 7.5.5 under GH Pages), the same loader will
+     instantiate the BasiliskII Emscripten Module, attach the canvas,
+     and wire input via `emulator-input.ts`.
+- Configured via `src/web/src/emulator-config.ts` (typed):
+  - `coreUrl` / `wasmUrl` — Vite-base-relative paths to the vendored
+    core.
+  - `bootDiskUrl` — `null` until chunked-disk plumbing exists.
+  - `appDiskUrl` — `${BASE_URL}app.dsk`, dropped next to `index.html`
+    by CI.
+  - `screen` — emulator native resolution (defaults to 640×480).
+- **SharedArrayBuffer / cross-origin isolation:** the Vite dev server
+  sets `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` itself. GitHub Pages
+  cannot set custom response headers, so the production deploy plans to
+  ship the ~3KB MIT-licensed `coi-serviceworker` polyfill (registers a
+  SW that re-issues navigations with the headers attached). Not yet
+  wired — only needed once the boot disk is unstubbed and the worker
+  actually allocates SAB. Fallback: BasiliskII can run with
+  `jsfrequentreadinput=false` (service-worker-mediated input passing,
+  no SAB required, slower input).
 - Strips out Infinite Mac's library browser, multi-OS selector, settings
-  panes, etc.
+  panes — our loader is single-purpose.
 - Dev server: `npm run dev` from the repo root (npm workspaces).
 
 ### 4. Testing (`tests/`)
@@ -192,12 +228,14 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 | Risk | Mitigation |
 |------|-----------|
-| Infinite Mac CDN for OS disk may have CORS issues from GH Pages | Test early; fallback: bundle a freely redistributable System 7 image |
+| **No public URL for System 7.5.5 boot disk** (actual blocker, found 2026-05-08) | Self-host a chunked manifest generated from a System 7.5.5 ISO via Infinite Mac's `scripts/import-disks.py`, served from GH Pages alongside `app.dsk`. Apple released 7.5.5 freely, so licensing is OK. ~150MB of small files, well within Pages limits. See LEARNINGS.md. |
 | Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well |
 | HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners) |
-| BasiliskII WASM file size (~10MB+) may be slow to load on GH Pages | Compress with Brotli; Vite handles this |
-| Startup Items auto-launch reliability | Test on System 7.5.5; fallback: use Extensions or user instruction |
-| ROM licensing | We don't bundle ROMs — BasiliskII needs one but Infinite Mac CDN supplies it via their existing setup |
+| BasiliskII WASM file size (1.7MB at the pinned Infinite Mac commit; smaller than original PRD assumed) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |
+| GitHub Pages can't set COOP/COEP for SharedArrayBuffer | Ship `coi-serviceworker` polyfill (MIT, ~3KB) registered from `index.html`. Fallback host is Cloudflare Pages or Netlify if the SW shim breaks. |
+| Startup Items auto-launch reliability | Test on System 7.5.5; fallback: inject the app into the boot disk's System Folder at config time, or ship a custom blessed boot disk. |
+| ROM licensing | We don't bundle ROMs — Infinite Mac's chunked boot disk includes the ROM used by BasiliskII via their existing setup. Self-hosting (above) inherits this property. |
+| BasiliskII core is GPL-2.0 (not Apache-2.0 as originally stated) | NOTICE file pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
 
 ---
 

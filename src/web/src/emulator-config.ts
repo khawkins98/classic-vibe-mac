@@ -1,42 +1,52 @@
 /**
- * Emulator configuration — what the (not-yet-wired) BasiliskII loader will use.
+ * Emulator configuration — typed shape consumed by emulator-loader.ts.
  *
- * Why this lives in its own file: the actual loader implementation will be
- * imported lazily once we've pulled in the Infinite Mac worker code, but the
- * config shape is stable and lets the build pipeline + CI reason about which
- * files need to be present in `dist/`.
+ * Files referenced here are placed by `scripts/fetch-emulator.sh` (binaries)
+ * and by the build pipeline (app.dsk, copied from `dist/app.dsk` next to
+ * `index.html` post-`vite build`). Everything is served as static GH Pages
+ * assets at the Vite `base` path.
  *
- * Next steps to make this real:
- *   1. Add a build script (e.g. scripts/fetch-emulator-core.sh) that pulls
- *      `BasiliskII.wasm` and `BasiliskII.js` from
- *      raw.githubusercontent.com/mihaip/infinite-mac/main/src/emulator/worker/emscripten/
- *      into `src/web/public/emulator/` (so Vite serves them as static assets).
- *      Pin a commit SHA, not `main`, once we know the version we want.
- *   2. Port the minimal slice of Infinite Mac's `emulator-ui.ts` /
- *      `emulator-worker.ts` we need to drive BasiliskII. Strip CD-ROM,
- *      library browser, etc. Keep the Apache-2.0 LICENSE + NOTICE.
- *   3. Wire SharedArrayBuffer / cross-origin isolation for GitHub Pages —
- *      Pages can't set headers, so we'll need a coi-serviceworker shim.
- *   4. Replace the placeholder render in `main.ts` with the real <canvas>
- *      mount and the worker bootstrap.
+ * The boot disk is the messy one. See the long comment on `bootDiskUrl`.
  */
 export interface EmulatorConfig {
-  /** Where the BasiliskII core lives once fetched/copied into dist/. */
-  emulatorCoreUrl: string;
-  emulatorJsUrl: string;
-  /** System 7.5.5 boot disk — served from Infinite Mac's existing infra. */
-  bootDiskUrl: string;
-  /** Our custom app disk produced by scripts/build-disk-image.sh. */
+  /** BasiliskII Emscripten loader (.js). Sibling-loads the .wasm. */
+  coreUrl: string;
+  /** BasiliskII WebAssembly module. */
+  wasmUrl: string;
+  /**
+   * Boot disk for System 7.5.5.
+   *
+   * Open question / blocker (see LEARNINGS.md 2026-05-08):
+   * Infinite Mac does NOT serve a single-file System 7.5.5 disk. Their
+   * worker.ts loads a *chunked* disk via a JSON manifest at build time
+   * (e.g. `@/Data/System 7.5.5 HD.dsk.json`), with the binary chunks
+   * served from a private Cloudflare R2 bucket bound to system7.app etc.
+   * That manifest is build-generated and not committed; the chunk URLs
+   * have no documented public schema.
+   *
+   * Until we either (a) host our own chunked manifest+blobs, or (b)
+   * negotiate / replicate a public URL pattern with mihaip, this URL
+   * will resolve to nothing and the loader will fall back to its
+   * "stub" mode (loader UI shows but emulator does not boot). The
+   * mount point preserved here is what we'd point at once unblocked.
+   */
+  bootDiskUrl: string | null;
+  /** Our generated app.dsk (HFS, ~1MB) — sits next to index.html. */
   appDiskUrl: string;
+  /** Logical screen size for the emulated Mac. 512x342 = original Mac. */
+  screen: { width: number; height: number };
 }
 
+// import.meta.env.BASE_URL is the Vite `base` setting at build time, e.g.
+// "/classic-vibe-mac/" on GH Pages and "/" in dev. Always trailing slash.
+const BASE = import.meta.env.BASE_URL;
+
 export const emulatorConfig: EmulatorConfig = {
-  emulatorCoreUrl: "./emulator/BasiliskII.wasm",
-  emulatorJsUrl: "./emulator/BasiliskII.js",
-  // TODO: confirm the exact public URL Infinite Mac serves the System 7.5.5
-  // chunked disk manifest from. If CORS blocks GitHub Pages -> infinitemac.org
-  // requests, fall back to bundling a freely-redistributable System 7 image
-  // ourselves (per PRD risk table).
-  bootDiskUrl: "https://infinitemac.org/disks/system-7.5.5.json",
-  appDiskUrl: "./app.dsk",
+  coreUrl: `${BASE}emulator/BasiliskII.js`,
+  wasmUrl: `${BASE}emulator/BasiliskII.wasm`,
+  // Intentionally null until the chunked-disk plumbing is figured out.
+  // emulator-loader.ts treats `null` as "skip boot, render stub overlay".
+  bootDiskUrl: null,
+  appDiskUrl: `${BASE}app.dsk`,
+  screen: { width: 640, height: 480 },
 };

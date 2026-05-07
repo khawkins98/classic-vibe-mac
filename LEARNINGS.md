@@ -30,6 +30,55 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Boot disk plumbing: System 7.5.5 has no public single-file URL
+**Context:** Wiring BasiliskII WASM into the page. Plan was to point the
+emulator at something like `https://infinitemac.org/disks/system-7.5.5.json`
+as a boot disk URL.
+**Finding:** Infinite Mac doesn't serve disk images as single files. The
+boot disk is a *chunked* file: a build-generated JSON manifest
+(`@/Data/System 7.5.5 HD.dsk.json` — NOT in the repo) lists ~190
+SHA-named chunk filenames, which the worker fetches incrementally from a
+private Cloudflare R2 bucket (`infinite-mac-disk`) routed through
+system7.app / macos8.app / etc. There is no documented public URL
+pattern, no GitHub-hosted copy, and the manifest itself is a build
+artifact of Infinite Mac's pipeline (run via `scripts/import-disks.py`
+against an Apple-provided System 7.5.5 image). Confirmed by reading
+`src/emulator/common/common.ts` (`generateChunkUrl`),
+`src/emulator/ui/config.ts` (`configToMacemuPrefs`),
+`src/defs/disks.ts` (`SYSTEM_7_5_5.generatedSpec`), and the
+top-level `wrangler.jsonc` (`r2_buckets: [{bucket_name:
+"infinite-mac-disk"}]`) at infinite-mac@30112da0.
+**Action:** Set `EmulatorConfig.bootDiskUrl = null`. The loader fetches
+the WASM core successfully (real bytes, period-styled progress bar in
+`.inset`), then enters a STUB phase that renders "Welcome to Macintosh"
+and an explanation inside the marketer's window chrome. Path forward, in
+order of effort: (1) generate our own chunked manifest from a System
+7.5.5 ISO via Infinite Mac's `scripts/import-disks.py` and host the
+chunks under `/disks/` on GH Pages (~150MB across many small files —
+within Pages limits, lazy-loaded by chunk index); (2) ask upstream for a
+stable public URL pattern; (3) ship a single-file System 7.5.5 .dsk and
+recompile BasiliskII WASM with the non-chunked disk path enabled.
+Recommend (1). This is the project's biggest remaining unknown for
+end-to-end "boot in the browser."
+
+### 2026-05-08 — BasiliskII WASM is GPL-2.0, not Apache-2.0
+**Context:** Updating fetch-emulator.sh to vendor LICENSE/NOTICE files
+alongside the binaries. The role brief and earlier PRD framed the
+relevant license as Apache-2.0.
+**Finding:** Infinite Mac's TypeScript glue is Apache-2.0, but the
+compiled BasiliskII core is built from
+`mihaip/macemu/BasiliskII/COPYING`, which is GPL-2.0. That means
+redistributing the .wasm — which we do, by serving it from GH Pages —
+inherits GPL-2.0 §3 obligations (corresponding source must be available
+on request). Linking the upstream macemu commit satisfies the offer-source
+obligation as long as we don't modify the binary.
+**Action:** `scripts/fetch-emulator.sh` writes a NOTICE file calling out
+both licenses and pinning the upstream commit + macemu repo. The
+`src/web/.gitignore` ignores the .wasm/.js but explicitly negates
+`LICENSE-infinite-mac` and `NOTICE` so they always travel with the
+binaries in `dist/`. A downstream fork that wants to recompile BasiliskII
+needs to vendor the macemu source (or otherwise satisfy GPL §3 itself).
+
 ### 2026-05-08 — GitHub Pages can't set COOP/COEP; SAB needs a service-worker shim
 **Context:** Wiring the GH Pages deploy job for the Vite-built web frontend.
 BasiliskII WASM needs `SharedArrayBuffer`, which the browser only exposes

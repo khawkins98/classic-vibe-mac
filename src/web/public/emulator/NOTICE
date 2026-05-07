@@ -1,0 +1,25 @@
+classic-vibe-mac vendored emulator artifacts
+============================================
+
+The files BasiliskII.js and BasiliskII.wasm in this directory were
+downloaded verbatim from:
+
+  https://github.com/mihaip/infinite-mac
+  commit 30112da0db5d04ff5764d77ae757e73111a6ef12
+  path:  src/emulator/worker/emscripten/
+
+The Infinite Mac project is licensed under Apache-2.0 (see
+LICENSE-infinite-mac). The compiled BasiliskII core itself is derived from
+mihaip/macemu (https://github.com/mihaip/macemu), which is GPL-2.0:
+
+  https://github.com/mihaip/macemu/blob/master/BasiliskII/COPYING
+
+Because the .wasm is a derivative work of the GPL-2.0 BasiliskII source,
+redistribution of these binaries inherits GPL-2.0 obligations including
+the requirement to offer corresponding source on request. The source is
+the upstream macemu submodule referenced from Infinite Mac at the pinned
+commit above.
+
+These files are not modified relative to their upstream form. They are
+re-fetched at build time by scripts/fetch-emulator.sh; they are not
+committed to the classic-vibe-mac git history.

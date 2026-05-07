@@ -2,13 +2,16 @@
  * Landing page bootstrap.
  *
  * This page IS the page that loads the emulator (per the marketer brief —
- * the landing page and the app surface are the same). For now the emulator
- * slot is a stubbed window; once the BasiliskII core lands, the
- * #emulator-canvas-mount node inside .inset will be replaced with the real
- * <canvas> the worker draws into. See ./emulator-config.ts for the
- * planned wiring.
+ * the landing page and the app surface are the same). On DOMContentLoaded
+ * we hand off the `#emulator-canvas-mount` element inside the "Macintosh"
+ * window's `.inset` to `startEmulator()`, which renders its own
+ * period-styled loader UI and (eventually) the canvas.
+ *
+ * See ./emulator-loader.ts for the boot lifecycle and ./emulator-config.ts
+ * for the typed config.
  */
 import { emulatorConfig } from "./emulator-config";
+import { startEmulator } from "./emulator-loader";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -78,14 +81,7 @@ root.innerHTML = /* html */ `
     </header>
     <div class="window__body window__body--platinum">
       <div class="inset" id="emulator">
-        <span class="inset__lede">Welcome to Macintosh.</span>
-        <span id="emulator-canvas-mount">
-          TODO: BasiliskII goes here.
-        </span>
-        <span>
-          The emulator core has not been wired yet. When it is, this box
-          will hold a 512&nbsp;&times;&nbsp;342 canvas booting System&nbsp;7.5.5.
-        </span>
+        <div id="emulator-canvas-mount" class="emulator-mount"></div>
       </div>
     </div>
   </section>
@@ -162,4 +158,13 @@ npm run dev</pre>
 const configEl = document.getElementById("config");
 if (configEl) {
   configEl.textContent = JSON.stringify(emulatorConfig, null, 2);
+}
+
+// Hand the emulator slot to the loader. It owns rendering inside this
+// element from this point on (progress UI, then canvas). If anything goes
+// wrong it switches to its own error/stub state — main.ts does not need
+// to handle failures.
+const emulatorMount = document.getElementById("emulator-canvas-mount");
+if (emulatorMount) {
+  startEmulator(emulatorConfig, emulatorMount);
 }

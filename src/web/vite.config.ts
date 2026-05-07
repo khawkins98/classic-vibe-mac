@@ -24,10 +24,28 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // BasiliskII WASM needs SharedArrayBuffer, which requires cross-origin
-    // isolation. These headers also need to be set by GitHub Pages — see
-    // the PRD risks section. For Pages we'll likely need a service worker
-    // shim (e.g. coi-serviceworker) since Pages can't set response headers.
+    // BasiliskII (Infinite Mac WASM build) uses SharedArrayBuffer for the
+    // shared input/video buffer between main thread and emulator worker.
+    // SharedArrayBuffer requires cross-origin isolation, which requires
+    // both COOP and COEP headers on the document response.
+    //
+    // Dev: Vite sets these on its dev server below.
+    //
+    // Production / GitHub Pages: Pages cannot set response headers (it's a
+    // pure static host with no _headers/wrangler-style config). The chosen
+    // workaround is `coi-serviceworker` (https://github.com/gzuidhof/coi-serviceworker),
+    // which registers a service worker that re-issues every navigation
+    // request with COOP/COEP headers attached. The shim is ~3KB, MIT-licensed,
+    // and the standard fix for SharedArrayBuffer-on-Pages. We do not yet
+    // ship it; once the boot disk plumbing lands (see emulator-config.ts)
+    // and the worker actually needs SAB, the shim ships as a vendored
+    // copy under public/ and a single <script> tag in index.html.
+    //
+    // Fallback if the shim ever proves problematic: BasiliskII has a non-SAB
+    // mode (jsfrequentreadinput=false in BasiliskIIPrefs) that uses
+    // service-worker-mediated message passing. Slower input latency, but no
+    // isolation requirement. Listed here so the next agent doesn't have to
+    // re-derive it.
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",

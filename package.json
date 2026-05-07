@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run dev --workspace=src/web",
     "build": "npm run build --workspace=src/web",
+    "fetch:emulator": "bash scripts/fetch-emulator.sh",
     "preview": "npm run preview --workspace=src/web",
     "test": "npm run test:unit && npm run test:e2e && npm run test:visual",
     "test:unit": "make -C tests/unit run",

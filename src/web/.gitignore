@@ -2,3 +2,17 @@ node_modules/
 dist/
 .vite/
 *.local
+
+# Vendored emulator binaries: pulled at build time by scripts/fetch-emulator.sh,
+# not committed (large + GPL-2.0 redistribution is handled at the binary
+# release boundary, not in git history). The accompanying LICENSE/NOTICE
+# files in the same directory ARE checked in below via negation.
+public/emulator/*.wasm
+public/emulator/*.js
+public/emulator/*.data
+public/emulator/*.worker.js
+
+# Keep the upstream license + our NOTICE attribution alongside the binaries
+# (Apache-2.0 §4 / GPL-2.0 §1 require these to travel with the artifacts).
+!public/emulator/LICENSE-infinite-mac
+!public/emulator/NOTICE
