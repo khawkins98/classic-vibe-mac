@@ -331,7 +331,11 @@ int main(void)
 
     gWindow = GetNewWindow(128, NULL, (WindowPtr)-1L);
     SetPort(gWindow);
-    TextFont(geneva);
+    /* applFont (=1) resolves to whatever the user has set as the
+     * application font, which is Geneva on a default System 7
+     * install. Retro68's Fonts.h doesn't define the older 'geneva'
+     * symbol, so we go through applFont. */
+    TextFont(applFont);
     TextSize(9);
 
     NewGame();

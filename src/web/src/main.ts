@@ -131,11 +131,11 @@ npm run dev</pre>
 
       <h2>Status</h2>
       <p>
-        The build pipeline compiles and produces a disk image today. The
-        in-browser emulator is stubbed; integration is the next milestone.
-        The demo app (a Minesweeper clone) is in progress. See
+        The build pipeline compiles. The HFS disk image is packed. The
+        BasiliskII core boots. Minesweeper is wired into the boot disk's
+        Startup Items. See
         <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/PRD.md">PRD.md</a>
-        for the full plan.
+        for what's still on the list.
       </p>
     </div>
   </section>
