@@ -1,20 +1,66 @@
-# TODO: CI/CD pipeline
-# Steps:
-#   1. Pull Retro68 Docker image
-#   2. Compile src/app/ → Mac 68k binary
-#   3. Run scripts/build-disk-image.sh → app.dsk
-#   4. Build src/web/ with Vite
-#   5. Deploy dist/ to gh-pages branch
-name: Build and Deploy
+name: Build
 
+# Build the Mac 68k app on every push and PR. We're pre-1.0 and not on `main`
+# yet, so do not restrict by branch — we want signal on every branch.
 on:
   push:
-    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  build-app:
+    name: Cross-compile Minesweeper (68k)
     runs-on: ubuntu-latest
+
+    # Official Retro68 image, rebuilt on every commit to Retro68 master.
+    # The toolchain lives at /Retro68-build/toolchain inside the container.
+    # Pulling the prebuilt image is dramatically faster (and simpler) than
+    # building Retro68 from source (~2GB toolchain, ~hour-long build).
+    container:
+      image: ghcr.io/autc04/retro68:latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Placeholder
-        run: echo "Pipeline not yet implemented — see PRD.md"
+
+      - name: Configure (CMake + Retro68 toolchain)
+        run: |
+          cmake -S src/app -B build \
+            -DCMAKE_TOOLCHAIN_FILE=/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # Sanity check. The .APPL file is the data fork only and may be 0 bytes
+      # for resource-only apps — the canonical artifacts are .bin (MacBinary,
+      # both forks) and .dsk (mountable HFS image with the app inside).
+      - name: Verify build artifacts
+        run: |
+          ls -la build/
+          test -s build/Minesweeper.bin
+          test -s build/Minesweeper.dsk
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Minesweeper-${{ github.sha }}
+          path: |
+            build/Minesweeper.bin
+            build/Minesweeper.dsk
+            build/Minesweeper.APPL
+          if-no-files-found: error
+          retention-days: 14
+
+# TODO — remaining pipeline steps from PRD.md, to be wired up by follow-up PRs:
+#   1. Run scripts/build-disk-image.sh on the compiled binary to produce a
+#      custom HFS app.dsk with the binary placed in `System Folder/Startup
+#      Items/` so it auto-launches at boot. (owner: build-disk-image agent)
+#   2. Build the stripped Infinite Mac frontend in src/web/ with Vite,
+#      embedding the path to app.dsk in the emulator config. (owner: web agent)
+#   3. Co-locate app.dsk into the Vite dist/ output.
+#   4. Deploy dist/ to GitHub Pages (likely via actions/deploy-pages on a
+#      separate `deploy` job that depends on this one and only runs on the
+#      default branch).
