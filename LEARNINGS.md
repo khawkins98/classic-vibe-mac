@@ -1,6 +1,6 @@
 # Learnings
 
-A running log of things we've learned building classic-mac-builder — gotchas,
+A running log of things we've learned building classic-vibe-mac — gotchas,
 dead ends, surprises, and decisions worth remembering. The goal is to save
 the next person (or future-you) from rediscovering the same lessons.
 

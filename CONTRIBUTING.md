@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to classic-mac-builder.
+Thanks for your interest in contributing to classic-vibe-mac.
 
 ## Branching
 

@@ -7,7 +7,7 @@ if (!root) {
 
 root.innerHTML = `
   <main style="font-family: ui-monospace, monospace; padding: 2rem; max-width: 60ch;">
-    <h1>classic-mac-builder</h1>
+    <h1>classic-vibe-mac</h1>
     <p>TODO: BasiliskII goes here.</p>
     <p>
       This is a placeholder. The next step is to wire a BasiliskII WASM core

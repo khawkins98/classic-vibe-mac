@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Playwright config for classic-mac-builder.
+ * Playwright config for classic-vibe-mac.
  *
  * The dev server is the Vite app under src/web (workspace), launched via
  * `npm run dev` at the repo root which proxies to `vite` on port 5173.

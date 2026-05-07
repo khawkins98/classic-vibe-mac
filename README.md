@@ -1,4 +1,4 @@
-# classic-mac-builder
+# classic-vibe-mac
 
 A GitHub template that compiles a classic Mac OS app from C source and serves it
 running in the browser via GitHub Pages — no local emulator needed.

@@ -1,6 +1,6 @@
 # Tests
 
-Three layers of testing for `classic-mac-builder`. Each layer answers a
+Three layers of testing for `classic-vibe-mac`. Each layer answers a
 different question and runs independently.
 
 | Layer | Lives in | Run with | What it tests |

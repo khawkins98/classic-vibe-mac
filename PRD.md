@@ -1,4 +1,4 @@
-# PRD: classic-mac-builder (Proof of Concept)
+# PRD: classic-vibe-mac (Proof of Concept)
 
 ## Problem Statement
 
@@ -193,7 +193,7 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 ## Repo Structure (proposed)
 
 ```
-classic-mac-builder/
+classic-vibe-mac/
 ├── .github/
 │   └── workflows/
 │       └── build.yml

@@ -1,5 +1,5 @@
 {
-  "name": "classic-mac-builder",
+  "name": "classic-vibe-mac",
   "private": true,
   "version": "0.0.0",
   "description": "Compile a classic Mac OS app from C source and serve it running in the browser via GitHub Pages.",

@@ -17,7 +17,7 @@ test("placeholder page renders", async ({ page }) => {
   await page.goto("/");
 
   // The current placeholder explicitly says "TODO: BasiliskII goes here."
-  await expect(page.locator("h1")).toHaveText("classic-mac-builder");
+  await expect(page.locator("h1")).toHaveText("classic-vibe-mac");
   await expect(page.getByText("TODO: BasiliskII goes here.")).toBeVisible();
 
   // Capture a screenshot so the visual layer (and humans) can sanity-check.

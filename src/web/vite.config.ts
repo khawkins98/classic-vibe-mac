@@ -1,11 +1,11 @@
 import { defineConfig } from "vite";
 
 // GitHub Pages serves the site under /<repo-name>/ when using a project page
-// (e.g. https://<user>.github.io/classic-mac-builder/). Override at build time
+// (e.g. https://<user>.github.io/classic-vibe-mac/). Override at build time
 // with VITE_BASE=/your-repo-name/ npm run build.
 //
 // TODO: once the canonical repo name is decided, hard-code the default here
-// (e.g. "/classic-mac-builder/") so a fresh fork's CI build works without env
+// (e.g. "/classic-vibe-mac/") so a fresh fork's CI build works without env
 // configuration. For local `npm run dev` we always want "/".
 const base = process.env.VITE_BASE ?? "/";
 
