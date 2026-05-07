@@ -30,6 +30,69 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Bisection round 1: hello-world ALSO bombs with "unimplemented trap"
+**Context:** Following up the previous "Minesweeper bombs" entry. Bisected
+by replacing `src/app/minesweeper.{c,r}` with the smallest possible
+Toolbox app: `InitGraf` / `InitFonts` / `InitWindows` / `InitMenus` /
+`TEInit` / `InitDialogs(NULL)` / `InitCursor` / `MoreMasters() x4`,
+then `GetNewWindow(128, ...)` from a single `WIND` resource, then
+`WaitNextEvent` loop drawing `\p"It works."` in the update event.
+Resource fork stripped to `WIND 128`, `vers 1`, `SIZE -1` (256K min,
+512K preferred, `not32BitCompatible`, `notHighLevelEventAware`). No
+`MBAR`/`MENU`/`ALRT`/`DITL`/`STR#`. Originals preserved as
+`src/app/minesweeper-full.{c,r}.bak`.
+**Finding:** Same bomb. The deployed page boots System 7.5.5 cleanly,
+Finder runs through Startup Items, launches our `Minesweeper.bin`,
+and immediately bombs with "Sorry, a system error occurred —
+unimplemented trap." Proof: `public/screenshot-helloworld.png`. Since
+the C source is now ~30 lines of textbook init + `WaitNextEvent` and
+the .r file is three resources, the bomb cannot be in the
+Minesweeper-specific code. The bug lives in one of: (a) the Retro68
+runtime startup itself (the C runtime that runs *before* `main()` —
+sets up the A5 world, registers exception handlers, etc.), (b) the
+`SIZE -1` flag combination triggering a Finder/Process Manager call
+the Quadra-650 ROM doesn't implement, (c) something about how the
+`.bin` is decoded into the boot disk by `hcopy -m` (e.g. wrong
+Type/Creator), (d) a version mismatch between Retro68's link-time
+assumptions (System 7.5+? CFM-68K? Apple Event Manager?) and the
+ROM's actual trap table. Of these, (d) is the most plausible: the
+"unimplemented trap" bomb specifically means the CPU hit an A-line
+trap (high nibble 0xA) whose entry in the trap dispatch table is
+unimplemented. That's a Toolbox call the ROM doesn't ship.
+**Action:** Documented and stopped per scope (one round of bisection,
+user is asleep). Hello-world is what's currently deployed. The
+demo page now shows a bomb under "It works." instead of under
+Minesweeper, but that's no worse than before. Next bisection step
+recommendations for the morning, in order of cheapness:
+  1. **Strip even further: no resource file at all.** Move the
+     window creation to `NewWindow()` with a hardcoded `Rect`, no
+     `GetNewWindow`. Drop the .r file from the build entirely. If
+     this also bombs, the bug is in Retro68's runtime/launch, not
+     in any code we wrote.
+  2. **Try `_Debugger`-style instrumentation.** Add a `DebugStr`
+     call as the first line of `main()` (before any Toolbox call).
+     If the bomb fires *before* the DebugStr triggers, the runtime
+     is crashing before main. If after, it's a specific Toolbox
+     call.
+  3. **Check the `.bin` Type/Creator.** Run `hls -l` on the
+     installed file inside the boot disk and confirm Type=`APPL`
+     and Creator=4 chars (not the default `????`). Wrong
+     Type/Creator can make Finder treat the file as a document
+     and try to open it with an app that doesn't exist.
+  4. **Recompile against the System 7.0 / 7.1 SDK headers** if
+     Retro68 supports it — the current build may be linking
+     against System 7.5+ symbols that the ROM in question
+     (Quadra-650, ~1992) genuinely doesn't have.
+  5. **Use a different ROM.** The Quadra-650 ROM is from 1992
+     and shipped with System 7.1. Switching to a "Universal"
+     ROM image (Quadra-840AV, Performa-style) would expand the
+     trap table. This is an emulator-config change, not an app
+     change.
+  6. **Look at Retro68 issue tracker** for "unimplemented trap"
+     bug reports. Other people have hit this; the fix is usually
+     either a missing init call, a SIZE flag bit, or a specific
+     compiler/linker flag (e.g. `-mcpu=68000` vs `-mcpu=68020`).
+
 ### 2026-05-08 — End-to-end deploy works; Minesweeper bombs with "unimplemented trap"
 **Context:** First successful deploy to GH Pages with the chunked boot
 disk, fixed `hls` Mac-path bug, BasiliskII coming up cleanly. Took a

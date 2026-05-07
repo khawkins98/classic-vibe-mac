@@ -1,19 +1,17 @@
 /*
  * minesweeper.c — TEMPORARY hello-world for bisecting the
- * "unimplemented trap" bomb on deploy.
+ * "unimplemented trap" bomb on deploy. ROUND 2.
  *
- * The full Minesweeper is preserved as minesweeper-full.c.bak (and
- * its resource fork as minesweeper-full.r.bak). This shrinks the
- * suspect surface to the bare minimum Toolbox surface area:
- *   - basic init (with MoreMasters)
- *   - one WIND resource (id 128)
- *   - draw "It works." into it
- *   - WaitNextEvent loop, exit on Cmd-Q or click in goAway
+ * Round 1 (one WIND in the .r file + GetNewWindow) also bombed,
+ * so this round goes one step further: NO resource-defined window,
+ * NO GetNewWindow. The window is created from C with NewWindow()
+ * and a hardcoded Rect. The .r file is now SIZE-only + vers.
  *
- * If this boots cleanly on the deployed page, the bomb is in the
- * full Minesweeper code or its richer resource fork. If it ALSO
- * bombs, the bug is in the resource file, basic init, or the
- * Retro68 runtime itself.
+ * If this still bombs, the bug is in: the Retro68 runtime startup,
+ * the SIZE flag combination, the .bin Type/Creator, or the ROM/SDK
+ * version mismatch — see LEARNINGS.md round-1 entry.
+ *
+ * Originals preserved as minesweeper-full.{c,r}.bak.
  *
  * Target: 68k Mac, System 7+, compiled with Retro68.
  */
@@ -28,7 +26,8 @@
 
 int main(void)
 {
-    WindowPtr win;
+    Rect       r;
+    WindowPtr  win;
     EventRecord e;
     Boolean    quit = false;
 
@@ -40,19 +39,23 @@ int main(void)
     InitDialogs(NULL);
     InitCursor();
 
-    /* Expand the master pointer block a few times so the Memory
-     * Manager doesn't have to relocate handles in tight low-memory
-     * conditions. Standard System 7-era idiom; Inside Macintosh:
-     * Memory recommends this right after InitDialogs. */
     MoreMasters();
     MoreMasters();
     MoreMasters();
     MoreMasters();
 
-    win = GetNewWindow(128, NULL, (WindowPtr)-1L);
+    /* Hardcoded window — no WIND resource. SetRect(top, left, bottom,
+     * right? no — SetRect signature is (r, left, top, right, bottom).
+     * Inside Macintosh: Imaging With QuickDraw, p. 2-49. */
+    SetRect(&r, 60, 60, 320, 180);
+    win = NewWindow(NULL, &r, "\pHello",
+                    true,             /* visible */
+                    documentProc,     /* WDEF id 0, plain document window */
+                    (WindowPtr)-1L,   /* in front */
+                    true,             /* goAwayFlag */
+                    0L);              /* refCon */
+
     if (win == NULL) {
-        /* If the WIND resource didn't load, just spin so we get a
-         * known-state hang instead of a wild dereference. */
         while (!quit) {
             WaitNextEvent(everyEvent, &e, 60L, NULL);
         }
