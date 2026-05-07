@@ -30,6 +30,73 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Bisection round 2: even SIZE-only + NewWindow bombs (NOT in our code)
+**Context:** Round 1 hello-world bombed (preceding entry). Round 2
+went one step further: dropped the `WIND` resource entirely, created
+the window from C with `NewWindow(NULL, &rect, "\pHello",
+true, documentProc, (WindowPtr)-1L, true, 0L)`, and stripped the .r
+file to just `vers` and `SIZE -1`. C source is now ~30 lines of pure
+textbook Toolbox init + `WaitNextEvent`.
+**Finding:** Same bomb. Identical "unimplemented trap" dialog at the
+exact same moment in launch. Proof: `public/screenshot-helloworld.png`
+(latest). This **rules out** the suspect surface in our app code and
+resource fork. The C is now too small to hide a bug, and the .r file
+is too small (vers + SIZE) to carry one. Whatever Toolbox call is
+hitting the unimplemented trap, it happens during the Retro68 C
+runtime startup BEFORE main() — or, equivalently, it happens during
+Process Manager / Finder launch of the app driven by the SIZE
+resource flags or the .bin Type/Creator. Most likely culprits, with
+investigation order for the next agent:
+
+  1. **Retro68 runtime + the Quadra-650 ROM trap table.** Retro68's
+     C startup (the code that runs before main) sets up an A5 world,
+     calls `MaxApplZone` / `MoreMasters` itself, may register
+     exception handlers, and may reference Toolbox calls that
+     post-date the 1992 Quadra-650 ROM. Specifically suspect:
+     `_HWPriv` (Power Manager), `_FSDispatch` (FSSpec / new file
+     manager — only on System 7.0+ ROMs, but with selectors that
+     vary), `_SysEnvirons` (System 7), or AppleEvent dispatch.
+     The Quadra-650 shipped with System 7.1; the boot disk is
+     System 7.5.5 which patches the trap table on boot, but the
+     patches happen *after* INIT load — if our app launches
+     BEFORE the System 7.5.5 patches finish, we're effectively
+     running against the raw 7.1 trap set. Run our app NOT from
+     Startup Items but from a manual double-click after the
+     desktop is fully up, and see whether the bomb still fires.
+     This is the highest-value cheap experiment.
+  2. **The `.bin` Type/Creator inside the boot disk.** Verify with
+     `hls -l ':System Folder:Startup Items:Minesweeper.bin'` that
+     Type=APPL and Creator is a real 4-char code (not `????` and
+     not `BINA`). If `hcopy -m` left the file as MacBinary
+     (Type=BINA, Creator=mBIN), the Finder would try to open it
+     with StuffIt Expander, which doesn't exist on this disk,
+     and the resulting error path could surface as the bomb we
+     see. The `hcopy -m` flag is supposed to strip MacBinary back
+     to two-fork — confirm it actually did.
+  3. **SIZE flag combinations.** Try the absolute minimum SIZE:
+     just `is32BitCompatible` + memory partition; drop suspend/
+     resume, background, HLEvent flags entirely. The
+     `acceptSuspendResumeEvents` bit makes the Process Manager
+     post osEvts to us — if our event handling is broken in some
+     way the Process Manager doesn't tolerate, that could trigger
+     a Toolbox call we don't expect.
+  4. **Try Retro68's "console" sample** (the official hello-world
+     that ships with the toolchain) byte-for-byte. If THAT bombs
+     in our pipeline, the bug is in the pipeline (boot disk
+     packing, Type/Creator, SIZE, ROM choice) — not in any C we
+     write. If it works, copy what it does.
+  5. **Switch ROMs.** Quadra-650.rom is the most-common Infinite
+     Mac default but it's old (1992). A "Universal" ROM (later
+     Quadra/Performa) has a more complete trap table. This is a
+     `prefs` file change in `src/web/src/emulator-worker.ts` and
+     a re-fetch.
+
+The hello-world is what's currently deployed; the demo page shows
+the bomb under "Hello" rather than "Minesweeper", which is no
+worse than before. Originals preserved at
+`src/app/minesweeper-full.{c,r}.bak` for restoration once the
+upstream bug is found and fixed.
+
 ### 2026-05-08 — Bisection round 1: hello-world ALSO bombs with "unimplemented trap"
 **Context:** Following up the previous "Minesweeper bombs" entry. Bisected
 by replacing `src/app/minesweeper.{c,r}` with the smallest possible
