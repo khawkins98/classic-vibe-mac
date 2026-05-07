@@ -148,13 +148,14 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
      manifest + chunk files in the format BasiliskII WASM consumes
      (256 KiB chunks, blake2b-16 with salt `b"raw"`, JSON manifest matching
      `EmulatorChunkedFileSpec`). Algorithm ported from
-     `mihaip/infinite-mac@30112da0db` :: `scripts/import-disks.py`. This
-     step is wired but not yet invoked by CI — the loader can't consume
-     the chunks until the worker glue lands (see Component 3).
-- Artifact validation: `.bin`, `.dsk`, and our custom `dist/app.dsk` are
-  sanity-checked with `test -s`; `system755-vibe.dsk` is logged but not
-  hard-gated yet (placeholder SHA pin, see Risks). Retro68's `.APPL`
-  artifact is sometimes 0 bytes and is excluded from release uploads.
+     `mihaip/infinite-mac@30112da0db` :: `scripts/import-disks.py`.
+     Both `.dsk` and `.dsk.json` + chunks ride into the Pages
+     deployment; the loader (Component 3) consumes the chunked
+     manifest at runtime.
+- Artifact validation: `.bin`, `.dsk`, our custom `dist/app.dsk`, and
+  the boot disk are sanity-checked with `test -s`; the boot disk
+  source is hash-pinned (see Risks). Retro68's `.APPL` artifact is
+  sometimes 0 bytes and is excluded from release uploads.
 
 ### 3. Web Execution Layer (`src/web/`)
 - **Vite + TypeScript** (vanilla TS, no framework). Page chrome is a
@@ -271,7 +272,7 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 |------|-----------|
 | **BasiliskII WASM init contract** (resolved 2026-05-08) | Ported the minimum-viable subset of `mihaip/infinite-mac@30112da0db`'s worker glue into `src/web/src/emulator-worker.ts` (~480 lines): chunked disk reader, disks API, EmulatorWorkerApi shim, prefs renderer, ROM/prefs FS staging, SAB-based video/input. Verified end-to-end with a real boot attempt — BasiliskII v1.1 prints "Reading ROM file...", paints a frame, and renders the classic "no bootable disk" screen with the floppy-question-mark cursor (see public/screenshot-booted.png). Audio/clipboard/files/ethernet/CD-ROM/IndexedDB persistence are stubbed. |
 | **System 7.5.5 redistribution** (we host it ourselves, no longer a CORS issue) | Apple posted complete System 7.5.3 install media to its support site in 2001 with a license permitting free redistribution; the 7.5.5 updater (https://support.apple.com/kb/dl1099) inherits that posture and major archives (Internet Archive, Macintosh Garden, Macintosh Repository) distribute these binaries openly on this basis. NOTICE attributes Apple and explicitly disclaims affiliation; takedown protocol documented. |
-| **`build-boot-disk.sh` SHA-256 pin is a placeholder** | First CI run will print the observed hash and continue unverified; that hash gets pasted back into the script and locked. Until then a hostile CDN substitution would not be detected — but the consequence is bounded (the disk only matters after the worker glue is ported). |
+| **`build-boot-disk.sh` SHA-256 pin** (locked 2026-05-08) | Pinned to `9126e47cda69…` after the first successful CI run. A hostile CDN substitution now fails CI loudly. Re-pin only if archive.org rebuilds the upstream image. |
 | Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well. |
 | HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners). |
 | BasiliskII WASM file size (1.7MB at the pinned Infinite Mac commit; smaller than original PRD assumed) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |

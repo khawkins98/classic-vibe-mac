@@ -97,7 +97,7 @@ BOOT_DISK_URL="https://archive.org/download/macos755_202104/Macos.dsk"
 # match the downloaded blob. To populate: run this script with
 # BOOT_DISK_SHA256_OVERRIDE=skip the first time; the script prints the
 # observed hash and you paste it back here.
-BOOT_DISK_SHA256="${BOOT_DISK_SHA256_OVERRIDE:-PLACEHOLDER_REPLACE_ME_AFTER_FIRST_RUN}"
+BOOT_DISK_SHA256="${BOOT_DISK_SHA256_OVERRIDE:-9126e47cda694f90b8366e920dc19c172e53e470a06e1ac48cc3f1d5d1888bb7}"
 BOOT_DISK_EXPECTED_SIZE_BYTES=25165824  # 24 MB, give or take. Sanity check.
 
 # --- Paths --------------------------------------------------------------
