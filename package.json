@@ -1,0 +1,25 @@
+{
+  "name": "classic-vibe-mac",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Compile a classic Mac OS app from C source and serve it running in the browser via GitHub Pages.",
+  "workspaces": [
+    "src/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=src/web",
+    "build": "npm run build --workspace=src/web",
+    "fetch:emulator": "bash scripts/fetch-emulator.sh",
+    "preview": "npm run preview --workspace=src/web",
+    "test": "npm run test:unit && npm run test:e2e && npm run test:visual",
+    "test:unit": "make -C tests/unit run",
+    "test:e2e": "playwright test --config=playwright.config.ts",
+    "test:visual": "playwright test --config=tests/visual/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@playwright/test": "^1.48.2",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to classic-mac-builder.
+Thanks for your interest in contributing to classic-vibe-mac.
 
 ## Branching
 
@@ -71,4 +71,7 @@ feat(api)!: rename disk image output path
 
 - Make sure the build passes locally (or in CI on your branch)
 - Update `README.md` / `PRD.md` if behavior or architecture changed
+- Add a note to [`LEARNINGS.md`](./LEARNINGS.md) if you discovered something
+  non-obvious along the way (Retro68 quirks, HFS gotchas, CORS issues,
+  System 7 API surprises, etc.) — future contributors will thank you
 - Don't commit build artifacts or emulator ROMs
