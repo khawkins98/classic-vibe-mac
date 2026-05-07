@@ -30,6 +30,74 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — BasiliskII WASM init contract: not single-file, not CDN-pluggable
+**Context:** Trying to wire `bootDiskUrl` so the page actually boots.
+The previous LEARNINGS entry ("Boot disk plumbing") established that
+Infinite Mac doesn't host a public single-file boot disk. Path forward
+seemed to be either chunk it ourselves or ship a single `.dsk`. Read
+`mihaip/infinite-mac@30112da0db5d04ff5764d77ae757e73111a6ef12`'s
+`src/emulator/worker/worker.ts`, `src/emulator/worker/disks.ts`,
+`src/emulator/worker/chunked-disk.ts`, and
+`src/emulator/common/common.ts` to find the actual init contract.
+**Finding:** The compiled BasiliskII Emscripten Module does NOT accept
+a single-file disk URL. ALL disk access flows through their
+`EmulatorWorkerChunkedDisk` (or a pluggable `EmulatorWorkerDisk`
+interface implementing `read`/`write`/`size`/`name`), and that runs
+inside a Web Worker that exposes a `globalThis.workerApi` of type
+`EmulatorWorkerApi`. That class wires video (shared-memory or
+fallback), input (shared-memory or fallback), audio, files, clipboard,
+ethernet, disks, plus a `BasiliskIIPrefs.txt` file written into the
+Emscripten FS and a 32-byte device-image header generated per disk.
+The `EmulatorWorkerConfig` also takes a `wasm: ArrayBuffer`, a
+`workerId`, a `dateOffset`, an `arguments: string[]` for the prefs
+file, etc. Wiring all of that is on the order of hundreds of lines of
+TypeScript. There is no shortcut; the .wasm was compiled with a
+specific init contract and it's the contract.
+**Action:** Decision: we ship the **disk** and **chunking** plumbing
+now (paths A/B precursor work), but stay in honest STUB mode in the
+loader because the init contract isn't ported. The disk flows through
+`scripts/build-boot-disk.sh` (download → mount → inject Minesweeper
+into `:System Folder:Startup Items:` → optional chunking via
+`scripts/write-chunked-manifest.py`). When the worker-glue port lands,
+the disk and chunks are already deployed; that PR only has to add the
+worker, the EmulatorWorkerApi shim, and the prefs template. Reference
+upstream paths are pinned in comments at
+`src/web/src/emulator-loader.ts` boot()-phase 3 so the next agent can
+pick up the trail without re-deriving.
+
+### 2026-05-08 — Boot disk: build our own (System 7.5.5 from archive.org)
+**Context:** Decision point on Path A (single bootable disk),
+Path B (chunked manifest), or Path C (defer). Path B is the "right"
+answer for the WASM init contract but requires the same worker port
+either way (see preceding entry). Path A turns out to be incompatible
+with the current .wasm but is still the cheapest *prep* work to do
+now, because chunking a single .dsk is a 30-line Python script.
+**Finding:** A bootable, pre-installed System 7.5.5 hard-disk image
+(`Macos.dsk`, 24 MB) is hosted on the Internet Archive at
+`https://archive.org/details/macos755_202104`, packaged for use with
+MinivMac/BasiliskII. The System Folder is already blessed, the Finder
+is already in place, and there's a `Startup Items` folder ready to
+populate. hfsutils' `hcopy -m` decodes our Retro68 MacBinary back into
+a real two-fork file with Type/Creator preserved, so dropping
+Minesweeper in is a single command. Apple's 2001 free-redistribution
+posture for System 7.5.3 (and the 7.5.5 updater) covers redistribution
+of these binaries; mainstream archives have been mirroring them
+openly on this basis for 25 years. License/attribution lives in the
+new `NOTICE` at the repo root.
+**Action:** `scripts/build-boot-disk.sh` downloads (with cache + SHA
+verification + retry-on-302), mounts via `hmount`, lists/inspects via
+`hattrib` and `hls`, copies via `hcopy -m`, unmounts, and writes
+`dist/system755-vibe.dsk`. CI caches the upstream blob across runs via
+`actions/cache@v4` so we hit archive.org once per cache-key bump, not
+on every push. The SHA-256 pin in the script is a placeholder for now
+— first successful CI run will print the observed hash to be locked
+in (tracked as a Risk in PRD). The `--chunk` flag invokes
+`scripts/write-chunked-manifest.py` (algorithmic port of Infinite
+Mac's `write_chunked_image()`) to emit the chunked manifest format
+the WASM consumes; this isn't wired in CI yet because there's no
+loader to consume it, but the script is dependency-light (python3
+stdlib only) and ready when the worker port lands.
+
 ### 2026-05-08 — Boot disk plumbing: System 7.5.5 has no public single-file URL
 **Context:** Wiring BasiliskII WASM into the page. Plan was to point the
 emulator at something like `https://infinitemac.org/disks/system-7.5.5.json`

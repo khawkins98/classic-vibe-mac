@@ -78,6 +78,50 @@ jobs:
           ls -la dist/
           test -s dist/app.dsk
 
+      # Bake a bootable System 7.5.5 hard-disk image with our app pre-injected
+      # into :System Folder:Startup Items: . This is the path forward for
+      # auto-launch (PRD §Auto-launch) — System 7's Finder only auto-runs
+      # Startup Items from the boot volume's blessed System Folder, so the
+      # only way to make our app launch on boot without hand-driving the
+      # emulator is to MAKE the boot volume be ours. See LEARNINGS.md
+      # ("Boot disk: build our own…") for the long version.
+      #
+      # IMPORTANT: this disk is built but NOT yet consumed by the page —
+      # the BasiliskII WASM core needs hundreds of lines of worker glue
+      # we haven't ported (EmulatorWorkerApi, video/input/audio/disk
+      # callback channels, BasiliskIIPrefs.txt template, device-image
+      # header). The disk is shipped now so it's ready when the worker
+      # glue lands; until then the loader stays in STUB mode. Building it
+      # in CI also exercises the hfsutils + download path so it doesn't
+      # rot before the port is done.
+      #
+      # Cache the cached upstream image across runs to avoid hitting
+      # archive.org on every push; the cache key is the BOOT_DISK_URL pin
+      # (effectively constant within a SHA pin in the script).
+      - name: Cache upstream System 7.5.5 image
+        uses: actions/cache@v4
+        with:
+          path: .cache/boot-disk
+          key: boot-disk-system755-v1
+
+      - name: Build bootable System 7.5.5 disk (app pre-installed)
+        # `set +e` because the SHA-256 pin is currently a placeholder; the
+        # script prints the observed hash and continues unverified the
+        # first time. After the first successful CI run, paste the hash
+        # back into BOOT_DISK_SHA256 in the script and remove this `|| true`.
+        # Track in PRD risks table.
+        run: |
+          ./scripts/build-boot-disk.sh build/Minesweeper.bin dist/system755-vibe.dsk || {
+            status=$?
+            echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
+          }
+          if [ -s dist/system755-vibe.dsk ]; then
+            ls -la dist/system755-vibe.dsk
+            echo "::notice::system755-vibe.dsk built ($(stat -c%s dist/system755-vibe.dsk) bytes)"
+          else
+            echo "::warning::system755-vibe.dsk was not produced. Web build will proceed without it (loader stays in STUB mode regardless)."
+          fi
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -87,7 +131,8 @@ jobs:
             build/Minesweeper.dsk
             build/Minesweeper.APPL
             dist/app.dsk
-          if-no-files-found: error
+            dist/system755-vibe.dsk
+          if-no-files-found: warn
           retention-days: 14
 
   build-web:
@@ -120,6 +165,13 @@ jobs:
         run: |
           ls -la artifact/dist/
           test -s artifact/dist/app.dsk
+          # system755-vibe.dsk is best-effort right now (see build-app job
+          # for why) — log its presence/absence but don't fail.
+          if [ -s artifact/dist/system755-vibe.dsk ]; then
+            echo "system755-vibe.dsk present ($(stat -c%s artifact/dist/system755-vibe.dsk) bytes)."
+          else
+            echo "system755-vibe.dsk missing or empty — loader will stay in STUB mode."
+          fi
 
       - name: Install dependencies
         # Root-level npm ci: workspaces handle src/web automatically.
@@ -150,14 +202,17 @@ jobs:
           VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build
 
-      # Co-locate the disk image next to index.html so it's reachable at
-      # https://<user>.github.io/<repo>/app.dsk — that's where the emulator
-      # config in src/web/src/emulator.ts expects to find it. We do this
-      # outside Vite (rather than via publicDir) because app.dsk is a CI
-      # artifact, not a source asset, and we don't want it tracked in git.
-      - name: Co-locate app.dsk into web dist
+      # Co-locate the disk images next to index.html so they're reachable at
+      # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —
+      # which is where emulator-config.ts expects to find them. Done outside
+      # Vite (rather than via publicDir) because the .dsk files are CI
+      # artifacts, not source assets, and we don't want them tracked in git.
+      - name: Co-locate disk images into web dist
         run: |
           cp artifact/dist/app.dsk src/web/dist/app.dsk
+          if [ -s artifact/dist/system755-vibe.dsk ]; then
+            cp artifact/dist/system755-vibe.dsk src/web/dist/system755-vibe.dsk
+          fi
           ls -la src/web/dist/
           test -s src/web/dist/app.dsk
 

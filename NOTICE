@@ -1,0 +1,79 @@
+classic-vibe-mac — third-party attribution
+==========================================
+
+This project bundles or downloads at build time the following third-party
+artifacts. Each is used under its respective license; we make no
+proprietary claim to any of them.
+
+Apple Macintosh System 7.5.5
+----------------------------
+
+`scripts/build-boot-disk.sh` downloads a pre-installed, bootable
+System 7.5.5 hard-disk image from the Internet Archive
+(https://archive.org/details/macos755_202104) and modifies it in place
+by adding our Minesweeper application into the System Folder's
+Startup Items. The resulting image (`system755-vibe.dsk`) is published
+alongside the rest of the static site.
+
+System 7.5.3 was posted by Apple to its own support site in 2001 with a
+license permitting free redistribution; the System 7.5.5 updater
+(https://support.apple.com/kb/dl1099) released by Apple in 1996/1998
+inherits the same redistribution posture (Apple has since taken the
+legacy support pages offline, but the original licensing has not been
+revoked, and major archives — Internet Archive, Macintosh Garden,
+Macintosh Repository — distribute these binaries openly on this
+basis). All copyrights in the underlying System 7.5.5 software remain
+with Apple Inc.; classic-vibe-mac is not affiliated with or endorsed
+by Apple.
+
+If a successor in interest to this software contacts the maintainers
+with a takedown request, we will remove the redistributed boot image
+and document the path forward in LEARNINGS.md.
+
+Infinite Mac (Apache-2.0)
+-------------------------
+
+`scripts/fetch-emulator.sh` downloads the BasiliskII Emscripten core
+(`BasiliskII.js`, `BasiliskII.wasm`) from the Infinite Mac repository
+(https://github.com/mihaip/infinite-mac), pinned to a specific commit.
+Infinite Mac is licensed under Apache-2.0; the upstream LICENSE travels
+with the binaries as `src/web/public/emulator/LICENSE-infinite-mac`.
+
+`scripts/write-chunked-manifest.py` is an algorithmic port of
+`write_chunked_image()` from
+`mihaip/infinite-mac@30112da0db5d04ff5764d77ae757e73111a6ef12` ::
+`scripts/import-disks.py`. The chunking parameters (256 KiB chunks,
+blake2b-16 with salt b"raw") and JSON manifest shape match exactly so
+the output is bit-compatible with the upstream worker
+(`src/emulator/worker/chunked-disk.ts`).
+
+BasiliskII / macemu (GPL-2.0)
+-----------------------------
+
+The BasiliskII WebAssembly binary downloaded by
+`scripts/fetch-emulator.sh` is a derivative work of mihaip/macemu
+(https://github.com/mihaip/macemu, GPL-2.0). Redistribution of the
+.wasm therefore inherits GPL-2.0 obligations. See
+`src/web/public/emulator/NOTICE` for the offer-source statement; the
+source is the upstream macemu submodule referenced from the pinned
+Infinite Mac commit.
+
+Retro68 (CC0 / various)
+-----------------------
+
+The build pipeline cross-compiles our Mac app against the Retro68
+toolchain (https://github.com/autc04/Retro68) via the rolling Docker
+image `ghcr.io/autc04/retro68:latest`. Retro68 is composed of GCC
+(GPL-3.0+ with exception), binutils, and runtime headers/libraries
+under various permissive licenses. Retro68 itself is not redistributed
+by classic-vibe-mac; we only consume it from CI containers.
+
+hfsutils (GPL-2.0)
+------------------
+
+`scripts/build-disk-image.sh` and `scripts/build-boot-disk.sh` invoke
+hfsutils (https://www.mars.org/home/rob/proj/hfs/), specifically the
+`hformat`/`hmount`/`humount`/`hcopy`/`hmkdir`/`hattrib`/`hls`
+binaries. hfsutils is GPL-2.0 and is installed in the build container
+from Debian's `hfsutils` package; it is not redistributed by
+classic-vibe-mac.

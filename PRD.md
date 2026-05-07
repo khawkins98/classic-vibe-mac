@@ -22,15 +22,24 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 - **Build pipeline**: push C source → GitHub Actions compiles with Retro68 → produces
   Mac binary → packed into an HFS disk image
-- **Execution layer**: stripped Infinite Mac (Basilisk II, 68k, System 7.5.5) served
-  as static files on GitHub Pages, referencing Infinite Mac's CDN for the base OS disk
-  (avoids bundling/redistributing system software ourselves)
-- **Auto-launch**: app opens automatically on boot. Note: System 7's Startup
-  Items only fires from the *boot* volume's blessed System Folder, not from a
-  secondary mounted disk (see LEARNINGS.md). Approach is therefore one of:
-  (a) inject the app into the boot disk's System Folder at emulator-config
-  time, (b) ship a custom blessed boot disk with the app pre-installed, or
-  (c) drive Basilisk II to open the app post-boot. (a) or (b) is preferred.
+- **Execution layer**: stripped Infinite Mac (Basilisk II, 68k, System 7.5.5)
+  served as static files on GitHub Pages. We **self-host** a single
+  bootable System 7.5.5 hard-disk image — `system755-vibe.dsk` — alongside
+  the rest of the site. Infinite Mac doesn't expose a public single-file
+  boot disk URL (their worker fetches a build-generated chunked manifest
+  from a private Cloudflare R2 bucket), so we sidestep that altogether by
+  baking our own. Apple released System 7.5.3 to its own support site in
+  2001 with a free-redistribution license; the 7.5.5 updater inherits the
+  same posture (see NOTICE).
+- **Auto-launch**: app opens automatically on boot. System 7's Finder
+  scans `<boot volume>/System Folder/Startup Items/` on the *blessed*
+  System Folder of the boot volume only (LEARNINGS.md). Resolution:
+  `scripts/build-boot-disk.sh` mounts our self-hosted System 7.5.5 image
+  with hfsutils and copies the compiled Minesweeper into
+  `:System Folder:Startup Items:` directly. The image already has its
+  System Folder blessed (it was prepared by community emulator users),
+  so no `hattrib -b` dance is needed. Once the BasiliskII WASM core
+  boots from this disk, Finder will auto-launch the app.
 - **Demo app**: a Minesweeper clone (validates the full pipeline end-to-end)
 - **Template repo**: structured so anyone can fork, replace the app source, and get
   their own GitHub Pages deployment
@@ -122,16 +131,30 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   2. Compile C → Mac binary using CMake + Retro68 toolchain
      (`/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake`
      inside the container)
-  3. Create HFS disk image via `scripts/build-disk-image.sh`, which uses
-     `hfsutils` (`hcopy -m` preserves resource forks via MacBinary). Input is
-     the Retro68 `.bin` (MacBinary); output is `dist/app.dsk` with the app
-     placed under `Startup Items/` on the volume (placement is structurally
-     correct for a future bootable-disk pivot — see the Auto-launch goal).
-  4. Output: `dist/app.dsk` (uploaded as part of the workflow artifact
-     alongside Retro68's own `.bin`/`.dsk`/`.APPL`).
+  3. `scripts/build-disk-image.sh` packs the compiled `.bin` (MacBinary,
+     both forks intact) into a small secondary `dist/app.dsk` (HFS, 1.4 MB)
+     with the app placed under `:Startup Items:`. This image is kept for
+     forks that may want to mount it as a secondary volume; it is NOT the
+     boot disk.
+  4. `scripts/build-boot-disk.sh` downloads (with SHA-256 verification +
+     local cache) a pre-installed bootable System 7.5.5 hard-disk image
+     from the Internet Archive, mounts it via hfsutils, and copies our
+     compiled Minesweeper into `:System Folder:Startup Items:` on the
+     **blessed** System Folder. The output is `dist/system755-vibe.dsk`
+     (~24 MB). The script is idempotent and the upstream image is cached
+     across CI runs via `actions/cache@v4`.
+  5. `scripts/write-chunked-manifest.py` (invoked with the `--chunk` flag
+     to `build-boot-disk.sh`) re-emits the modified disk as a chunked
+     manifest + chunk files in the format BasiliskII WASM consumes
+     (256 KiB chunks, blake2b-16 with salt `b"raw"`, JSON manifest matching
+     `EmulatorChunkedFileSpec`). Algorithm ported from
+     `mihaip/infinite-mac@30112da0db` :: `scripts/import-disks.py`. This
+     step is wired but not yet invoked by CI — the loader can't consume
+     the chunks until the worker glue lands (see Component 3).
 - Artifact validation: `.bin`, `.dsk`, and our custom `dist/app.dsk` are
-  sanity-checked with `test -s`; Retro68's `.APPL` artifact is sometimes 0
-  bytes and is excluded from release uploads (see LEARNINGS.md).
+  sanity-checked with `test -s`; `system755-vibe.dsk` is logged but not
+  hard-gated yet (placeholder SHA pin, see Risks). Retro68's `.APPL`
+  artifact is sometimes 0 bytes and is excluded from release uploads.
 
 ### 3. Web Execution Layer (`src/web/`)
 - **Vite + TypeScript** (vanilla TS, no framework). Page chrome is a
@@ -155,21 +178,29 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
      (the mount lives inside the marketer's `.inset` window).
   2. Fetches `BasiliskII.js` and `BasiliskII.wasm` with streaming
      progress.
-  3. HEAD-checks `app.dsk` (404 tolerated for fresh forks).
-  4. **Currently stubs the actual boot** because the System 7.5.5 boot
-     disk has no public single-file URL — Infinite Mac's worker consumes
-     a build-generated chunked-disk JSON manifest backed by a private
-     R2 bucket, with no documented public schema (see LEARNINGS.md
-     2026-05-08, "Boot disk plumbing"). The loader cleanly enters a
-     STUB phase that keeps the chrome visually complete and surfaces
-     the blocker. Once unblocked (recommended path: self-host a chunked
-     manifest of System 7.5.5 under GH Pages), the same loader will
-     instantiate the BasiliskII Emscripten Module, attach the canvas,
-     and wire input via `emulator-input.ts`.
+  3. HEAD-checks both `system755-vibe.dsk` and `app.dsk` (404 tolerated
+     for fresh forks that haven't run CI yet).
+  4. **Currently stubs the actual emulator init** — but the reason has
+     shifted from "no boot disk source" to "BasiliskII WASM init
+     contract not implemented." The boot disk is now built, hosted, and
+     fetched successfully. The remaining blocker is the worker-side
+     glue that drives the BasiliskII Emscripten Module: a
+     `globalThis.workerApi` exposing video / input / audio / disks /
+     clipboard / files / ethernet callback channels, a fully-formed
+     `EmulatorWorkerConfig` (chunked-disk specs, prefs file rendered
+     from a `BasiliskIIPrefs.txt` template, device-image header, MAC
+     address), and the dispatcher that wires the Emscripten
+     `instantiateWasm` / `preRun` / `arguments` lifecycle. All of this
+     is hundreds of lines of TypeScript in `mihaip/infinite-mac` that
+     we have not ported. Until that lands, the loader runs through the
+     real fetch + HEAD-check phases and then enters STUB mode. See
+     LEARNINGS.md 2026-05-08 ("BasiliskII WASM init contract") and the
+     long header on `emulator-loader.ts`.
 - Configured via `src/web/src/emulator-config.ts` (typed):
   - `coreUrl` / `wasmUrl` — Vite-base-relative paths to the vendored
     core.
-  - `bootDiskUrl` — `null` until chunked-disk plumbing exists.
+  - `bootDiskUrl` — `${BASE_URL}system755-vibe.dsk`. Wired today;
+    consumed once the worker glue lands.
   - `appDiskUrl` — `${BASE_URL}app.dsk`, dropped next to `index.html`
     by CI.
   - `screen` — emulator native resolution (defaults to 640×480).
@@ -228,13 +259,15 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 | Risk | Mitigation |
 |------|-----------|
-| **No public URL for System 7.5.5 boot disk** (actual blocker, found 2026-05-08) | Self-host a chunked manifest generated from a System 7.5.5 ISO via Infinite Mac's `scripts/import-disks.py`, served from GH Pages alongside `app.dsk`. Apple released 7.5.5 freely, so licensing is OK. ~150MB of small files, well within Pages limits. See LEARNINGS.md. |
-| Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well |
-| HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners) |
+| **BasiliskII WASM init contract not implemented** (current blocker, found 2026-05-08) | The .wasm we vendor expects a `globalThis.workerApi` exposing video/input/audio/disks/clipboard/files/ethernet callbacks plus a fully-formed `EmulatorWorkerConfig`. ~hundreds of lines of TypeScript in `mihaip/infinite-mac` that need porting. Until that lands the loader stays in STUB mode; the boot disk and chunking are ready and waiting. See LEARNINGS.md 2026-05-08. |
+| **System 7.5.5 redistribution** (we host it ourselves, no longer a CORS issue) | Apple posted complete System 7.5.3 install media to its support site in 2001 with a license permitting free redistribution; the 7.5.5 updater (https://support.apple.com/kb/dl1099) inherits that posture and major archives (Internet Archive, Macintosh Garden, Macintosh Repository) distribute these binaries openly on this basis. NOTICE attributes Apple and explicitly disclaims affiliation; takedown protocol documented. |
+| **`build-boot-disk.sh` SHA-256 pin is a placeholder** | First CI run will print the observed hash and continue unverified; that hash gets pasted back into the script and locked. Until then a hostile CDN substitution would not be detected — but the consequence is bounded (the disk only matters after the worker glue is ported). |
+| Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well. |
+| HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners). |
 | BasiliskII WASM file size (1.7MB at the pinned Infinite Mac commit; smaller than original PRD assumed) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |
 | GitHub Pages can't set COOP/COEP for SharedArrayBuffer | Ship `coi-serviceworker` polyfill (MIT, ~3KB) registered from `index.html`. Fallback host is Cloudflare Pages or Netlify if the SW shim breaks. |
-| Startup Items auto-launch reliability | Test on System 7.5.5; fallback: inject the app into the boot disk's System Folder at config time, or ship a custom blessed boot disk. |
-| ROM licensing | We don't bundle ROMs — Infinite Mac's chunked boot disk includes the ROM used by BasiliskII via their existing setup. Self-hosting (above) inherits this property. |
+| Startup Items auto-launch reliability | We now bake the app into the boot disk's blessed System Folder directly, so this is a structural fix rather than a runtime workaround. To verify once the worker glue lands: boot in BasiliskII, watch for Minesweeper to open without manual click. |
+| ROM licensing | We don't bundle ROMs — the BasiliskII WASM core embeds the open-source CharIIe ROM substitute (or equivalent) the Infinite Mac build expects. Self-hosting the boot disk doesn't change this. |
 | BasiliskII core is GPL-2.0 (not Apache-2.0 as originally stated) | NOTICE file pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
 
 ---

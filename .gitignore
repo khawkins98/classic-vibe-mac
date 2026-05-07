@@ -16,6 +16,10 @@ CMakeFiles/
 cmake_install.cmake
 Makefile
 
+# Cache for the upstream System 7.5.5 image downloaded by
+# scripts/build-boot-disk.sh — never committed.
+.cache/
+
 # macOS
 .DS_Store
 
