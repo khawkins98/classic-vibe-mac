@@ -90,10 +90,27 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 ## Components
 
 ### 1. Mac App — Minesweeper Clone (`src/app/`)
-- Written in C using Mac Toolbox APIs (QuickDraw, Controls Manager, Events)
-- Targets 68k via Retro68 (`m68k-apple-macos-gcc`)
-- Classic features: grid reveal, mines, win/lose state, new game button
-- Designed to run on System 7.x
+- Written in C using Mac Toolbox APIs (QuickDraw, Window Manager, Menu
+  Manager, Event Manager, Dialog Manager, Resource Manager).
+- Targets 68k via Retro68 (`m68k-apple-macos-gcc`).
+- Classic features: 9x9 grid, 10 mines (beginner difficulty), reveal,
+  flag (option-click), flood-fill on zero-neighbor cells, win/lose
+  detection, New Game (Cmd-N), Quit (Cmd-Q), About box.
+- **First-click safety:** mines are placed lazily on the first reveal
+  with the clicked cell + its 8 neighbors excluded from the placement
+  pool, so the first click can never lose.
+- **Source layout:**
+  - `game_logic.{c,h}` — pure C engine. No Toolbox includes. Compiled
+    by both Retro68 (linked into the app) and the host C compiler
+    (driven by `tests/unit/test_minesweeper.c`). Uses an internal
+    xorshift32 RNG seeded from `TickCount()` at runtime, or with a
+    fixed seed in tests for reproducibility.
+  - `minesweeper.c` — Toolbox UI shell. Owns the event loop, draws
+    the board with QuickDraw, routes mouse clicks into the engine.
+  - `minesweeper.r` — Rez resources: `WIND` (main window), `MBAR` +
+    `MENU` (Apple/File/Edit), `ALRT`+`DITL` (About + win/lose
+    confirmation), `STR#` (status text), `vers`, `SIZE`.
+- Designed to run on System 7.x.
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
 - Uses **`ghcr.io/autc04/retro68:latest`** as the GitHub Actions job container

@@ -23,6 +23,8 @@ project(Minesweeper C)
 
 add_application(Minesweeper
     minesweeper.c
+    game_logic.c
+    minesweeper.r
 )
 
 # Strip dead code and MacsBug function names to keep the binary small. Drop
