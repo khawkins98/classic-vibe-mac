@@ -132,6 +132,8 @@ jobs:
             build/Minesweeper.APPL
             dist/app.dsk
             dist/system755-vibe.dsk
+            dist/system755-vibe.dsk.json
+            dist/system755-vibe-chunks/**
           if-no-files-found: warn
           retention-days: 14
 
@@ -212,6 +214,16 @@ jobs:
           cp artifact/dist/app.dsk src/web/dist/app.dsk
           if [ -s artifact/dist/system755-vibe.dsk ]; then
             cp artifact/dist/system755-vibe.dsk src/web/dist/system755-vibe.dsk
+          fi
+          # The chunked manifest + chunks are what the loader actually
+          # consumes (the single-file .dsk is kept for HEAD-checking and
+          # for forks that may want to re-chunk locally). See
+          # src/web/src/emulator-worker.ts ChunkedDisk for the read path.
+          if [ -s artifact/dist/system755-vibe.dsk.json ]; then
+            cp artifact/dist/system755-vibe.dsk.json src/web/dist/system755-vibe.dsk.json
+          fi
+          if [ -d artifact/dist/system755-vibe-chunks ]; then
+            cp -R artifact/dist/system755-vibe-chunks src/web/dist/system755-vibe-chunks
           fi
           ls -la src/web/dist/
           test -s src/web/dist/app.dsk

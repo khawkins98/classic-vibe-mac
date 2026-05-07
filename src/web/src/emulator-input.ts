@@ -2,47 +2,65 @@
  * emulator-input.ts — translate browser pointer/keyboard events into
  * BasiliskII's input queue.
  *
- * BasiliskII (in the Infinite Mac WASM build) consumes input via a
- * SharedArrayBuffer ring whose offsets are defined upstream at:
+ * BasiliskII (Infinite Mac WASM build) consumes input via a SharedArrayBuffer
+ * Int32 ring; offsets are defined upstream at
+ *   src/emulator/common/common.ts → InputBufferAddresses.
  *
- *   src/emulator/common/common.ts -> InputBufferAddresses
+ * `wireInput(canvas)` attaches DOM listeners to a canvas element. They
+ * dispatch through a small `InputBufferAdapter` set by emulator-loader.ts
+ * once the worker hands back the shared buffers. Until the adapter is set,
+ * events are dropped silently — safe to call wireInput before the worker
+ * boots.
  *
- * The actual buffer is owned by the worker once the emulator is started.
- * For now (we are in the stub state — see emulator-loader.ts) this module
- * provides the canvas-side wiring scaffold so the next agent doesn't have
- * to invent the event capture pattern from scratch. Calling `wireInput`
- * is safe in stub mode: it attaches listeners and just no-ops on dispatch
- * until `setBufferAdapter` is called with a real adapter from the worker.
- *
- * Why this lives in its own file: the Infinite Mac equivalent
- * (src/emulator/ui/input.ts) is ~600 lines including pointer-lock,
- * mouse-delta vs absolute mode, software-modifier keys, and clipboard
- * integration. We only need the basics for a single boot disk + game,
- * so we lift the smallest workable subset.
+ * Keyboard mapping is a subset of upstream
+ *   mihaip/infinite-mac@30112da0db src/emulator/common/key-codes.ts
+ * (JS_CODE_TO_ADB_KEYCODE) — we keep just the standard US-keyboard set
+ * needed for Minesweeper (letters/digits, arrows, modifiers, return,
+ * space, escape, delete).
  */
 
 export interface InputBufferAdapter {
-  /** Push a mouse position update (x,y in canvas pixels). */
   pushMouseMove(x: number, y: number): void;
-  /** Push a mouse button transition. button: 0=left, 1=right. */
+  /** button: 0=left, 1=middle, 2=right. */
   pushMouseButton(button: number, down: boolean): void;
-  /** Push a keyboard event. keyCode is a Mac scancode (not browser keyCode). */
+  /** macKeyCode is an ADB scancode (NOT browser keyCode). */
   pushKey(macKeyCode: number, down: boolean, modifiers: number): void;
 }
 
 let adapter: InputBufferAdapter | null = null;
 
-/** Called by the worker once the shared input buffer is ready. */
 export function setBufferAdapter(a: InputBufferAdapter | null): void {
   adapter = a;
 }
+
+// ── KeyboardEvent.code → ADB scancode (subset of upstream key-codes.ts) ──
+// We use `event.code` (physical key location, layout-independent) rather
+// than `event.key` so the mapping is stable across user keyboard layouts.
+const JS_CODE_TO_ADB: Readonly<Record<string, number>> = {
+  KeyA: 0x00, KeyS: 0x01, KeyD: 0x02, KeyF: 0x03, KeyH: 0x04, KeyG: 0x05,
+  KeyZ: 0x06, KeyX: 0x07, KeyC: 0x08, KeyV: 0x09, KeyB: 0x0b, KeyQ: 0x0c,
+  KeyW: 0x0d, KeyE: 0x0e, KeyR: 0x0f, KeyY: 0x10, KeyT: 0x11, KeyO: 0x1f,
+  KeyU: 0x20, KeyI: 0x22, KeyP: 0x23, KeyL: 0x25, KeyJ: 0x26, KeyK: 0x28,
+  KeyN: 0x2d, KeyM: 0x2e,
+  Digit1: 0x12, Digit2: 0x13, Digit3: 0x14, Digit4: 0x15, Digit5: 0x17,
+  Digit6: 0x16, Digit7: 0x1a, Digit8: 0x1c, Digit9: 0x19, Digit0: 0x1d,
+  Equal: 0x18, Minus: 0x1b, BracketRight: 0x1e, BracketLeft: 0x21,
+  Quote: 0x27, Semicolon: 0x29, Backslash: 0x2a, Comma: 0x2b, Slash: 0x2c,
+  Period: 0x2f, Backquote: 0x32,
+  Enter: 0x24, Tab: 0x30, Space: 0x31, Backspace: 0x33, Escape: 0x35,
+  MetaLeft: 0x37, MetaRight: 0x37, OSLeft: 0x37, OSRight: 0x37,
+  ShiftLeft: 0x38, ShiftRight: 0x7b, CapsLock: 0x39,
+  AltLeft: 0x3a, AltRight: 0x7c,
+  ControlLeft: 0x36, ControlRight: 0x7d,
+  ArrowLeft: 0x3b, ArrowRight: 0x3c, ArrowDown: 0x3d, ArrowUp: 0x3e,
+  Home: 0x73, End: 0x77, PageUp: 0x74, PageDown: 0x79,
+  Delete: 0x75,
+};
 
 export function wireInput(canvas: HTMLCanvasElement): () => void {
   const onPointerMove = (e: PointerEvent) => {
     if (!adapter) return;
     const rect = canvas.getBoundingClientRect();
-    // Scale CSS pixels back to canvas pixels — the canvas is sized at
-    // emulator native resolution but may be CSS-scaled by the chrome.
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const x = Math.max(0, Math.min(canvas.width, (e.clientX - rect.left) * scaleX));
@@ -59,49 +77,46 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
     adapter?.pushMouseButton(e.button, false);
   };
 
-  // Browser keyCode -> Mac scancode mapping is non-trivial. The full table
-  // lives upstream at src/emulator/ui/input.ts (BROWSER_KEYCODE_TO_MAC).
-  // For the stub we just forward `key` as a placeholder; the worker side
-  // will translate once wired.
   const onKeyDown = (e: KeyboardEvent) => {
     if (!adapter) return;
-    // Don't steal browser shortcuts (cmd-r, etc.) until we're sure we want to.
-    if (e.metaKey || e.ctrlKey) return;
+    const adb = JS_CODE_TO_ADB[e.code];
+    if (adb === undefined) return;
     e.preventDefault();
-    adapter.pushKey(e.keyCode, true, modifiersOf(e));
+    adapter.pushKey(adb, true, modifiersOf(e));
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
     if (!adapter) return;
-    if (e.metaKey || e.ctrlKey) return;
+    const adb = JS_CODE_TO_ADB[e.code];
+    if (adb === undefined) return;
     e.preventDefault();
-    adapter.pushKey(e.keyCode, false, modifiersOf(e));
+    adapter.pushKey(adb, false, modifiersOf(e));
   };
 
-  // Suppress the browser context menu so right-click can be a Mac
-  // option-click eventually.
+  // Suppress the browser context menu so right-click can be option-click.
   const onContextMenu = (e: Event) => e.preventDefault();
 
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointerup", onPointerUp);
-  canvas.addEventListener("keydown", onKeyDown);
-  canvas.addEventListener("keyup", onKeyUp);
+  // Keys go on window, not the canvas — System 7 expects keystrokes whether
+  // or not the canvas has focus, and tabIndex-focus is fragile.
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
   canvas.addEventListener("contextmenu", onContextMenu);
 
   return () => {
     canvas.removeEventListener("pointermove", onPointerMove);
     canvas.removeEventListener("pointerdown", onPointerDown);
     canvas.removeEventListener("pointerup", onPointerUp);
-    canvas.removeEventListener("keydown", onKeyDown);
-    canvas.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("keydown", onKeyDown);
+    window.removeEventListener("keyup", onKeyUp);
     canvas.removeEventListener("contextmenu", onContextMenu);
   };
 }
 
 function modifiersOf(e: KeyboardEvent): number {
-  // Bit layout matches Infinite Mac's modifier flags (shift=1, ctrl=2,
-  // option=4, command=8). Approximate mapping for now.
+  // BasiliskII modifier bits: shift=1, ctrl=2, option=4, command=8.
   let m = 0;
   if (e.shiftKey) m |= 1;
   if (e.ctrlKey) m |= 2;

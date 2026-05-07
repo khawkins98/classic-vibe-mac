@@ -30,6 +30,54 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — BasiliskII WASM init contract: ported, boots
+**Context:** Following up the previous "init contract is huge" entry —
+actually doing the port. Goal was a minimum-viable shim that drives the
+vendored .wasm to first frame.
+**Finding:** The full Infinite Mac worker (~900 lines + 6 sibling
+files) covers things we don't need: audio worklets, clipboard,
+ethernet, file uploads, CD-ROMs, persistent IndexedDB savers, speed
+governor, delayed disks, fallback-mode service worker bridges. A
+stripped-to-the-bone port comes in around 480 lines
+(`src/web/src/emulator-worker.ts`) and is enough to:
+1. Allocate the SharedArrayBuffers the WASM expects (32bpp
+   framebuffer, videoMode Int32, input ring at the offsets in
+   `InputBufferAddresses`).
+2. Read a chunked disk over synchronous XHR (the WASM calls
+   `disk.read()` synchronously from inside Wasm, so we can't await
+   `fetch()`).
+3. Render BasiliskIIPrefs.txt + appended config (`rom Quadra-650.rom`,
+   `cpu 4`, `modelid 36`, `ramsize 16777216`, `screen win/640/480`,
+   `disk system755-vibe.dsk`, 7 placeholder disks, `jsfrequentreadinput
+   true`) into the Emscripten FS at `/prefs`.
+4. Stage `Quadra-650.rom` (1MB, fetched alongside the .wasm via
+   `fetch-emulator.sh`) at `/Quadra-650.rom`.
+5. Pass `["--config","prefs"]` as the Module's `arguments`.
+6. Expose `globalThis.workerApi` shaped to match upstream
+   `EmulatorWorkerApi` (the WASM ABI calls into it by name from
+   Wasm-land — the names are not negotiable).
+
+The Emscripten module is `MODULARIZE`'d ESM with `EXPORT_NAME=emulator`;
+import as `await import('/emulator/BasiliskII.js')`, then call
+`mod.default(moduleOverrides)`. Because we already have the `.wasm`
+ArrayBuffer in hand, we hand it to Emscripten via `instantiateWasm` to
+skip a redundant fetch.
+**Action:** Verified end-to-end: the worker imports the BasiliskII ESM,
+the WASM instantiates ("Basilisk II V1.1 by Christian Bauer et al."),
+the ROM loads, `didOpenVideo` fires, the framebuffer paints. With a
+fake (mostly-zero) disk image you get the classic "no bootable disk"
+screen — flashing floppy/question-mark — proving the framebuffer +
+boot loop are correct. With a real System 7.5.5 image (built by
+`scripts/build-boot-disk.sh`) the path forward is just "feed it real
+chunks." Subtle: never `mount.innerHTML = ""` once the canvas is in
+place — every status update afterwards has to be console-only or it
+wipes the canvas. Worker file uses `/// <reference lib="webworker" />`
+so `DedicatedWorkerGlobalScope` types resolve under our DOM-only
+`tsconfig.json`. coi-serviceworker is vendored at
+`src/web/public/coi-serviceworker.min.js` and loaded as a non-module
+script before the app script in `index.html` so production GH Pages
+becomes cross-origin-isolated on the second navigation.
+
 ### 2026-05-08 — BasiliskII WASM init contract: not single-file, not CDN-pluggable
 **Context:** Trying to wire `bootDiskUrl` so the page actually boots.
 The previous LEARNINGS entry ("Boot disk plumbing") established that

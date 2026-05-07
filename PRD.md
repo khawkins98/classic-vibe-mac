@@ -161,11 +161,11 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   hand-rolled System 7 desktop (menu bar + windowed Read Me + a
   "Macintosh" window where the emulator mounts), styled to period in
   `src/web/src/style.css`.
-- Uses pre-built `BasiliskII.js` + `BasiliskII.wasm` from Infinite Mac.
-  The cores live committed at `src/emulator/worker/emscripten/` on
-  `main` — there's no GitHub Release or documented CDN. We pin a
-  specific Infinite Mac commit SHA and download via
-  `raw.githubusercontent.com` at build time in
+- Uses pre-built `BasiliskII.js` + `BasiliskII.wasm` from Infinite Mac
+  plus the `Quadra-650.rom`. The cores live committed at
+  `src/emulator/worker/emscripten/` on `main` — there's no GitHub
+  Release or documented CDN. We pin a specific Infinite Mac commit SHA
+  and download via `raw.githubusercontent.com` at build time in
   `scripts/fetch-emulator.sh`, with size + SHA-256 verification per
   file. Outputs land in `src/web/public/emulator/` (gitignored). License
   posture: Infinite Mac glue is Apache-2.0 but the compiled BasiliskII
@@ -173,49 +173,59 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
   both LICENSE files alongside a NOTICE that pins the upstream commit
   (see LEARNINGS.md 2026-05-08). Run from the repo root:
   `npm run fetch:emulator`.
-- Boot lifecycle is owned by `src/web/src/emulator-loader.ts`:
-  1. Renders a period-styled progress bar inside `#emulator-canvas-mount`
-     (the mount lives inside the marketer's `.inset` window).
-  2. Fetches `BasiliskII.js` and `BasiliskII.wasm` with streaming
-     progress.
-  3. HEAD-checks both `system755-vibe.dsk` and `app.dsk` (404 tolerated
-     for fresh forks that haven't run CI yet).
-  4. **Currently stubs the actual emulator init** — but the reason has
-     shifted from "no boot disk source" to "BasiliskII WASM init
-     contract not implemented." The boot disk is now built, hosted, and
-     fetched successfully. The remaining blocker is the worker-side
-     glue that drives the BasiliskII Emscripten Module: a
-     `globalThis.workerApi` exposing video / input / audio / disks /
-     clipboard / files / ethernet callback channels, a fully-formed
-     `EmulatorWorkerConfig` (chunked-disk specs, prefs file rendered
-     from a `BasiliskIIPrefs.txt` template, device-image header, MAC
-     address), and the dispatcher that wires the Emscripten
-     `instantiateWasm` / `preRun` / `arguments` lifecycle. All of this
-     is hundreds of lines of TypeScript in `mihaip/infinite-mac` that
-     we have not ported. Until that lands, the loader runs through the
-     real fetch + HEAD-check phases and then enters STUB mode. See
-     LEARNINGS.md 2026-05-08 ("BasiliskII WASM init contract") and the
-     long header on `emulator-loader.ts`.
+- Boot lifecycle is owned by `src/web/src/emulator-loader.ts` plus
+  the new `src/web/src/emulator-worker.ts` (Web Worker, `type:'module'`):
+  1. Loader renders a period-styled progress bar inside
+     `#emulator-canvas-mount` (the mount lives inside the marketer's
+     `.inset` window).
+  2. Loader gates on `crossOriginIsolated` — SAB is required for the
+     fast path; if the browser isn't isolated, drops cleanly to STUB
+     with a sharper message ("reload to let coi-serviceworker take
+     effect").
+  3. Loader HEAD-checks the chunked manifest `${bootDiskUrl}.json`. If
+     missing, drops to STUB pointing at `scripts/build-boot-disk.sh`.
+  4. Loader spawns the worker, hands it the manifest + URLs +
+     screen/RAM config.
+  5. Worker allocates SharedArrayBuffers (video framebuffer + videoMode
+     metadata + Int32 input ring whose offsets match Infinite Mac's
+     `InputBufferAddresses` so the WASM ABI lines up), reads chunked
+     disk via synchronous XHR (the BasiliskII core calls `disk.read()`
+     synchronously from inside Wasm), renders the BasiliskIIPrefs.txt
+     template + appended config + ROM + disks into the Emscripten FS,
+     and `import()`s `/emulator/BasiliskII.js` (ES module factory).
+  6. Worker exposes `globalThis.workerApi` shaped to match upstream
+     `EmulatorWorkerApi` exactly — the WASM was compiled against that
+     shape and calls into it from Wasm-land for video blits, disk
+     reads, idle waits, input polling.
+  7. Worker posts video frames into the SAB; loader rAF-loops a
+     BGRA→RGBA copy + `putImageData` onto the canvas.
+- The port skips audio/clipboard/files/ethernet/CD-ROM/persistent disk
+  savers/speed governor — see the long header on `emulator-worker.ts`
+  for what was lifted from where in upstream.
 - Configured via `src/web/src/emulator-config.ts` (typed):
   - `coreUrl` / `wasmUrl` — Vite-base-relative paths to the vendored
     core.
-  - `bootDiskUrl` — `${BASE_URL}system755-vibe.dsk`. Wired today;
-    consumed once the worker glue lands.
+  - `bootDiskUrl` — `${BASE_URL}system755-vibe.dsk`. Loader resolves
+    `${bootDiskUrl}.json` for the manifest and
+    `${bootDiskUrl-without-.dsk}-chunks/` for chunk fetches.
   - `appDiskUrl` — `${BASE_URL}app.dsk`, dropped next to `index.html`
-    by CI.
+    by CI. Currently NOT mounted by the worker (the boot disk now bakes
+    the app into Startup Items, so app.dsk is redundant for boot —
+    kept around for forks that may want it as a secondary mount).
   - `screen` — emulator native resolution (defaults to 640×480).
 - **SharedArrayBuffer / cross-origin isolation:** the Vite dev server
   sets `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` itself. GitHub Pages
-  cannot set custom response headers, so the production deploy plans to
-  ship the ~3KB MIT-licensed `coi-serviceworker` polyfill (registers a
-  SW that re-issues navigations with the headers attached). Not yet
-  wired — only needed once the boot disk is unstubbed and the worker
-  actually allocates SAB. Fallback: BasiliskII can run with
-  `jsfrequentreadinput=false` (service-worker-mediated input passing,
-  no SAB required, slower input).
+  cannot set custom response headers; we ship the ~3KB MIT-licensed
+  `coi-serviceworker` shim, vendored at
+  `src/web/public/coi-serviceworker.min.js` and loaded as a non-module
+  `<script>` at the top of `<head>` (must run before the app script).
+  The shim registers a SW, the page reloads once, and the second
+  navigation is cross-origin isolated. Fallback if the shim breaks:
+  Cloudflare Pages or Netlify (both let you set response headers).
 - Strips out Infinite Mac's library browser, multi-OS selector, settings
-  panes — our loader is single-purpose.
+  panes, IndexedDB persistence, audio worklet, ethernet, file uploads,
+  clipboard bridge — our loader is single-purpose.
 - Dev server: `npm run dev` from the repo root (npm workspaces).
 
 ### 4. Testing (`tests/`)
@@ -259,7 +269,7 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 | Risk | Mitigation |
 |------|-----------|
-| **BasiliskII WASM init contract not implemented** (current blocker, found 2026-05-08) | The .wasm we vendor expects a `globalThis.workerApi` exposing video/input/audio/disks/clipboard/files/ethernet callbacks plus a fully-formed `EmulatorWorkerConfig`. ~hundreds of lines of TypeScript in `mihaip/infinite-mac` that need porting. Until that lands the loader stays in STUB mode; the boot disk and chunking are ready and waiting. See LEARNINGS.md 2026-05-08. |
+| **BasiliskII WASM init contract** (resolved 2026-05-08) | Ported the minimum-viable subset of `mihaip/infinite-mac@30112da0db`'s worker glue into `src/web/src/emulator-worker.ts` (~480 lines): chunked disk reader, disks API, EmulatorWorkerApi shim, prefs renderer, ROM/prefs FS staging, SAB-based video/input. Verified end-to-end with a real boot attempt — BasiliskII v1.1 prints "Reading ROM file...", paints a frame, and renders the classic "no bootable disk" screen with the floppy-question-mark cursor (see public/screenshot-booted.png). Audio/clipboard/files/ethernet/CD-ROM/IndexedDB persistence are stubbed. |
 | **System 7.5.5 redistribution** (we host it ourselves, no longer a CORS issue) | Apple posted complete System 7.5.3 install media to its support site in 2001 with a license permitting free redistribution; the 7.5.5 updater (https://support.apple.com/kb/dl1099) inherits that posture and major archives (Internet Archive, Macintosh Garden, Macintosh Repository) distribute these binaries openly on this basis. NOTICE attributes Apple and explicitly disclaims affiliation; takedown protocol documented. |
 | **`build-boot-disk.sh` SHA-256 pin is a placeholder** | First CI run will print the observed hash and continue unverified; that hash gets pasted back into the script and locked. Until then a hostile CDN substitution would not be detected — but the consequence is bounded (the disk only matters after the worker glue is ported). |
 | Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well. |

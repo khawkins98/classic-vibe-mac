@@ -59,6 +59,11 @@ mkdir -p "${DEST_DIR}"
 FILES=(
   "src/emulator/worker/emscripten/BasiliskII.js|156114|4fd750e202686a7b7c3bd0055dbe33d21dd6b3ce2639da8da814ef1036d1c66b"
   "src/emulator/worker/emscripten/BasiliskII.wasm|1713564|0be9b5ba1179b65d9d1bd30b3cc35ee56daf6713ba1353048c03229f641680bb"
+  # Quadra-650 ROM. Required by BasiliskII at boot time; loaded via
+  # `rom Quadra-650.rom` in our generated BasiliskIIPrefs.txt. The ROM
+  # itself is © Apple but Infinite Mac vendors it under the same posture
+  # as the System 7.5.5 boot media (see NOTICE).
+  "src/Data/Quadra-650.rom|1048576|05ad753fb594e656cf078023ec189e09e2a7655a780de993b75b8c51ed6b09ca"
 )
 
 # Apache-2.0 license file from the upstream Infinite Mac repo (covers the

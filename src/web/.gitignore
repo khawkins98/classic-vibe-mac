@@ -11,6 +11,15 @@ public/emulator/*.wasm
 public/emulator/*.js
 public/emulator/*.data
 public/emulator/*.worker.js
+public/emulator/*.rom
+
+# Boot disk artifacts (built by scripts/build-boot-disk.sh in CI, then copied
+# into public/ by scripts/copy-disks-to-public.sh for local dev). Big and
+# GPL/redistribution-sensitive — never committed.
+public/system755-vibe.dsk
+public/system755-vibe.dsk.json
+public/system755-vibe-chunks/
+public/app.dsk
 
 # Keep the upstream license + our NOTICE attribution alongside the binaries
 # (Apache-2.0 §4 / GPL-2.0 §1 require these to travel with the artifacts).

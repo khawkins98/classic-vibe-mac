@@ -243,23 +243,40 @@ trap - EXIT
 
 echo "[boot-disk] wrote ${OUTPUT} ($(size_of "${OUTPUT}") bytes)"
 
-# --- Step 3 (optional): chunk for the BasiliskII WASM consumer ----------
+# --- Step 3: chunk for the BasiliskII WASM consumer ----------------------
+#
+# If --chunk wasn't passed, default to a sibling directory next to OUTPUT.
+# The chunked manifest + chunks are how the loader actually reads the disk
+# (see src/web/src/emulator-worker.ts ChunkedDisk). Single-file .dsk is
+# kept around for HEAD-checks and as a fallback artifact, but the loader
+# never fetches it.
 
-if [[ -n "${CHUNKS_DIR}" ]]; then
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "error: --chunk requires python3 on PATH." >&2
-    exit 1
-  fi
-  CHUNKER="${SCRIPT_DIR}/write-chunked-manifest.py"
-  if [[ ! -f "${CHUNKER}" ]]; then
-    echo "error: chunker not found at ${CHUNKER}" >&2
-    exit 1
-  fi
-  echo "[boot-disk] chunking ${OUTPUT} -> ${CHUNKS_DIR}/"
-  mkdir -p "${CHUNKS_DIR}"
-  python3 "${CHUNKER}" \
-    --image "${OUTPUT}" \
-    --name "system755-vibe.dsk" \
-    --out-dir "${CHUNKS_DIR}"
-  echo "[boot-disk] manifest: ${CHUNKS_DIR}/system755-vibe.dsk.json"
+if [[ -z "${CHUNKS_DIR}" ]]; then
+  CHUNKS_DIR="$(dirname "${OUTPUT}")/$(basename "${OUTPUT}" .dsk)-chunks"
+  echo "[boot-disk] --chunk not given; defaulting to ${CHUNKS_DIR}/"
 fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "error: chunking requires python3 on PATH." >&2
+  exit 1
+fi
+CHUNKER="${SCRIPT_DIR}/write-chunked-manifest.py"
+if [[ ! -f "${CHUNKER}" ]]; then
+  echo "error: chunker not found at ${CHUNKER}" >&2
+  exit 1
+fi
+echo "[boot-disk] chunking ${OUTPUT} -> ${CHUNKS_DIR}/"
+mkdir -p "${CHUNKS_DIR}"
+python3 "${CHUNKER}" \
+  --image "${OUTPUT}" \
+  --name "system755-vibe.dsk" \
+  --out-dir "${CHUNKS_DIR}"
+# The chunker writes <name>.json into out-dir; copy it to sit next to the
+# .dsk so the loader's `${bootDiskUrl}.json` HEAD-check resolves cleanly.
+MANIFEST_SRC="${CHUNKS_DIR}/system755-vibe.dsk.json"
+MANIFEST_DST="$(dirname "${OUTPUT}")/system755-vibe.dsk.json"
+if [[ -f "${MANIFEST_SRC}" && "${MANIFEST_SRC}" != "${MANIFEST_DST}" ]]; then
+  cp "${MANIFEST_SRC}" "${MANIFEST_DST}"
+fi
+echo "[boot-disk] manifest:  ${MANIFEST_DST}"
+echo "[boot-disk] chunk dir: ${CHUNKS_DIR}"

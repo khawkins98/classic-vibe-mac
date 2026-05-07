@@ -15,29 +15,14 @@ export interface EmulatorConfig {
   /**
    * Boot disk for System 7.5.5.
    *
-   * This points at our self-hosted, app-pre-installed System 7.5.5 disk
-   * (built by scripts/build-boot-disk.sh in CI). It is the *bootable*
-   * volume — its System Folder is blessed and contains a Startup Items
-   * folder with our compiled Minesweeper inside, so once the emulator is
-   * driving this disk the Finder will auto-launch the app on every boot
-   * without any post-boot scripting.
-   *
-   * NOTE — this is currently shipped but NOT YET WIRED. The Infinite
-   * Mac BasiliskII WASM core (which we vendor) does not consume a
-   * single-file disk URL: ALL disk access flows through their
-   * `EmulatorWorkerChunkedDisk` API backed by an `EmulatorChunkedFileSpec`
-   * (read-side: chunked-disk.ts; consumer: worker.ts), and that API in
-   * turn requires a fully-formed `EmulatorWorkerConfig` and a
-   * `globalThis.workerApi` exposing the video/input/audio/files/clipboard
-   * surfaces. Until we port that worker glue, the loader does not start
-   * the emulator — see emulator-loader.ts and LEARNINGS.md
-   * 2026-05-08 ("BasiliskII WASM init contract"). The disk is shipped
-   * now so it's ready when the port lands.
-   *
-   * Reference: mihaip/infinite-mac@30112da0db5d04ff5764d77ae757e73111a6ef12
-   *   src/emulator/worker/worker.ts            EmulatorWorkerApi.constructor
-   *   src/emulator/worker/chunked-disk.ts      EmulatorWorkerChunkedDisk
-   *   src/emulator/common/common.ts            EmulatorWorkerConfig type
+   * Points at our self-hosted, app-pre-installed System 7.5.5 disk image
+   * (built by scripts/build-boot-disk.sh in CI). The loader actually
+   * fetches `${bootDiskUrl}.json` (the chunked manifest) and individual
+   * chunks from `${bootDiskUrl-without-.dsk}-chunks/`, NOT the single-file
+   * .dsk — the .dsk URL is preserved for HEAD-checking and as the
+   * canonical "show this in the JSON config preview" path. The chunking
+   * is required because the BasiliskII WASM core consumes disks through
+   * EmulatorWorkerChunkedDisk (worker/chunked-disk.ts upstream).
    */
   bootDiskUrl: string | null;
   /** Our generated app.dsk (HFS, ~1MB) — sits next to index.html. */
@@ -53,11 +38,8 @@ const BASE = import.meta.env.BASE_URL;
 export const emulatorConfig: EmulatorConfig = {
   coreUrl: `${BASE}emulator/BasiliskII.js`,
   wasmUrl: `${BASE}emulator/BasiliskII.wasm`,
-  // The disk is shipped at this URL by CI but the loader will still drop
-  // into STUB mode until the worker glue is ported (see the long comment
-  // on `bootDiskUrl` above). The HEAD-check in the loader uses this URL
-  // to verify the disk built and uploaded correctly even before the boot
-  // path itself works.
+  // Loader resolves `${bootDiskUrl}.json` for the chunked manifest and
+  // `${bootDiskUrl-without-.dsk}-chunks/<sig>.chunk` for chunk fetches.
   bootDiskUrl: `${BASE}system755-vibe.dsk`,
   appDiskUrl: `${BASE}app.dsk`,
   screen: { width: 640, height: 480 },

@@ -2,87 +2,69 @@
  * emulator-loader.ts — owns the BasiliskII boot lifecycle.
  *
  * Renders into the `#emulator-canvas-mount` slot inside the marketer's
- * "Macintosh" window chrome (see main.ts). Owns:
- *   - period-styled progress UI ("Loading BasiliskII… 1.7 MB")
- *   - canvas creation
- *   - WASM core fetch + instantiation (planned)
- *   - boot disk + app.dsk mount (planned)
+ * "Macintosh" window chrome (see main.ts).
  *
- * ─── Current status ──────────────────────────────────────────────────────
+ * Boot flow:
+ *   1. Render a period-styled progress UI in the mount.
+ *   2. Verify cross-origin isolation (SharedArrayBuffer is required by the
+ *      BasiliskII WASM init contract; if the browser isn't isolated, fall
+ *      back to STUB with a sharper message).
+ *   3. HEAD-check the chunked boot disk manifest. If absent, STUB.
+ *   4. Spawn `emulator-worker.ts` as a `type:'module'` Web Worker, hand
+ *      it the disk spec + URLs, and listen for `emulator_handles` —
+ *      that message contains the SharedArrayBuffers we render from and
+ *      the input buffer we write into.
+ *   5. Mount the canvas, start a requestAnimationFrame loop that copies
+ *      the SAB framebuffer into ImageData and putImageData()s it. Hook
+ *      input events into the shared input buffer via emulator-input.ts.
  *
- * The BasiliskII WASM artifacts ARE wired (fetch-emulator.sh pulls them
- * into /emulator/ and we fetch them here). The boot disk is ALSO now
- * wired — `scripts/build-boot-disk.sh` produces `system755-vibe.dsk`,
- * a blessed System 7.5.5 hard-disk image with our Minesweeper
- * pre-installed in `:System Folder:Startup Items:`, and CI publishes
- * it next to index.html. The loader HEAD-checks it on boot.
- *
- * What's still missing is the *worker glue* that drives the BasiliskII
- * Emscripten Module. Reading worker.ts in the upstream confirmed that
- * the .wasm's compiled init path expects a `globalThis.workerApi`
- * exposing video/input/audio/files/clipboard/disks callbacks plus a
- * fully-formed `EmulatorWorkerConfig` (chunked-disk specs, prefs file,
- * device-image header, MAC address, etc). All disk access — even from
- * a single-file image — flows through `EmulatorWorkerChunkedDisk`,
- * which means we'd either chunk our disk and route through the
- * upstream class, or implement an in-memory `EmulatorWorkerDisk` that
- * wraps an ArrayBuffer of our .dsk and slot it into the same disks
- * array. Either way it's a sizable port. Until that lands, the loader
- * runs through the real fetch phase and then enters STUB mode.
- *
- * See LEARNINGS.md 2026-05-08 ("BasiliskII WASM init contract") for
- * the full rationale.
- *
- * Once that's unblocked, the actual boot path is roughly:
- *
- *   1. Fetch boot disk manifest JSON, pin chunks ahead of cursor.
- *   2. Build an `EmulatorWorkerConfig` (see Infinite Mac
- *      src/emulator/common/common.ts, EmulatorWorkerConfig type).
- *   3. Spawn the BasiliskII Emscripten Module with `arguments` pointing
- *      at the prefs file (rendered from BasiliskIIPrefs.txt + our disks).
- *   4. The .js loader auto-loads /emulator/BasiliskII.wasm sibling.
- *   5. Wire input events (see emulator-input.ts) into the shared input
- *      buffer at the addresses defined in InputBufferAddresses.
- *
- * Reference paths in upstream (mihaip/infinite-mac, pinned in
- * scripts/fetch-emulator.sh):
- *   src/emulator/worker/worker.ts          -- boot orchestration
- *   src/emulator/worker/emulators.ts       -- prefs + disk wiring
- *   src/emulator/common/common.ts          -- shared types + chunk URL
- *   src/emulator/ui/config.ts              -- configToMacemuPrefs()
+ * Reference (for the worker glue this drives):
+ *   mihaip/infinite-mac@30112da0db src/emulator/ui/ui.ts (Emulator class)
+ *   mihaip/infinite-mac@30112da0db src/emulator/worker/worker.ts
  */
 
 import type { EmulatorConfig } from "./emulator-config";
-// wireInput will be called from within boot() once the BasiliskII worker
-// glue is ported (see the file-level comment). Re-exported now so the
-// surface is reachable from a future thin shim without re-rooting the
-// import graph, and so tsc with noUnusedLocals doesn't complain about
-// the imported symbol while we wait for the port to land.
+import {
+  InputBufferAddresses,
+  type EmulatorChunkedFileSpec,
+  type EmulatorWorkerMessage,
+  type EmulatorWorkerStartMessage,
+  type EmulatorWorkerVideoBlitRect,
+} from "./emulator-worker-types";
+import { wireInput, setBufferAdapter } from "./emulator-input";
 export { wireInput } from "./emulator-input";
 
 type LoaderPhase =
   | { kind: "idle" }
   | { kind: "fetching"; label: string; loadedBytes: number; totalBytes: number }
-  | { kind: "starting" }
+  | { kind: "starting"; detail: string }
   | { kind: "running" }
   | { kind: "stub"; reason: string }
   | { kind: "error"; message: string };
 
 interface LoaderHandles {
   mount: HTMLElement;
-  /** Replaces mount contents wholesale and re-binds DOM refs. */
   setPhase(phase: LoaderPhase): void;
 }
 
-/** Public entry point. Returns an abort-able handle. */
 export function startEmulator(
   config: EmulatorConfig,
   mount: HTMLElement,
 ): { dispose(): void } {
   const handles = renderShell(mount);
   const ac = new AbortController();
+  let worker: Worker | undefined;
+  let rafId = 0;
+  let unwireInput: (() => void) | undefined;
 
-  void boot(config, handles, ac.signal).catch((err) => {
+  void boot(config, handles, ac.signal, (w) => {
+    worker = w;
+  }, (raf) => {
+    rafId = raf;
+  }, (un) => {
+    unwireInput = un;
+  }).catch((err) => {
+    if ((err as Error).name === "AbortError") return;
     console.error("[emulator] boot failed:", err);
     handles.setPhase({
       kind: "error",
@@ -91,160 +73,340 @@ export function startEmulator(
   });
 
   return {
-    dispose: () => ac.abort(),
+    dispose: () => {
+      ac.abort();
+      if (rafId) cancelAnimationFrame(rafId);
+      unwireInput?.();
+      worker?.terminate();
+    },
   };
 }
 
-// ── Boot sequence ─────────────────────────────────────────────────────
+// ── Boot ─────────────────────────────────────────────────────────────
 
 async function boot(
   config: EmulatorConfig,
   handles: LoaderHandles,
   signal: AbortSignal,
+  setWorker: (w: Worker) => void,
+  setRaf: (id: number) => void,
+  setUnwire: (un: () => void) => void,
 ): Promise<void> {
-  // Phase 1: pull the BasiliskII core. Real bytes; we surface progress.
-  await fetchWithProgress(config.coreUrl, "Loading BasiliskII…", handles, signal);
-  await fetchWithProgress(config.wasmUrl, "Loading WebAssembly core…", handles, signal);
-
-  // Phase 2: HEAD-check the disk images so missing artifacts surface
-  // immediately in the network panel and the console. We tolerate 404 on
-  // either disk: a fresh fork that hasn't run CI yet won't have them, and
-  // we still want the emulator UI to render through to the stub state
-  // rather than crash with a fetch error.
-  let bootDiskOk = false;
-  if (config.bootDiskUrl) {
-    try {
-      const r = await fetch(config.bootDiskUrl, { method: "HEAD", signal });
-      bootDiskOk = r.ok;
-      if (!r.ok && r.status !== 404) {
-        console.warn("[emulator] boot disk HEAD returned", r.status);
-      }
-    } catch (err) {
-      if ((err as Error).name !== "AbortError") {
-        console.warn("[emulator] boot disk HEAD failed:", err);
-      }
-    }
+  // ── Phase 0: cross-origin isolation gate. ──
+  // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
+  // Vite dev sets COOP/COEP, and on GH Pages we install coi-serviceworker
+  // (see index.html). If isolation isn't established (first-load before SW
+  // takes over, or unsupported browser), drop into STUB cleanly.
+  if (typeof SharedArrayBuffer === "undefined" || !crossOriginIsolated) {
+    handles.setPhase({
+      kind: "stub",
+      reason:
+        "This browser is not cross-origin isolated, so SharedArrayBuffer " +
+        "is unavailable. The BasiliskII core requires it. On GitHub Pages, " +
+        "reload once after the page has fully loaded — the coi-serviceworker " +
+        "shim takes effect on the second navigation.",
+    });
+    return;
   }
+
+  // ── Phase 1: HEAD-check the chunked boot disk manifest. ──
+  // The manifest is the entry point for chunked-disk reads. If it's missing
+  // we have no way to boot; surface that as STUB rather than crashing in
+  // the worker.
+  if (!config.bootDiskUrl) {
+    handles.setPhase({
+      kind: "stub",
+      reason:
+        "Boot disk URL is not configured. Run scripts/build-boot-disk.sh " +
+        "to produce system755-vibe.dsk + chunks, then rebuild.",
+    });
+    return;
+  }
+  const manifestUrl = `${config.bootDiskUrl}.json`;
+  let manifest: EmulatorChunkedFileSpec;
   try {
-    const r = await fetch(config.appDiskUrl, { method: "HEAD", signal });
-    if (!r.ok && r.status !== 404) {
-      console.warn("[emulator] app.dsk HEAD returned", r.status);
-    }
-  } catch (err) {
-    if ((err as Error).name !== "AbortError") {
-      console.warn("[emulator] app.dsk HEAD failed:", err);
-    }
-  }
-
-  // Phase 3: boot. Always falls into STUB until the BasiliskII WASM worker
-  // glue is ported (see the file-level comment and LEARNINGS.md). The
-  // boot disk URL itself is wired and CI publishes it; the blocker is
-  // now the Module init contract, not the disk.
-  //
-  // Once the worker glue lands, the real init path goes roughly:
-  //   1. Chunk the boot disk (or wrap it as an in-memory
-  //      EmulatorWorkerDisk that satisfies the read/write/size/name
-  //      contract from Infinite Mac's `worker/disks.ts`).
-  //   2. Build EmulatorWorkerConfig (see Infinite Mac common.ts).
-  //   3. Spawn the BasiliskII Emscripten Module with `arguments`
-  //      pointing at the rendered prefs file (BasiliskIIPrefs.txt
-  //      template) and a `globalThis.workerApi` exposing the
-  //      EmulatorWorkerApi surface.
-  //   4. Wire input via wireInput(canvas) — see emulator-input.ts —
-  //      and create the canvas with mountCanvas(handles.mount, ...).
-  //
-  // Reference paths in upstream (mihaip/infinite-mac@30112da0db):
-  //   src/emulator/worker/worker.ts          startEmulator(), EmulatorWorkerApi
-  //   src/emulator/worker/chunked-disk.ts    EmulatorWorkerChunkedDisk
-  //   src/emulator/worker/disks.ts           EmulatorWorkerDisk interface
-  //   src/emulator/common/common.ts          EmulatorWorkerConfig
-  //   src/emulator/ui/config.ts              configToMacemuPrefs()
-  handles.setPhase({
-    kind: "stub",
-    reason: bootDiskOk
-      ? "System 7.5.5 boot disk fetched successfully. The BasiliskII WASM " +
-        "core still needs worker-side glue (EmulatorWorkerApi: video, " +
-        "input, audio, disks, clipboard, files, BasiliskIIPrefs.txt, " +
-        "device-image header) that hasn't been ported from Infinite Mac " +
-        "yet — see emulator-loader.ts header and LEARNINGS.md."
-      : "BasiliskII core downloaded but the boot disk did not respond OK. " +
-        "If this is a fresh fork, run the build pipeline to produce " +
-        "system755-vibe.dsk. See PRD.md Component 3.",
-  });
-}
-
-// ── Networking with progress ──────────────────────────────────────────
-
-async function fetchWithProgress(
-  url: string,
-  label: string,
-  handles: LoaderHandles,
-  signal: AbortSignal,
-): Promise<ArrayBuffer> {
-  handles.setPhase({ kind: "fetching", label, loadedBytes: 0, totalBytes: 0 });
-
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    throw new Error(`${label} HTTP ${res.status}`);
-  }
-
-  const totalHeader = res.headers.get("content-length");
-  const totalBytes = totalHeader ? parseInt(totalHeader, 10) : 0;
-
-  if (!res.body) {
-    // Old browser fallback — no streaming progress.
-    const buf = await res.arrayBuffer();
     handles.setPhase({
       kind: "fetching",
-      label,
-      loadedBytes: buf.byteLength,
-      totalBytes: buf.byteLength,
+      label: "Loading disk manifest…",
+      loadedBytes: 0,
+      totalBytes: 0,
     });
-    return buf;
+    const r = await fetch(manifestUrl, { signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const raw = await r.json();
+    // `baseUrl` is the chunks directory, sibling of the manifest.
+    const baseUrl = `${config.bootDiskUrl.replace(/\.dsk$/, "")}-chunks`;
+    manifest = {
+      name: typeof raw.name === "string" ? raw.name + ".dsk" : "system755-vibe.dsk",
+      baseUrl,
+      totalSize: raw.totalSize,
+      chunks: raw.chunks,
+      chunkSize: raw.chunkSize,
+      prefetchChunks: raw.prefetchChunks ?? [0],
+    };
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return;
+    handles.setPhase({
+      kind: "stub",
+      reason:
+        `Boot disk manifest not found (${manifestUrl}). Run the CI ` +
+        `pipeline (scripts/build-boot-disk.sh emits the chunks + manifest) ` +
+        `or check the deployed asset path. Underlying: ${(err as Error).message}`,
+    });
+    return;
   }
 
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let loaded = 0;
+  // ── Phase 2: HEAD-check the BasiliskII core itself. ──
+  // The worker fetches it with `fetch()` too, but a HEAD here gives us a
+  // crisper error message (and surfaces 404s in the network panel).
+  try {
+    const r = await fetch(config.coreUrl, { method: "HEAD", signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return;
+    handles.setPhase({
+      kind: "stub",
+      reason:
+        `BasiliskII core not found at ${config.coreUrl}. Run ` +
+        `npm run fetch:emulator. Underlying: ${(err as Error).message}`,
+    });
+    return;
+  }
 
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    if (value) {
-      chunks.push(value);
-      loaded += value.byteLength;
-      handles.setPhase({
-        kind: "fetching",
-        label,
-        loadedBytes: loaded,
-        totalBytes,
-      });
+  // ── Phase 3: spin up the worker and wait for handles. ──
+  handles.setPhase({ kind: "starting", detail: "Booting emulator worker…" });
+
+  // Resolve the ROM URL alongside the core. `fetch-emulator.sh` drops
+  // Quadra-650.rom into /emulator/ next to the .wasm.
+  const romUrl = config.coreUrl.replace(/BasiliskII\.js$/, "Quadra-650.rom");
+
+  // The worker file is bundled by Vite (`new URL(...)` pattern, supported
+  // since Vite 2). `type: "module"` because BasiliskII.js is an ES module.
+  const worker = new Worker(
+    new URL("./emulator-worker.ts", import.meta.url),
+    { type: "module", name: "basilisk-worker" },
+  );
+  setWorker(worker);
+
+  let canvas: HTMLCanvasElement | undefined;
+  let ctx: CanvasRenderingContext2D | undefined;
+  let imageData: ImageData | undefined;
+  let videoView: Uint8Array | undefined;
+  let videoModeView: Int32Array | undefined;
+  let inputView: Int32Array | undefined;
+  let frames = 0;
+  let firstFrameLogged = false;
+  let lastBlitRect: EmulatorWorkerVideoBlitRect | undefined;
+
+  let canvasMounted = false;
+  worker.addEventListener("message", (ev: MessageEvent<EmulatorWorkerMessage>) => {
+    const m = ev.data;
+    switch (m.type) {
+      case "emulator_status":
+        // Don't touch the mount once the canvas is in place — status updates
+        // after we've handed off rendering would wipe out the canvas.
+        if (canvasMounted) {
+          console.log("[emulator] status:", m.phase, m.name ?? "");
+        } else {
+          handles.setPhase({
+            kind: "starting",
+            detail: m.phase + (m.name ? ` (${m.name})` : ""),
+          });
+        }
+        break;
+
+      case "emulator_handles": {
+        videoView = new Uint8Array(m.videoBuffer);
+        videoModeView = new Int32Array(m.videoModeBuffer);
+        inputView = new Int32Array(m.inputBuffer);
+        // Mount the canvas and wire input now that we have shared memory.
+        canvas = mountCanvas(handles.mount, {
+          width: m.screenWidth,
+          height: m.screenHeight,
+        });
+        ctx = canvas.getContext("2d", { desynchronized: true })!;
+        imageData = ctx.createImageData(m.screenWidth, m.screenHeight);
+        setBufferAdapter({
+          pushMouseMove: (x, y) => {
+            if (!inputView) return;
+            inputView[InputBufferAddresses.mousePositionFlagAddr] = 1;
+            inputView[InputBufferAddresses.mousePositionXAddr] = x;
+            inputView[InputBufferAddresses.mousePositionYAddr] = y;
+          },
+          pushMouseButton: (button, down) => {
+            if (!inputView) return;
+            const slot = button === 2
+              ? InputBufferAddresses.mouseButton2StateAddr
+              : InputBufferAddresses.mouseButtonStateAddr;
+            inputView[slot] = down ? 1 : 0;
+          },
+          pushKey: (macKeyCode, down, modifiers) => {
+            if (!inputView) return;
+            inputView[InputBufferAddresses.keyEventFlagAddr] = 1;
+            inputView[InputBufferAddresses.keyCodeAddr] = macKeyCode;
+            inputView[InputBufferAddresses.keyStateAddr] = down ? 1 : 0;
+            inputView[InputBufferAddresses.keyModifiersAddr] = modifiers;
+          },
+        });
+        setUnwire(wireInput(canvas));
+        canvasMounted = true;
+        break;
+      }
+
+      case "emulator_video_open":
+        // Resize the canvas + ImageData if the emulator opens at a different
+        // size than we initially mounted (e.g. a 800×600 pre-baked prefs).
+        if (canvas && ctx && (canvas.width !== m.width || canvas.height !== m.height)) {
+          canvas.width = m.width;
+          canvas.height = m.height;
+          imageData = ctx.createImageData(m.width, m.height);
+        }
+        break;
+
+      case "emulator_blit":
+        if (m.rect) {
+          if (!lastBlitRect) lastBlitRect = { ...m.rect };
+          else {
+            lastBlitRect.top = Math.min(lastBlitRect.top, m.rect.top);
+            lastBlitRect.left = Math.min(lastBlitRect.left, m.rect.left);
+            lastBlitRect.bottom = Math.max(lastBlitRect.bottom, m.rect.bottom);
+            lastBlitRect.right = Math.max(lastBlitRect.right, m.rect.right);
+          }
+        }
+        break;
+
+      case "emulator_chunk_loaded":
+        // Could surface this as progress; for now, just log.
+        if (m.chunkIndex < 4) console.log(`[emulator] chunk ${m.chunkIndex} loaded`);
+        break;
+
+      case "emulator_ready":
+        handles.setPhase({ kind: "running" });
+        break;
+
+      case "emulator_error":
+        console.error("[emulator] worker error:", m.error);
+        handles.setPhase({ kind: "error", message: m.error });
+        break;
+
+      case "emulator_stopped":
+        console.log("[emulator] worker stopped");
+        break;
+    }
+  });
+
+  worker.addEventListener("error", (ev) => {
+    console.error("[emulator] worker error event:", ev);
+    handles.setPhase({
+      kind: "error",
+      message: `Worker error: ${ev.message ?? "unknown"}`,
+    });
+  });
+
+  // Fire off the start message.
+  const startMsg: EmulatorWorkerStartMessage = {
+    type: "start",
+    coreUrl: absoluteUrl(config.coreUrl),
+    wasmUrl: absoluteUrl(config.wasmUrl),
+    romUrl: absoluteUrl(romUrl),
+    diskSpecs: [manifest],
+    screenWidth: config.screen.width,
+    screenHeight: config.screen.height,
+    ramSizeMB: 16, // 16MB is plenty for System 7.5.5 + Minesweeper.
+  };
+  worker.postMessage(startMsg);
+
+  // ── Phase 4: render loop. ──
+  const draw = () => {
+    if (signal.aborted) return;
+    if (videoView && videoModeView && imageData && ctx && canvas) {
+      const size = videoModeView[0];
+      if (size > 0) {
+        // Pixels are 32bpp BGRA in the SAB; ImageData wants RGBA. Walk the
+        // dirty rect (or full frame) and swap channels.
+        const rect = lastBlitRect ?? {
+          top: 0,
+          left: 0,
+          bottom: canvas.height,
+          right: canvas.width,
+        };
+        copyAndSwapBgraToRgba(
+          videoView,
+          imageData.data,
+          canvas.width,
+          rect,
+        );
+        ctx.putImageData(
+          imageData,
+          0,
+          0,
+          rect.left,
+          rect.top,
+          rect.right - rect.left,
+          rect.bottom - rect.top,
+        );
+        lastBlitRect = undefined;
+        frames++;
+        if (!firstFrameLogged && frames > 0) {
+          firstFrameLogged = true;
+          console.log("[emulator] first frame painted");
+        }
+      }
+    }
+    setRaf(requestAnimationFrame(draw));
+  };
+  setRaf(requestAnimationFrame(draw));
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function absoluteUrl(path: string): string {
+  return new URL(path, self.location.href).toString();
+}
+
+/**
+ * BasiliskII writes BGRA into the SAB; canvas ImageData is RGBA. We could
+ * walk the whole framebuffer every frame, but using the dirty rect saves
+ * bandwidth when only a corner of the screen changed (which is most of
+ * the time for a quiescent System 7 desktop).
+ */
+function copyAndSwapBgraToRgba(
+  src: Uint8Array,
+  dst: Uint8ClampedArray,
+  width: number,
+  rect: EmulatorWorkerVideoBlitRect,
+) {
+  for (let y = rect.top; y < rect.bottom; y++) {
+    let i = (y * width + rect.left) * 4;
+    const end = (y * width + rect.right) * 4;
+    for (; i < end; i += 4) {
+      dst[i + 0] = src[i + 2];
+      dst[i + 1] = src[i + 1];
+      dst[i + 2] = src[i + 0];
+      dst[i + 3] = 0xff;
     }
   }
-
-  // Concatenate.
-  const out = new Uint8Array(loaded);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.byteLength;
-  }
-  return out.buffer;
 }
+
+// ── Networking with progress (used for non-streaming fetches) ────────
+// Kept around so the loader can show progress on the manifest fetch if it
+// ever grows large enough to warrant it. For now the manifest is < 50KB
+// and one shot is fine.
 
 // ── DOM ──────────────────────────────────────────────────────────────
 
 function renderShell(mount: HTMLElement): LoaderHandles {
   const setPhase = (phase: LoaderPhase) => {
+    // CAREFUL: once we transition to `running` the canvas is mounted in
+    // place — we MUST NOT touch innerHTML or we'll wipe it. Only re-render
+    // for phases that own the mount as their own DOM tree.
+    if (phase.kind === "running") return;
     mount.innerHTML = renderPhase(phase);
   };
   setPhase({ kind: "idle" });
   return { mount, setPhase };
 }
 
-// Exported so a future thin shim that drives the BasiliskII Emscripten
-// Module can swap the loader UI for the real canvas without re-rooting
-// the import graph. See the boot()-phase 3 comment for the full path.
 export function mountCanvas(
   mount: HTMLElement,
   screen: { width: number; height: number },
@@ -255,7 +417,6 @@ export function mountCanvas(
   canvas.width = screen.width;
   canvas.height = screen.height;
   canvas.className = "emulator-canvas";
-  // Tabindex so the canvas can receive keyboard focus.
   canvas.tabIndex = 0;
   mount.appendChild(canvas);
   return canvas;
@@ -265,15 +426,12 @@ function renderPhase(phase: LoaderPhase): string {
   switch (phase.kind) {
     case "idle":
       return progressBlock("Initializing…", 0, 0);
-    case "fetching": {
+    case "fetching":
       return progressBlock(phase.label, phase.loadedBytes, phase.totalBytes);
-    }
     case "starting":
-      return progressBlock("Starting Macintosh…", 1, 1);
+      return progressBlock(phase.detail, 1, 1);
     case "running":
-      // Canvas takes over; this branch isn't normally rendered (mountCanvas
-      // wipes the mount), but we keep it for completeness.
-      return "";
+      return ""; // canvas takes over
     case "stub":
       return stubBlock(phase.reason);
     case "error":
@@ -282,8 +440,7 @@ function renderPhase(phase: LoaderPhase): string {
 }
 
 function progressBlock(label: string, loaded: number, total: number): string {
-  const pct =
-    total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+  const pct = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
   const counter =
     total > 0
       ? `${formatBytes(loaded)} / ${formatBytes(total)}`
@@ -323,8 +480,6 @@ function errorBlock(message: string): string {
     </div>
   `;
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────
 
 function formatBytes(n: number): string {
   if (n <= 0) return "";
