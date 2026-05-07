@@ -203,11 +203,13 @@ hmount "${OUTPUT}" >/dev/null
 trap 'humount "${OUTPUT}" >/dev/null 2>&1 || true' EXIT
 
 # Sanity-check that the volume actually has a System Folder. If we ever
-# pin a wrong image this is where it'd blow up.
-if ! hls -a / 2>/dev/null | grep -q "System Folder"; then
+# pin a wrong image this is where it'd blow up. hfsutils paths are
+# Mac-style — the volume root is "" (or ":"), NOT "/". Passing "/"
+# yields "no such file or directory".
+if ! hls -a 2>/dev/null | grep -q "System Folder"; then
   echo "error: mounted volume has no 'System Folder' at the root." >&2
   echo "  Listing for diagnosis:" >&2
-  hls -a / >&2 || true
+  hls -a >&2 || true
   exit 1
 fi
 
