@@ -237,8 +237,43 @@ echo "[boot-disk] installing $(basename "${BINARY}") into Startup Items"
 hcopy -m "${BINARY}" ":System Folder:Startup Items:"
 
 # Verify the copy landed and looks Mac-shaped (Type/Creator codes).
+# Format of `hls -l` per its man page:
+#   <type-flag>  <TYPE>/<CREATOR>  <rsrc-bytes>  <data-bytes>  <date>  <name>
+# So column 3 is the resource-fork length, column 4 is the data-fork
+# length. An APPL with rsrc==0 is a paperweight: no SIZE resource means
+# the Process Manager has no memory partition info and the launch path
+# bombs on an unimplemented-trap dialog before main() even runs.
 echo "[boot-disk] :System Folder:Startup Items: contents:"
-hls -l ":System Folder:Startup Items:"
+HLS_OUT="$(hls -l ":System Folder:Startup Items:")"
+echo "${HLS_OUT}"
+
+APP_NAME_NOEXT="$(basename "${BINARY}" .bin)"
+APP_LINE="$(printf '%s\n' "${HLS_OUT}" | awk -v n="${APP_NAME_NOEXT}" '$NF==n')"
+if [[ -z "${APP_LINE}" ]]; then
+  echo "FATAL: copied app '${APP_NAME_NOEXT}' not found in Startup Items listing." >&2
+  exit 1
+fi
+
+# Columns: 1=type-flag, 2=TYPE/CREATOR, 3=rsrc, 4=data, 5..=date, last=name.
+APP_TYPE="$(printf '%s' "${APP_LINE}" | awk '{print $2}')"
+APP_RSRC="$(printf '%s' "${APP_LINE}" | awk '{print $3}')"
+APP_DATA="$(printf '%s' "${APP_LINE}" | awk '{print $4}')"
+echo "[boot-disk] installed app type/creator: ${APP_TYPE}, rsrc=${APP_RSRC}, data=${APP_DATA}"
+
+if [[ "${APP_RSRC}" == "0" ]]; then
+  echo "FATAL: resource fork is empty after hcopy -m." >&2
+  echo "  This means the SIZE/CODE/etc resources didn't make it onto the boot disk;" >&2
+  echo "  the Process Manager will bomb on launch with 'unimplemented trap'." >&2
+  echo "  Check the input MacBinary header at bytes 0x57..0x5A (rsrc length, big-endian):" >&2
+  if command -v xxd >/dev/null 2>&1; then
+    xxd -s 87 -l 4 "${BINARY}" >&2 || true
+  fi
+  exit 1
+fi
+case "${APP_TYPE}" in
+  APPL/*) : ;;  # APPL is what we want; creator may be ???? if app didn't register.
+  *) echo "FATAL: copied file has type ${APP_TYPE}, expected APPL/<creator>." >&2; exit 1 ;;
+esac
 
 humount "${OUTPUT}" >/dev/null
 trap - EXIT

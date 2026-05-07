@@ -30,6 +30,41 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — `hls -l` columns are `rsrc data`, not `data rsrc` (rsrc fork was fine all along)
+**Context:** Working hypothesis after rounds 1+2 was that `hcopy -m` was
+silently dropping the resource fork. The CI log line
+`f  APPL/????      7011         0 May  7 23:42 Minesweeper` was being
+read as "data=7011, rsrc=0", which would explain the bomb (no SIZE
+resource → Process Manager bombs). Plan was to round-trip through
+Retro68's own `Minesweeper.dsk`, then assert the rsrc fork is non-zero.
+**Finding:** Reproduced locally with the CI artifact's `Minesweeper.bin`
+on macOS hfsutils. The columns in `hls -l` per its man page are:
+`<type-flag>  <TYPE>/<CREATOR>  <rsrc-bytes>  <data-bytes>  <date>  <name>`.
+So "7011 0" actually means **rsrc=7011, data=0** — exactly what an APPL
+should look like (resource-fork app, empty data fork). Verified by
+extracting back to MacBinary and checking the header rsrc-length field
+at offset 0x57: `00 00 1b 63` = 7011 bytes. Forks survive `hcopy -m`
+byte-perfect; only the MacBinary CRC at 0x7A-0x7B differs across
+round-trips. **The resource fork was never the bug.** The "unimplemented
+trap" bomb is somewhere else — most likely one of the round-2 entry's
+hypotheses (Retro68 runtime startup before main, SIZE flag combinations,
+ROM trap-table mismatch, or Type/Creator handling by Finder).
+**Action:** (1) Added a defensive rsrc-fork assertion to
+`scripts/build-boot-disk.sh` (correctly reading column 3 as rsrc, column
+4 as data) so future regressions in the copy pipeline fail loudly
+instead of silently. (2) Restored full Minesweeper from the .bak files
+since the bisection's hello-world isn't useful — the bug isn't in the
+app code or in the resource layout, it's upstream. (3) Did NOT change
+the copy mechanism — `hcopy -m` is working correctly. The
+"copy-via-Retro68-.dsk" round-trip was tested and produces identical
+on-disk forks (same APPL/????, same 7011-byte rsrc), so it would not
+have changed anything. (4) Next investigation should follow round-2
+hypotheses 1, 4, 5: try a different ROM (Universal/Quadra-840AV vs
+Quadra-650), or compile the official Retro68 "console" sample
+byte-for-byte and see if it bombs in our pipeline. If the Retro68
+sample boots cleanly, copy whatever it does; if it bombs too, the
+bug is in the BasiliskII/ROM/SDK combination.
+
 ### 2026-05-08 — Bisection round 2: even SIZE-only + NewWindow bombs (NOT in our code)
 **Context:** Round 1 hello-world bombed (preceding entry). Round 2
 went one step further: dropped the `WIND` resource entirely, created
