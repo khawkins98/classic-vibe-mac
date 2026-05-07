@@ -25,10 +25,19 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 - **Execution layer**: stripped Infinite Mac (Basilisk II, 68k, System 7.5.5) served
   as static files on GitHub Pages, referencing Infinite Mac's CDN for the base OS disk
   (avoids bundling/redistributing system software ourselves)
-- **Auto-launch**: app placed in Startup Items so it opens immediately on boot
+- **Auto-launch**: app opens automatically on boot. Note: System 7's Startup
+  Items only fires from the *boot* volume's blessed System Folder, not from a
+  secondary mounted disk (see LEARNINGS.md). Approach is therefore one of:
+  (a) inject the app into the boot disk's System Folder at emulator-config
+  time, (b) ship a custom blessed boot disk with the app pre-installed, or
+  (c) drive Basilisk II to open the app post-boot. (a) or (b) is preferred.
 - **Demo app**: a Minesweeper clone (validates the full pipeline end-to-end)
 - **Template repo**: structured so anyone can fork, replace the app source, and get
   their own GitHub Pages deployment
+- **Automated testing**: three-layer strategy — host-compiled C unit tests for
+  game logic, Playwright e2e against the Vite dev server, and AI vision
+  assertions for screenshots of the emulated canvas (pixel-diff is too brittle
+  against an emulated CRT)
 
 ## Non-Goals (POC)
 
@@ -87,22 +96,53 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 - Designed to run on System 7.x
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
-- Uses a **Retro68 Docker image** (e.g. `ghcr.io/autc04/retro68`) for fast, cached builds
+- Uses **`ghcr.io/autc04/retro68:latest`** as the GitHub Actions job container
+  — Retro68 has not published a release tarball since 2019, and the rolling
+  Docker image is the maintained distribution channel (see LEARNINGS.md).
 - Steps:
   1. Compile C → Mac binary using CMake + Retro68 toolchain
-  2. Create HFS disk image using `hfsutils` or `mkfs.hfs` in Linux
-  3. Copy binary into disk image's `System Folder/Startup Items/`
+     (`/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake`
+     inside the container)
+  2. Create HFS disk image using `hfsutils` (`hcopy -m` preserves resource
+     forks via MacBinary)
+  3. Copy binary into disk image (placement depends on the auto-launch
+     approach chosen — see the Auto-launch goal above)
   4. Output: `app.dsk`
-- Artifacts cached between runs for speed
+- Artifact validation: `.bin` and `.dsk` are sanity-checked with `test -s`;
+  Retro68's `.APPL` artifact is sometimes 0 bytes and is excluded from
+  release uploads (see LEARNINGS.md).
 
 ### 3. Web Execution Layer (`src/web/`)
-- Minimal fork of Infinite Mac frontend (React + Vite)
-- Uses pre-built `BasiliskII.wasm` (pulled from Infinite Mac releases, not rebuilt)
+- **Vite + TypeScript** (vanilla TS, no React for now — the original PRD
+  mention of React was speculative; we don't need a framework to mount one
+  emulator).
+- Uses pre-built `BasiliskII.wasm` from Infinite Mac. Infinite Mac does **not**
+  ship WASM via GitHub Releases or a documented CDN — the emulator cores live
+  committed at `src/emulator/worker/emscripten/` on `main` (see LEARNINGS.md).
+  Plan: a build-time fetch script pinning a specific Infinite Mac commit SHA
+  and pulling `BasiliskII.wasm`/`.js` via `raw.githubusercontent.com`.
+  Apache-2.0 license — redistribution OK with NOTICE preserved.
 - Configured to:
   - Load base System 7.5.5 disk from Infinite Mac's CDN
   - Mount our custom `app.dsk` as a second drive
-  - Boot and let Startup Items trigger our app
-- Strips out Infinite Mac's library browser, CD-ROM support, etc.
+  - Boot and trigger our app (mechanism TBD — see Auto-launch goal)
+- Strips out Infinite Mac's library browser, multi-OS selector, settings
+  panes, etc.
+- Dev server: `npm run dev` from the repo root (npm workspaces).
+
+### 4. Testing (`tests/`)
+- Three layers:
+  1. **Unit (`tests/unit/`)** — host-compiled C tests for game logic. Anything
+     in `src/app/` that doesn't call MacToolbox APIs is testable here against
+     the host `gcc`. Fast and cheap.
+  2. **E2E (`tests/e2e/`)** — Playwright against the local Vite dev server.
+     Drives the page, sends events into the canvas, captures screenshots.
+  3. **Vision (`tests/visual/`)** — AI vision assertions on canvas
+     screenshots via the Claude API. Replaces brittle pixel-diff with
+     semantic checks ("expect a window titled Minesweeper", "expect a 9×9
+     grid"). Gated behind `ANTHROPIC_API_KEY`.
+- Top-level npm scripts: `npm test`, `npm run test:unit`, `npm run test:e2e`,
+  `npm run test:visual`.
 
 ### 4. GitHub Pages Deployment
 - Vite builds static output to `dist/`
