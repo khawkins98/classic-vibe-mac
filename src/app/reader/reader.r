@@ -89,8 +89,9 @@ resource 'MENU' (131) {
     allEnabled, enabled;
     "View";
     {
-        "Reload",   noIcon, "R", noMark, plain;
-        "Back",     noIcon, "[", noMark, plain;
+        "Reload",      noIcon, "R", noMark, plain;
+        "Back",        noIcon, "[", noMark, plain;
+        "Open URL...", noIcon, "L", noMark, plain;
     }
 };
 
@@ -115,11 +116,13 @@ resource 'WIND' (128) {
 
 /*
  * STR# 128 layout:
- *   1  ":Shared:"           — path prefix to the extfs share
+ *   1  ":Shared:"           — path prefix to the extfs share (baked content)
  *   2  "index.html"         — default landing doc
  *   3  "(no document)"      — placeholder window title
  *   4  "Reader"             — short app name (alert headers, etc.)
  *   5  fallback HTML body shown when :Shared: is missing or empty
+ *   6  ":Unix:"             — extfs runtime volume prefix (JS→Mac live data)
+ *   7  "(fetched URL)"      — window title for URL-fetched documents
  */
 resource 'STR#' (128) {
     {
@@ -135,6 +138,8 @@ resource 'STR#' (128) {
         "extfs share, or the share is empty. Add HTML files to "
         "<i>src/web/public/shared/</i> in the repo, redeploy, and "
         "Reader will pick them up on the next launch.</p>";
+        ":Unix:";
+        "(fetched URL)";
     }
 };
 
@@ -190,6 +195,51 @@ resource 'ALRT' (130) {
         OK, visible, silent;
     },
     alertPositionMainScreen
+};
+
+/* ------------------------------------------------------- Open URL dialog */
+
+/*
+ * DITL 131 — URL input dialog item list.
+ *   Item 1: OK button   (default)
+ *   Item 2: Cancel      (cancel item)
+ *   Item 3: EditText    (URL input field)
+ *   Item 4: StaticText  (hint label)
+ *
+ * Dialog rect: {80, 60, 175, 500} = 420 wide x 95 tall, centred-ish.
+ * The edit field is wide enough for a typical URL; the hint text below it
+ * reminds the user of the supported wiki: and gh: shortcuts.
+ */
+resource 'DITL' (131) {
+    {
+        /* 1 — OK (default) */
+        { 60, 330, 80, 430 },
+        Button { enabled, "Open" };
+
+        /* 2 — Cancel */
+        { 60, 220, 80, 320 },
+        Button { enabled, "Cancel" };
+
+        /* 3 — URL edit field (255-char max; Reader truncates at 254) */
+        { 10, 10, 28, 430 },
+        EditText { enabled, "" };
+
+        /* 4 — hint static text */
+        { 34, 10, 52, 430 },
+        StaticText { disabled,
+            "wiki:Article  gh:user/repo/path  https://..." };
+    }
+};
+
+resource 'DLOG' (131) {
+    { 80, 60, 175, 500 },
+    movableDBoxProc,
+    visible,
+    goAway,
+    0,
+    131,
+    "Open URL",
+    noAutoCenter
 };
 
 /* ----------------------------------------------- Finder-binding bundle */
@@ -359,6 +409,6 @@ resource 'SIZE' (-1) {
     reserved,
     reserved,
     reserved,
-    256 * 1024,
-    256 * 1024
+    512 * 1024,
+    512 * 1024
 };

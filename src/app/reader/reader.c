@@ -106,13 +106,15 @@ enum {
     kFileClose  = 2,
     kFileQuit   = 4,
 
-    kViewReload = 1,
-    kViewBack   = 2
+    kViewReload  = 1,
+    kViewBack    = 2,
+    kViewOpenUrl = 3
 };
 
 enum {
-    kAlertAbout = 128,
-    kAlertNote  = 130
+    kAlertAbout    = 128,
+    kAlertNote     = 130,
+    kDialogOpenUrl = 131
 };
 
 enum {
@@ -120,7 +122,9 @@ enum {
     kStrIndex       = 2,    /* "index.html" */
     kStrEmptyTitle  = 3,    /* "(no document)" */
     kStrErrTitle    = 4,    /* "Reader" */
-    kStrFallbackHtml = 5    /* HTML body shown when no content found */
+    kStrFallbackHtml = 5,   /* HTML body shown when no content found */
+    kStrUnix        = 6,    /* ":Unix:" — extfs runtime volume */
+    kStrFetchedUrl  = 7     /* "(fetched URL)" — window title for URL docs */
     /* ← These IDs index into the STR# 128 resource defined in reader.r.
      * Open reader.r in the playground editor, change one of those strings,
      * click Build & Run, and watch your edit show up in the Mac above. */
@@ -168,6 +172,19 @@ static HtmlLayout    gLayout;
 static Str63       gCurrentDoc;
 static Str63       gHistory[kHistoryDepth];
 static short       gHistoryDepth   = 0;
+
+/* ------------------------------------------- URL-fetch polling state */
+
+/* Monotonic request counter. Incremented each time the user submits a URL.
+ * Written into __url-request.txt so the JS host can detect new requests
+ * and ignore stale result files from previous requests. */
+static long        gUrlRequestId   = 0;
+
+/* true while we are waiting for the JS host to write the result file. */
+static Boolean     gPollingForResult = false;
+
+/* Tick count at which we next check for the result file. */
+static long        gNextResultCheck = 0;
 
 /* ----------------------------------------------------- Pascal-string utils */
 
@@ -222,6 +239,193 @@ static void BuildSharedPath(StringPtr out, ConstStr255Param docName)
     }
     PStrCopy(out, prefix);
     PStrCat(out, docName);
+}
+
+/* Build a Str255 holding ":Unix:<filename>". Used for files written into the
+ * extfs live mount by the JS host (e.g. __url-request.txt, __url-result-N.html).
+ * Unlike :Shared: (baked at build time), :Unix: is read/write at runtime. */
+static void BuildUnixPath(StringPtr out, ConstStr255Param filename)
+{
+    Str255 prefix;
+    GetIndString(prefix, kStrListID, kStrUnix);   /* ":Unix:" */
+    if (prefix[0] == 0) {
+        prefix[0] = 6;
+        BlockMoveData(":Unix:", prefix + 1, 6);
+    }
+    PStrCopy(out, prefix);
+    PStrCat(out, filename);
+}
+
+/* Convert a non-negative long integer to a decimal ASCII Pascal string.
+ * There is no itoa() or sprintf() in the classic Mac toolbox we can rely on
+ * without linking the C runtime — this is a standalone helper. */
+static void LongToStr(long n, Str255 out)
+{
+    /* We build digits right-to-left into a temp C-string, then reverse. */
+    char tmp[12];  /* max 10 digits for 32-bit + sign + NUL */
+    int  len = 0;
+    if (n == 0) { tmp[len++] = '0'; }
+    while (n > 0) { tmp[len++] = (char)('0' + (n % 10)); n /= 10; }
+    /* Reverse into the Pascal string. */
+    out[0] = (unsigned char)len;
+    for (int i = 0; i < len; i++) {
+        out[1 + i] = (unsigned char)tmp[len - 1 - i];
+    }
+}
+
+/* Write the URL fetch request to :Unix:__url-request.txt.
+ * Format: "<requestId>\n<url>\n" (newline-separated, ASCII/MacRoman).
+ * The JS shared-poller polls this file and starts a fetch when the ID changes. */
+static void WriteUrlRequest(ConstStr255Param url)
+{
+    gUrlRequestId++;
+
+    Str255 path;
+    BuildUnixPath(path, "\p__url-request.txt");
+
+    /* Delete any previous request file so we start clean. */
+    HDelete(0, 0, path);
+    short refNum = 0;
+    OSErr err = HCreate(0, 0, path, 'CVMR', 'TEXT');
+    if (err != noErr && err != dupFNErr) return;
+    err = HOpen(0, 0, path, fsWrPerm, &refNum);
+    if (err != noErr) return;
+
+    /* Write "<id>\n<url>\n" — assemble into a char buf. */
+    char buf[280];
+    int  pos = 0;
+
+    /* Append the request ID digits. */
+    Str255 idStr;
+    LongToStr(gUrlRequestId, idStr);
+    for (int i = 1; i <= idStr[0]; i++) buf[pos++] = idStr[i];
+    buf[pos++] = '\n';
+
+    /* Append the URL (Pascal string body). */
+    for (int i = 1; i <= url[0] && pos < 277; i++) buf[pos++] = url[i];
+    buf[pos++] = '\n';
+
+    long count = pos;
+    (void)FSWrite(refNum, &count, buf);
+    FSClose(refNum);
+
+    gPollingForResult = true;
+    gNextResultCheck  = TickCount() + 30;  /* first check ~0.5 s from now */
+}
+
+/* Load a document directly from a full Mac path (bypassing BuildSharedPath).
+ * Used for URL-fetched result files written to :Unix: by the JS host. */
+static void LoadDocumentFromFullPath(ConstStr255Param fullPath,
+                                     ConstStr255Param displayName,
+                                     Boolean          pushHistory)
+{
+    long n = ReadHtmlFile(fullPath);
+    if (n < 0) return;   /* file not ready yet — caller retries */
+    gHtmlLen = n;
+
+    if (pushHistory && !PStrEqual(displayName, gCurrentDoc)) {
+        if (gHistoryDepth < kHistoryDepth) {
+            PStrCopy(gHistory[gHistoryDepth], gCurrentDoc);
+            gHistoryDepth++;
+        } else {
+            for (int i = 1; i < kHistoryDepth; i++) {
+                PStrCopy(gHistory[i - 1], gHistory[i]);
+            }
+            PStrCopy(gHistory[kHistoryDepth - 1], gCurrentDoc);
+        }
+    }
+    PStrCopy(gCurrentDoc, displayName);
+
+    /* Show "(fetched URL)" as the window title. */
+    Str255 titleStr;
+    GetIndString(titleStr, kStrListID, kStrFetchedUrl);
+    if (titleStr[0] == 0) { titleStr[0] = 13; BlockMoveData("(fetched URL)", titleStr + 1, 13); }
+    SetWTitle(gWindow, titleStr);
+
+    RebuildLayout();
+    InvalidateContent();
+}
+
+/* Poll for the URL fetch result written by the JS shared-poller.
+ * Called from the main loop when gPollingForResult is true.
+ * On success: loads the document and clears polling state.
+ * On ENOENT: returns (will retry next tick).
+ * On other error: gives up. */
+static void CheckUrlResult(void)
+{
+    /* Build :Unix:__url-result-<id>.html */
+    Str255 filename;
+    Str255 idStr;
+    LongToStr(gUrlRequestId, idStr);
+
+    /* filename = "__url-result-" ++ id ++ ".html" */
+    filename[0] = 0;
+    PStrCat(filename, "\p__url-result-");
+    PStrCat(filename, idStr);
+    PStrCat(filename, "\p.html");
+
+    Str255 fullPath;
+    BuildUnixPath(fullPath, filename);
+
+    short refNum = 0;
+    OSErr err = HOpen(0, 0, fullPath, fsRdPerm, &refNum);
+    if (err == fnfErr || err == nsvErr) {
+        /* Not written yet — schedule next check in ~0.5 s. */
+        gNextResultCheck = TickCount() + 30;
+        return;
+    }
+    if (err != noErr) {
+        /* Unexpected error — give up. */
+        gPollingForResult = false;
+        return;
+    }
+    FSClose(refNum);
+
+    /* File is present — load it. */
+    gPollingForResult = false;
+    Str255 displayName;
+    GetIndString(displayName, kStrListID, kStrFetchedUrl);
+    LoadDocumentFromFullPath(fullPath, displayName, true);
+
+    /* Clean up the result file so stale data doesn't confuse a future request. */
+    HDelete(0, 0, fullPath);
+}
+
+/* Show the "Open URL" dialog (DLOG 131). On OK, write the URL request. */
+static void DoOpenUrlDialog(void)
+{
+    DialogPtr dlg = GetNewDialog(kDialogOpenUrl, NULL, (WindowPtr)-1L);
+    if (!dlg) return;
+
+    /* Tell the Dialog Manager which items are default/cancel so Return and
+     * Escape work as expected (inside Macintosh: Toolbox Essentials § 6-82). */
+    SetDialogDefaultItem(dlg, 1);   /* item 1 = Open button */
+    SetDialogCancelItem(dlg, 2);    /* item 2 = Cancel button */
+
+    /* Put focus in the URL edit field (item 3). */
+    SelectDialogItemText(dlg, 3, 0, 32767);
+
+    short itemHit = 0;
+    while (itemHit != 1 && itemHit != 2) {
+        ModalDialog(NULL, &itemHit);
+    }
+
+    if (itemHit == 1) {
+        /* Retrieve the URL text from item 3. */
+        short  kind;
+        Handle h;
+        Rect   box;
+        GetDialogItem(dlg, 3, &kind, &h, &box);
+        Str255 url;
+        GetDialogItemText(h, url);
+
+        /* Ignore blank input. */
+        if (url[0] > 0) {
+            WriteUrlRequest(url);
+        }
+    }
+
+    DisposeDialog(dlg);
 }
 
 /* ------------------------------------------------------ File I/O */
@@ -617,8 +821,9 @@ static void DoMenuCommand(long cmd)
         (void)SystemEdit(menuItem - 1);
     } else if (menuID == kMenuView) {
         switch (menuItem) {
-            case kViewReload: LoadDocument(gCurrentDoc, false); break;
-            case kViewBack:   NavigateBack();                   break;
+            case kViewReload:  LoadDocument(gCurrentDoc, false); break;
+            case kViewBack:    NavigateBack();                   break;
+            case kViewOpenUrl: DoOpenUrlDialog();                break;
         }
     }
     HiliteMenu(0);
@@ -983,7 +1188,10 @@ int main(void)
 
     while (!gQuit) {
         EventRecord e;
-        if (WaitNextEvent(everyEvent, &e, 30L, NULL)) {
+        /* When polling for a URL result, use a short sleep so we check
+         * frequently. TickCount() runs at ~60 Hz — 5 ticks ≈ 83 ms. */
+        long sleepTicks = gPollingForResult ? 5L : 30L;
+        if (WaitNextEvent(everyEvent, &e, sleepTicks, NULL)) {
             switch (e.what) {
                 case mouseDown:   DoMouseDown(&e);                 break;
                 case keyDown:     DoKeyDown(&e);                   break;
@@ -997,6 +1205,11 @@ int main(void)
                     (void)AEProcessAppleEvent(&e);
                     break;
             }
+        }
+
+        /* URL result polling — check once every ~30 ticks when active. */
+        if (gPollingForResult && TickCount() >= gNextResultCheck) {
+            CheckUrlResult();
         }
     }
 
