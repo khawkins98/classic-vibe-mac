@@ -264,17 +264,6 @@ shipped, the next slate is polish + new demo apps.
 - **Reader URL bar** —
   [#14](https://github.com/khawkins98/classic-vibe-mac/issues/14).
   Bounded, host-fetched, CORS-permissive sources only.
-- **Playground v1.2 polish** —
-  [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22)
-  (file tree + tabs),
-  [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23)
-  (Rez syntax highlighting),
-  [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24)
-  (3-way diff for upstream sample changes),
-  [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25)
-  (side-by-side editor + emulator at viewport ≥1200px),
-  [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26)
-  ("Hello, Mac!" minimal starter sample).
 - **Stretch:** Mac OS 9 / PPC via SheepShaver and Retro68's PPC
   toolchain. Requires a non-redistributable ROM, complicating
   things. Out of POC scope.
