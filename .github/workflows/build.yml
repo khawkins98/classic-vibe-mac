@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-app:
-    name: Cross-compile Reader (68k)
+    name: Cross-compile classic Mac apps (68k)
     runs-on: ubuntu-latest
 
     # Official Retro68 image, rebuilt on every commit to Retro68 master.
@@ -61,20 +61,27 @@ jobs:
       # Sanity check. The .APPL file is the data fork only and may be 0 bytes
       # for resource-only apps — the canonical artifacts are .bin (MacBinary,
       # both forks) and .dsk (mountable HFS image with the app inside).
+      # Multi-app: each subdirectory of build/ is its own app's output.
       - name: Verify build artifacts
         run: |
           ls -la build/
-          test -s build/Reader.bin
-          test -s build/Reader.dsk
+          ls -la build/reader/
+          ls -la build/macweather/
+          test -s build/reader/Reader.bin
+          test -s build/reader/Reader.dsk
+          test -s build/macweather/MacWeather.bin
+          test -s build/macweather/MacWeather.dsk
 
-      # Pack the compiled MacBinary into our own HFS disk image. Feeds the
-      # .bin (MacBinary, both forks intact) — NOT the .APPL (data-fork-only,
-      # frequently 0 bytes for resource-only apps). hcopy -m inside the script
-      # decodes MacBinary back into a real two-fork HFS file on the volume.
+      # Pack the compiled Reader MacBinary into our own HFS disk image.
+      # Feeds the .bin (MacBinary, both forks intact) — NOT the .APPL
+      # (data-fork-only, frequently 0 bytes for resource-only apps). hcopy
+      # -m inside the script decodes MacBinary back into a real two-fork
+      # HFS file on the volume. (app.dsk is currently Reader-only; the
+      # boot disk below carries every app.)
       - name: Build custom app.dsk (HFS disk image with Startup Items)
         run: |
           mkdir -p dist
-          ./scripts/build-disk-image.sh build/Reader.bin dist/app.dsk
+          ./scripts/build-disk-image.sh build/reader/Reader.bin dist/app.dsk
           ls -la dist/
           test -s dist/app.dsk
 
@@ -104,14 +111,20 @@ jobs:
           path: .cache/boot-disk
           key: boot-disk-system755-v1
 
-      - name: Build bootable System 7.5.5 disk (app pre-installed)
+      - name: Build bootable System 7.5.5 disk (apps pre-installed)
         # `set +e` because the SHA-256 pin is currently a placeholder; the
         # script prints the observed hash and continues unverified the
         # first time. After the first successful CI run, paste the hash
         # back into BOOT_DISK_SHA256 in the script and remove this `|| true`.
         # Track in PRD risks table.
+        #
+        # The first arg is comma-separated; build-boot-disk.sh installs
+        # each binary into both Startup Items (auto-launch on boot) and
+        # :Applications: (user-launchable from the desktop).
         run: |
-          ./scripts/build-boot-disk.sh build/Reader.bin dist/system755-vibe.dsk || {
+          ./scripts/build-boot-disk.sh \
+            build/reader/Reader.bin,build/macweather/MacWeather.bin \
+            dist/system755-vibe.dsk || {
             status=$?
             echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
           }
@@ -125,11 +138,14 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Reader-${{ github.sha }}
+          name: classic-vibe-mac-${{ github.sha }}
           path: |
-            build/Reader.bin
-            build/Reader.dsk
-            build/Reader.APPL
+            build/reader/Reader.bin
+            build/reader/Reader.dsk
+            build/reader/Reader.APPL
+            build/macweather/MacWeather.bin
+            build/macweather/MacWeather.dsk
+            build/macweather/MacWeather.APPL
             dist/app.dsk
             dist/system755-vibe.dsk
             dist/system755-vibe.dsk.json
@@ -157,10 +173,10 @@ jobs:
       # Pull the artifact from build-app so we can co-locate dist/app.dsk
       # next to the Vite output. Downloads to ./artifact/ preserving the
       # original directory structure (build/, dist/).
-      - name: Download Reader artifact
+      - name: Download app artifact
         uses: actions/download-artifact@v4
         with:
-          name: Reader-${{ github.sha }}
+          name: classic-vibe-mac-${{ github.sha }}
           path: artifact
 
       - name: Verify downloaded app.dsk

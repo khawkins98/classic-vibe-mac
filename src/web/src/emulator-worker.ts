@@ -56,6 +56,7 @@ import {
   type EmulatorChunkedFileSpec,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
+import { startWeatherPoller } from "./weather-poller";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -388,6 +389,7 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     screenHeight,
     ramSizeMB,
     sharedFolderFiles,
+    weather,
   } = msg;
 
   // ── Allocate the shared memory regions ──
@@ -555,6 +557,24 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
 
     onRuntimeInitialized() {
       self.postMessage({ type: "emulator_ready" });
+      // Start the live weather poll. /Shared/ exists at this point (preRun
+      // created it), and BasiliskII's extfs surfaces it as the Mac volume
+      // "Unix:" — so MacWeather's HOpen of :Unix:weather.json will see
+      // whatever JSON we drop in. First fetch fires immediately, then
+      // every 15 minutes. See weather-poller.ts.
+      if (weather) {
+        try {
+          startWeatherPoller({
+            emscriptenFs: moduleOverrides.FS,
+            fallbackLat: weather.fallbackLat,
+            fallbackLon: weather.fallbackLon,
+            lat: weather.lat,
+            lon: weather.lon,
+          });
+        } catch (err) {
+          console.warn("[worker] weather poller failed to start:", err);
+        }
+      }
     },
 
     print: (...args: unknown[]) => console.log("[basilisk]", ...args),

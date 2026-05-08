@@ -87,6 +87,18 @@ export type EmulatorWorkerStartMessage = {
    * See emulator-config.ts `sharedFolder` for the source of this list.
    */
   sharedFolderFiles: Array<{ name: string; url: string }>;
+  /**
+   * Live weather poll. The worker fetches from open-meteo and writes the
+   * JSON to /Shared/weather.json (which appears as :Unix:weather.json
+   * inside the Mac, where MacWeather reads it). Coordinates are
+   * fallbacks; main-thread code can override them by passing through.
+   */
+  weather?: {
+    fallbackLat: number;
+    fallbackLon: number;
+    lat?: number;
+    lon?: number;
+  };
 };
 
 /** Worker → main messages. Discriminated union by `type`. */

@@ -305,6 +305,10 @@ async function boot(
       name: f.name,
       url: absoluteUrl(f.url),
     })),
+    weather: {
+      fallbackLat: config.weather.fallbackLat,
+      fallbackLon: config.weather.fallbackLon,
+    },
   };
   worker.postMessage(startMsg);
 
