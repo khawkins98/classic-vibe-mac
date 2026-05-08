@@ -735,13 +735,25 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
       this.#nextExpectedBlitTime = performance.now() + 16;
     }
 
-    // ── Audio: stubbed. The .wasm calls these but we drop the data. ──
-    didOpenAudio(_sampleRate: number, _sampleSize: number, _channels: number) {
-      // Posting "audio open" makes the upstream UI side decide to start an
-      // AudioWorklet; we don't have one wired, so just acknowledge silently.
+    // ── Audio: postMessage-based fallback (no ringbuf.js dependency). ──
+    // The main thread creates an AudioContext + AudioWorklet on
+    // `emulator_audio_open`, and the worklet receives chunks via
+    // `emulator_audio_data`. `audioBufferSize()` always returns 0 so
+    // BasiliskII keeps producing frames; backpressure isn't needed at
+    // this volume.
+    didOpenAudio(sampleRate: number, sampleSize: number, channels: number) {
+      self.postMessage({ type: "emulator_audio_open", sampleRate, sampleSize, channels });
     }
     audioBufferSize(): number { return 0; }
-    enqueueAudio(_bufPtr: number, _nbytes: number) { /* drop */ }
+    enqueueAudio(bufPtr: number, nbytes: number) {
+      if (nbytes <= 0) return;
+      const HEAPU8: Uint8Array = (moduleOverrides as any).HEAPU8;
+      if (!HEAPU8) return;
+      // Copy from WASM heap — we cannot transfer WASM memory directly.
+      const data = new Uint8Array(nbytes);
+      data.set(HEAPU8.subarray(bufPtr, bufPtr + nbytes));
+      self.postMessage({ type: "emulator_audio_data", data }, [data.buffer]);
+    }
 
     // ── Idle / sleep: block the worker until a UI event arrives or the
     // timeout expires. SharedMemoryEmulatorWorkerInput pattern. ──
