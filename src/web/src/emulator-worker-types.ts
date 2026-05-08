@@ -157,4 +157,22 @@ export type EmulatorWorkerMessage =
   | { type: "emulator_chunk_loaded"; chunkIndex: number }
   | { type: "emulator_ready" }
   | { type: "emulator_error"; error: string }
-  | { type: "emulator_stopped" };
+  | { type: "emulator_stopped" }
+  /**
+   * Sent by the worker when BasiliskII opens its audio subsystem.
+   * The main thread should create an AudioContext at `sampleRate` and
+   * load the AudioWorklet so playback is ready before the core starts
+   * producing audio frames.
+   */
+  | {
+      type: "emulator_audio_open";
+      sampleRate: number;
+      sampleSize: number;
+      channels: number;
+    }
+  /**
+   * Sent by the worker for each audio frame produced by BasiliskII.
+   * `data` is a copy of the PCM bytes (not a view into WASM memory).
+   * The buffer is transferred (Transferable), so no copy on the receiver.
+   */
+  | { type: "emulator_audio_data"; data: Uint8Array };

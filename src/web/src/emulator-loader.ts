@@ -32,7 +32,7 @@ import {
   type EmulatorWorkerStartMessage,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
-import { wireInput, setInputBuffer } from "./emulator-input";
+import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator-input";
 import { startWeatherPoller } from "./weather-poller";
 import {
   isPauseWhenHiddenEnabled,
@@ -83,6 +83,10 @@ interface ActiveSession {
   unwireInput: (() => void) | undefined;
   teardownVisibility: (() => void) | undefined;
   stopWeather: (() => void) | undefined;
+  /** AudioContext created when BasiliskII opens its audio subsystem. */
+  audioContext: AudioContext | undefined;
+  /** AudioWorkletNode that receives PCM chunks forwarded from the worker. */
+  audioWorkletNode: AudioWorkletNode | undefined;
   /** Resolves on `emulator_ready`. Tracking this lets reboot() await it. */
   readyPromise: Promise<void>;
   resolveReady: () => void;
@@ -104,6 +108,8 @@ function makeSession(): ActiveSession {
     unwireInput: undefined,
     teardownVisibility: undefined,
     stopWeather: undefined,
+    audioContext: undefined,
+    audioWorkletNode: undefined,
     readyPromise,
     resolveReady,
     rejectReady,
@@ -120,6 +126,9 @@ function disposeSession(s: ActiveSession): void {
   // this leak was silent — the message hit a dead port.
   s.stopWeather?.();
   s.worker?.terminate();
+  // Close audio context so the AudioWorklet thread doesn't keep draining
+  // a dead queue after the worker has been terminated.
+  s.audioContext?.close().catch(() => {});
   // If readyPromise is still pending (dispose during boot), reject it so
   // any outstanding reboot() awaits don't dangle forever.
   s.rejectReady(new Error("emulator session disposed"));
@@ -480,6 +489,21 @@ async function boot(
       case "emulator_stopped":
         console.log("[emulator] worker stopped");
         break;
+
+      case "emulator_audio_open":
+        // BasiliskII has opened its audio subsystem — spin up Web Audio.
+        if (!signal.aborted) {
+          void initAudio(m.sampleRate, m.sampleSize, m.channels);
+        }
+        break;
+
+      case "emulator_audio_data":
+        // Forward raw PCM chunk to the AudioWorklet (Transferable to avoid copy).
+        session.audioWorkletNode?.port.postMessage(
+          { type: "data", data: m.data },
+          [m.data.buffer],
+        );
+        break;
     }
   });
 
@@ -490,6 +514,79 @@ async function boot(
       message: `Worker error: ${ev.message ?? "unknown"}`,
     });
   });
+
+  /**
+   * Set up the Web Audio pipeline once BasiliskII signals it has opened its
+   * audio subsystem. Creates an AudioContext at the Mac's native sample rate,
+   * loads the CvmAudioProcessor AudioWorklet, and wires it to the destination.
+   *
+   * Browsers require a user gesture before an AudioContext can play. We
+   * subscribe to `pointerdown` and attempt `ctx.resume()` immediately — on
+   * desktop the first click (which also starts the emulator interaction) will
+   * ungate audio automatically. Once the context is running we signal BasiliskII
+   * (via `audioContextRunningFlagAddr`) to start emitting PCM frames.
+   */
+  async function initAudio(
+    sampleRate: number,
+    sampleSize: number,
+    channels: number,
+  ): Promise<void> {
+    if (typeof AudioContext === "undefined") {
+      console.warn("[audio] AudioContext not supported — no audio");
+      return;
+    }
+    try {
+      const ctx = new AudioContext({ latencyHint: "interactive", sampleRate });
+      session.audioContext = ctx;
+
+      if (!ctx.audioWorklet) {
+        console.warn("[audio] AudioWorklet not supported — no audio");
+        return;
+      }
+
+      // The AudioWorklet script lives in public/ and is served as a static
+      // asset alongside index.html — no bundling required.
+      const workletUrl = absoluteUrl("./emulator-audio-worklet.js");
+      await ctx.audioWorklet.addModule(workletUrl);
+
+      if (signal.aborted) return; // session disposed while we were awaiting
+
+      const node = new AudioWorkletNode(ctx, "cvm-audio-processor", {
+        numberOfInputs: 0,
+        numberOfOutputs: 1,
+        outputChannelCount: [channels],
+        channelCount: channels,
+        processorOptions: { sampleSize },
+      });
+      session.audioWorkletNode = node;
+      node.connect(ctx.destination);
+
+      const onRunning = () => {
+        if (signal.aborted) return;
+        console.log("[audio] AudioContext running — signalling BasiliskII");
+        signalAudioContextRunning();
+      };
+
+      const tryResume = () => ctx.resume().catch(() => {});
+      window.addEventListener("pointerdown", tryResume);
+
+      ctx.addEventListener("statechange", () => {
+        if (ctx.state === "running") {
+          window.removeEventListener("pointerdown", tryResume);
+          onRunning();
+        }
+      });
+
+      // Try immediately — may succeed if a gesture has already happened.
+      await tryResume();
+      if (ctx.state === "running") {
+        window.removeEventListener("pointerdown", tryResume);
+        onRunning();
+      }
+    } catch (err) {
+      console.warn("[audio] Audio initialisation failed:", err);
+    }
+  }
 
   // Fire off the start message. Boot disk first (always chunked), then
   // any in-memory secondary disks added via reboot() — passed verbatim,
