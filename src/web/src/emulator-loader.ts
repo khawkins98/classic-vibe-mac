@@ -35,6 +35,7 @@ import {
 import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator-input";
 import { startWeatherPoller } from "./weather-poller";
 import { startSharedPoller } from "./shared-poller";
+import { startDrawingWatcher } from "./drawing-watcher";
 import {
   isPauseWhenHiddenEnabled,
   onPauseWhenHiddenChange,
@@ -85,6 +86,7 @@ interface ActiveSession {
   teardownVisibility: (() => void) | undefined;
   stopWeather: (() => void) | undefined;
   stopSharedPoller: (() => void) | undefined;
+  stopDrawingWatcher: (() => void) | undefined;
   /** AudioContext created when BasiliskII opens its audio subsystem. */
   audioContext: AudioContext | undefined;
   /** AudioWorkletNode that receives PCM chunks forwarded from the worker. */
@@ -111,6 +113,7 @@ function makeSession(): ActiveSession {
     teardownVisibility: undefined,
     stopWeather: undefined,
     stopSharedPoller: undefined,
+    stopDrawingWatcher: undefined,
     audioContext: undefined,
     audioWorkletNode: undefined,
     readyPromise,
@@ -129,6 +132,7 @@ function disposeSession(s: ActiveSession): void {
   // this leak was silent — the message hit a dead port.
   s.stopWeather?.();
   s.stopSharedPoller?.();
+  s.stopDrawingWatcher?.();
   s.worker?.terminate();
   // Tell the audio worklet to flush its queue before closing the context —
   // prevents stale PCM chunks from the old session bleeding into the next boot.
@@ -291,6 +295,7 @@ async function boot(
   };
   const setStopWeather = (s: () => void) => { session.stopWeather = s; };
   const setStopSharedPoller = (s: () => void) => { session.stopSharedPoller = s; };
+  const setStopDrawingWatcher = (s: () => void) => { session.stopDrawingWatcher = s; };
   // ── Phase 0: cross-origin isolation gate. ──
   // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
   // Vite dev sets COOP/COEP, and on GH Pages we install coi-serviceworker
@@ -644,6 +649,13 @@ async function boot(
     setStopSharedPoller(stopSharedPoller);
   } catch (err) {
     console.warn("[emulator] shared-poller failed to start:", err);
+  }
+
+  try {
+    const stopDrawingWatcher = startDrawingWatcher({ worker });
+    setStopDrawingWatcher(stopDrawingWatcher);
+  } catch (err) {
+    console.warn("[emulator] drawing-watcher failed to start:", err);
   }
 
   // ── Phase 4: render loop. ──
