@@ -44,10 +44,16 @@ export interface SampleProject {
 }
 
 /**
- * The two demo projects we expose in Phase 1. Order matches the order the
- * dropdown shows. `reader.c` is intentionally the first file revealed —
- * that's where the inline `// ← try changing this` comment lives, per the
+ * The demo projects we expose. Order matches the order the dropdown
+ * shows. `reader.c` is intentionally the first file revealed — that's
+ * where the inline `// ← try changing this` comment lives, per the
  * editor reviewer's "discoverable, not in your face" recommendation.
+ *
+ * Hello Mac (added later) is a deliberately simpler third sample —
+ * one window, one string, no parsing, no I/O — so visitors can verify
+ * the playground's full edit-and-rebuild flow on something with
+ * almost no surface area, and so the friendliest first read of "what
+ * does a System 7 app look like?" is one click away.
  */
 export const SAMPLE_PROJECTS: readonly SampleProject[] = [
   {
@@ -75,6 +81,16 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "MacWeather.bin",
     appType: "APPL",
     appCreator: "CVMW",
+  },
+  {
+    id: "hello-mac",
+    label: "Hello Mac",
+    files: ["hello.c", "hello.r"],
+    rezFile: "hello.r",
+    precompiledName: "hello-mac.code.bin",
+    outputName: "HelloMac.bin",
+    appType: "APPL",
+    appCreator: "CVHM",
   },
 ];
 

@@ -20,6 +20,7 @@
 # Outputs:
 #   build/reader/Reader.{bin,dsk,APPL}
 #   build/macweather/MacWeather.{bin,dsk,APPL}
+#   build/hello-mac/HelloMac.{bin,dsk,APPL}
 #
 # The .bin files are MacBinary (both forks) and feed scripts/build-boot-disk.sh.
 
@@ -28,3 +29,4 @@ project(classic_vibe_mac C)
 
 add_subdirectory(reader)
 add_subdirectory(macweather)
+add_subdirectory(hello-mac)
