@@ -34,9 +34,11 @@
 #include <OSUtils.h>
 #include <Resources.h>
 #include <Files.h>
+#include <AppleEvents.h>
 /* Controls Manager (NewControl, TrackControl, GetControlValue, ...) is
  * declared in Windows.h in Retro68's multiversal interfaces — there is
- * no standalone Controls.h header in this toolchain. */
+ * no standalone Controls.h header in this toolchain. AppleEvents.h pulls
+ * in AEDataModel symbols too via the multiversal headers. */
 
 #include "html_parse.h"
 
@@ -481,6 +483,164 @@ static void DoMenuCommand(long cmd)
     HiliteMenu(0);
 }
 
+/* ------------------------------------------------------ AppleEvents */
+
+/*
+ * Finder integration: when the user double-clicks a TEXT/CVMR file (i.e. an
+ * .html that scripts/build-boot-disk.sh tagged), the Process Manager
+ * launches us if needed and posts a kCoreEventClass / kAEOpenDocuments
+ * AppleEvent containing an FSSpec list. When we're launched with no
+ * documents (e.g. from Startup Items or a bare double-click on the app),
+ * we get kAEOpenApplication instead. The Finder also posts
+ * kAEQuitApplication on shutdown / Force Quit.
+ *
+ * Without these handlers, classic Mac OS 7 still launches us, but the
+ * 'odoc' AppleEvent goes unhandled — so we boot to index.html no matter
+ * which file the user double-clicked. The whole point of this plumbing is
+ * to wire the FSSpec from 'odoc' through to LoadDocument().
+ *
+ * Per AppleEvents docs (Inside Macintosh: Interapplication Communication
+ * ch. 4), every handler must return noErr or a meaningful AE error code,
+ * and reply parameters are owned by the AE machinery — we just read.
+ */
+
+/*
+ * MissedAnyParameters — the conventional AppleEvent sanity check. After we
+ * pull every parameter we care about, ask the AE for the magic
+ * "keyMissedKeywordAttr" attribute. If that returns errAEDescNotFound, we
+ * extracted everything; if it returns noErr, the sender supplied
+ * parameters we ignored, and the polite thing per IM is to fail the
+ * event with errAEEventNotHandled. We let it slide here because Reader's
+ * 'odoc' use is open-the-first-doc-and-go; extra parameters from a script
+ * shouldn't break that.
+ */
+/* Multiversal's AppleEvents.yaml ships the function but not this attribute
+ * keyword — define it inline so we don't have to patch the toolchain.
+ * Value 'miss' is the long-standing AppleEvent constant from Inside
+ * Macintosh: IAC. */
+#ifndef keyMissedKeywordAttr
+#define keyMissedKeywordAttr 'miss'
+#endif
+
+static OSErr MissedAnyParameters(const AppleEvent *evt)
+{
+    DescType returnedType;
+    Size actualSize;
+    OSErr err = AEGetAttributePtr((AppleEvent *)evt, keyMissedKeywordAttr,
+                                   typeWildCard, &returnedType,
+                                   NULL, 0, &actualSize);
+    /* errAEDescNotFound => no missed params (the desired outcome). */
+    if (err == errAEDescNotFound) return noErr;
+    if (err == noErr) return errAEEventNotHandled;
+    return err;
+}
+
+/* Default-open: use whatever STR# 128/2 says (currently "index.html"). */
+static void LoadDefaultDocument(void)
+{
+    Str63 startDoc;
+    GetIndString(startDoc, kStrListID, kStrIndex);
+    if (startDoc[0] == 0) {
+        /* GetIndString failed (resource missing?) — hard-code the fallback
+         * so we don't ship a dead app if the STR# slot ever drifts. */
+        startDoc[0] = 10;
+        BlockMoveData("index.html", startDoc + 1, 10);
+    }
+    LoadDocument(startDoc, false);
+}
+
+/* 'oapp' — Open Application. Sent when we launch with no documents
+ * (Startup Items, a bare Finder double-click on Reader, applet-style
+ * launch via osascript). Behaviour: load the default doc. */
+static pascal OSErr HandleOpenApp(const AppleEvent *evt, AppleEvent *reply,
+                                  long refcon)
+{
+    (void)reply; (void)refcon;
+    OSErr err = MissedAnyParameters(evt);
+    if (err != noErr) return err;
+    LoadDefaultDocument();
+    return noErr;
+}
+
+/* 'odoc' — Open Documents. The direct object (keyDirectObject) is an
+ * AEDescList of FSSpecs. We coerce to typeAEList, count, then pull #1 as
+ * an FSSpec, and use its `name` field directly — Reader's loader takes a
+ * filename and joins it under :Shared: itself. (Multi-doc + arbitrary
+ * folder support are out of scope; if the user opens a doc that's not in
+ * :Shared: the `:Shared:<name>` HOpen will simply fail and we'll fall
+ * through to the no-content message — better than crashing.) */
+static pascal OSErr HandleOpenDocs(const AppleEvent *evt, AppleEvent *reply,
+                                   long refcon)
+{
+    (void)reply; (void)refcon;
+
+    AEDescList docList;
+    OSErr err = AEGetParamDesc((AppleEvent *)evt, keyDirectObject,
+                                typeAEList, &docList);
+    if (err != noErr) return err;
+
+    long count = 0;
+    err = AECountItems(&docList, &count);
+    if (err != noErr || count < 1) {
+        AEDisposeDesc(&docList);
+        return err == noErr ? errAEEventNotHandled : err;
+    }
+
+    /* Grab item #1 as an FSSpec. AEGetNthPtr fills our buffer directly —
+     * no handle juggling. */
+    FSSpec spec;
+    AEKeyword keyword;
+    DescType actualType;
+    Size actualSize;
+    err = AEGetNthPtr(&docList, 1, typeFSS, &keyword, &actualType,
+                      &spec, sizeof(spec), &actualSize);
+    AEDisposeDesc(&docList);
+    if (err != noErr) return err;
+
+    err = MissedAnyParameters(evt);
+    if (err != noErr) return err;
+
+    /* The FSSpec name is a Str63 (Pascal string) — exactly what
+     * LoadDocument wants. We don't honour the spec's vRefNum/parID
+     * (Reader's :Shared:-prefix path resolution is hard-coded to the
+     * boot volume), but for files baked into :Shared: by build-boot-disk.sh
+     * the name alone is enough. */
+    LoadDocument(spec.name, true);
+    return noErr;
+}
+
+/* 'quit' — Quit Application. Trip the event-loop sentinel; the actual
+ * teardown happens after WaitNextEvent returns. */
+static pascal OSErr HandleQuitApp(const AppleEvent *evt, AppleEvent *reply,
+                                  long refcon)
+{
+    (void)reply; (void)refcon;
+    OSErr err = MissedAnyParameters(evt);
+    if (err != noErr) return err;
+    gQuit = true;
+    return noErr;
+}
+
+static void InstallAppleEventHandlers(void)
+{
+    /* NewAEEventHandlerUPP wraps a C function pointer so it's callable
+     * from the AE machinery — on 68k builds it's a real glue stub, on
+     * Retro68's modern toolchain it's a no-op cast, but we always go
+     * through the wrapper so the same source compiles for either target.
+     * Pass refcon=0 — Reader's handlers don't carry per-install state,
+     * they read globals directly. */
+    AEEventHandlerUPP openAppUPP   = NewAEEventHandlerUPP(HandleOpenApp);
+    AEEventHandlerUPP openDocsUPP  = NewAEEventHandlerUPP(HandleOpenDocs);
+    AEEventHandlerUPP quitAppUPP   = NewAEEventHandlerUPP(HandleQuitApp);
+
+    (void)AEInstallEventHandler(kCoreEventClass, kAEOpenApplication,
+                                openAppUPP, 0L, false);
+    (void)AEInstallEventHandler(kCoreEventClass, kAEOpenDocuments,
+                                openDocsUPP, 0L, false);
+    (void)AEInstallEventHandler(kCoreEventClass, kAEQuitApplication,
+                                quitAppUPP, 0L, false);
+}
+
 /* ------------------------------------------------------ Events */
 
 static void DoUpdate(WindowPtr w)
@@ -589,6 +749,16 @@ int main(void)
     AppendResMenu(GetMenuHandle(kMenuApple), 'DRVR');
     DrawMenuBar();
 
+    /* Hook up Finder integration BEFORE the first WaitNextEvent. The
+     * launch-time AppleEvent (oapp or odoc) is queued by the Process
+     * Manager during launch and dispatched the first time the app spins
+     * an event loop — if our handlers aren't installed yet, the queued
+     * event just goes to /dev/null and we fall back to LoadDefaultDocument
+     * via the fallback at the bottom of main(). Installing here is the
+     * standard MPW idiom (Inside Macintosh: IAC, "Receiving Apple
+     * Events", listing 4-1). */
+    InstallAppleEventHandlers();
+
     gWindow = GetNewWindow(kWindResID, NULL, (WindowPtr)-1L);
     if (!gWindow) {
         SysBeep(20);
@@ -605,15 +775,48 @@ int main(void)
                             scrollBarProc, 0L);
     ConfigureScrollBar();
 
-    /* Initial doc: index.html under :Shared:. */
-    Str63 startDoc;
-    GetIndString(startDoc, kStrListID, kStrIndex);
-    if (startDoc[0] == 0) {
-        startDoc[0] = 10;
-        BlockMoveData("index.html", startDoc + 1, 10);
+    /* Seed gCurrentDoc with a sane Pascal string so SetWindowTitleFromDoc
+     * doesn't draw garbage if we paint before any AE arrives. The actual
+     * load happens in three places now:
+     *   - HandleOpenApp  ('oapp' from the Finder, or Startup Items launch)
+     *   - HandleOpenDocs ('odoc' from a TEXT/CVMR double-click)
+     *   - the fallback below, in case neither AE arrives (e.g. running
+     *     under an old Finder, or a stub launcher that never sends AEs).
+     *
+     * Loading inside HandleOpenApp/HandleOpenDocs (rather than here, then
+     * stomping on top from the AE) is what makes double-clicked .html
+     * files actually *open*: if we always called LoadDefaultDocument()
+     * up front, an 'odoc' arriving milliseconds later would have to
+     * un-load index and re-load the requested doc, briefly flashing the
+     * wrong content. */
+    Str63 placeholder;
+    GetIndString(placeholder, kStrListID, kStrEmptyTitle);
+    if (placeholder[0] == 0) {
+        placeholder[0] = 13;
+        BlockMoveData("(no document)", placeholder + 1, 13);
     }
-    PStrCopy(gCurrentDoc, startDoc);
-    LoadDocument(startDoc, false);
+    PStrCopy(gCurrentDoc, placeholder);
+
+    /* Spin the event loop once with a short timeout so the Process Manager
+     * gets a chance to deliver the queued launch AppleEvent before we
+     * decide whether to fall back. WaitNextEvent with sleep=1 returns fast
+     * if there's nothing pending; if 'oapp' or 'odoc' is queued, it'll be
+     * a kHighLevelEvent and we route it via AEProcessAppleEvent. */
+    {
+        EventRecord e;
+        if (WaitNextEvent(highLevelEventMask, &e, 1L, NULL)) {
+            if (e.what == kHighLevelEvent) {
+                (void)AEProcessAppleEvent(&e);
+            }
+        }
+    }
+    /* If nothing handled the launch event (unlikely on real System 7, but
+     * the case under stub launchers and during local-dev hot reloads),
+     * load the default. PStrEqual against the placeholder is the
+     * "did anyone load anything yet?" probe. */
+    if (PStrEqual(gCurrentDoc, placeholder)) {
+        LoadDefaultDocument();
+    }
 
     while (!gQuit) {
         EventRecord e;
@@ -624,6 +827,12 @@ int main(void)
                 case autoKey:     DoKeyDown(&e);                   break;
                 case updateEvt:   DoUpdate((WindowPtr)e.message);  break;
                 case activateEvt: /* nothing — single-window app */ break;
+                case kHighLevelEvent:
+                    /* Finder/scripts can send 'odoc' or 'quit' at any
+                     * time, not just at launch. AEProcessAppleEvent
+                     * dispatches to whichever handler we installed. */
+                    (void)AEProcessAppleEvent(&e);
+                    break;
             }
         }
     }

@@ -330,11 +330,27 @@ if [[ -n "${SHARED_DIR}" && -d "${SHARED_DIR}" ]]; then
     # have no resource fork by nature, so this is correct: the Mac sees
     # them with empty .finf metadata and reads them as binary streams,
     # which matches what Reader's FSRead loop wants.
+    #
+    # After each copy we hattrib the file with type=TEXT and creator=CVMR.
+    # Without this the Finder treats the file as ????/???? and bombs out
+    # with "Could not find the application program that created the
+    # document …" on double-click, even though Reader is right there in
+    # Startup Items. CVMR is Reader's signature (see src/app/reader.r);
+    # TEXT is a generic Mac type that SimpleText/TeachText also recognise,
+    # so the file isn't a Reader-only paperweight if Reader is missing.
+    # The Finder's BNDL scan binds TEXT/CVMR -> Reader on first launch.
     for f in "${HTML_FILES[@]}"; do
       base="$(basename "${f}")"
       echo "[boot-disk]   :Shared:${base}  (and :System Folder:Startup Items:Shared:${base})"
       hcopy "${f}" ":Shared:${base}"
       hcopy "${f}" ":System Folder:Startup Items:Shared:${base}"
+      # hattrib -t TYPE -c CREATOR sets the Finder Info bytes. Errors here
+      # are non-fatal — the file is still readable, just unbound — but log
+      # them loudly so a CI regression surfaces.
+      hattrib -t TEXT -c CVMR ":Shared:${base}" \
+        || echo "[boot-disk] WARN: hattrib failed on :Shared:${base}"
+      hattrib -t TEXT -c CVMR ":System Folder:Startup Items:Shared:${base}" \
+        || echo "[boot-disk] WARN: hattrib failed on :System Folder:Startup Items:Shared:${base}"
     done
 
     echo "[boot-disk] :Shared: contents:"
