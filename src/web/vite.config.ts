@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import { createHash } from "node:crypto";
-import { readFileSync, mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 
 // GitHub Pages serves the site under /<repo-name>/ when using a project page
@@ -256,7 +256,3 @@ export default defineConfig({
     },
   },
 });
-
-// statSync is referenced indirectly by callers via `existsSync`/`readFileSync`;
-// we keep it imported only when needed. Suppress unused-import if so.
-void statSync;
