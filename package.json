@@ -12,7 +12,9 @@
     "fetch:emulator": "bash scripts/fetch-emulator.sh",
     "preview": "npm run preview --workspace=src/web",
     "test": "npm run test:unit && npm run test:e2e && npm run test:visual",
-    "test:unit": "make -C tests/unit run",
+    "test:unit": "npm run test:unit:c && npm run test:unit:js",
+    "test:unit:c": "make -C tests/unit run",
+    "test:unit:js": "node tests/unit/preprocessor.test.mjs",
     "test:e2e": "playwright test --config=playwright.config.ts",
     "test:visual": "playwright test --config=tests/visual/playwright.config.ts"
   },

@@ -2,10 +2,11 @@
 
 A 1993 Macintosh that lives at a URL — and lets you build apps for it
 in the same tab. System 7.5.5 boots in your browser. Two demo apps
-launch. Open the source panel and you can edit them. Compile-and-run
-in the same page is the milestone we're building toward right now;
-the editor and persistence already work, the in-browser Rez compiler
-is the next piece landing.
+launch. Open the source panel and you can edit them, hit Build, and
+the page returns a real `.bin` you can drop into any classic-Mac
+emulator. Compile-and-hot-load — your edits booting back into the Mac
+running above without a reload — is the next milestone; the
+edit / compile / download loop already works.
 
 ## Live at
 
@@ -29,7 +30,9 @@ one screen, all running in the visitor's tab:
 - **The editor** — CodeMirror 6 with C syntax highlighting, seeded
   with the same `reader.c` / `macweather.c` / `*.r` sources that
   built the apps running above. Edits persist in IndexedDB; you can
-  download your changes as a zip; "compile-and-run live" is the next
+  Build to download a fresh `.bin` (your edited resource fork
+  spliced onto the CI-precompiled code fork); "compile-and-hot-load"
+  — boot your edits back into the Mac running above — is the next
   milestone (see [Status](#status)).
 
 ## What it does
@@ -98,13 +101,14 @@ Type into it. Reload the page — your edits are still there
 (IndexedDB). Hit "Download as zip" to grab a snapshot of your
 edits.
 
-What works today: read, edit, persist, download. What's coming
-next: a Compile button that runs Rez in-browser against your
-edited resource fork, splices the output onto a precompiled
-code fork, hot-loads the result onto a synthetic in-memory disk,
-and re-spawns the emulator worker so your change boots ~1 second
-later. See [Status](#status) for the honest "what works when"
-breakdown.
+What works today: read, edit, persist, **Build** (runs Rez in
+the browser against your edited resource fork, splices the output
+onto the CI-precompiled code fork, downloads a complete MacBinary
+`.bin`), download as zip. What's coming next: a Build & Run button
+that hot-loads the result onto a synthetic in-memory disk and
+re-spawns the emulator worker so your change boots back into the
+Mac running above ~1 second later. See [Status](#status) for the
+honest "what works when" breakdown.
 
 ### Locally (full template flow)
 
