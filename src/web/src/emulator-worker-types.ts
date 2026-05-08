@@ -175,4 +175,28 @@ export type EmulatorWorkerMessage =
    * `data` is a copy of the PCM bytes (not a view into WASM memory).
    * The buffer is transferred (Transferable), so no copy on the receiver.
    */
-  | { type: "emulator_audio_data"; data: Uint8Array };
+  | { type: "emulator_audio_data"; data: Uint8Array }
+  /**
+   * Response to a `poll_url_request` message. Contains the raw bytes of
+   * /Shared/__url-request.txt, or null if the file is not yet present.
+   * Format (ASCII): "<requestId>\n<url>\n"
+   */
+  | { type: "url_request_data"; bytes: Uint8Array | null };
+
+/**
+ * Messages from the main thread to the worker that are NOT the start message.
+ * The `weather_data` and `url_result_write` messages are the runtime channel
+ * for host-to-Mac data (shared-folder writes via the Emscripten FS).
+ */
+export type EmulatorWorkerRuntimeMessage =
+  /**
+   * Ask the worker to read /Shared/__url-request.txt and reply with
+   * `url_request_data`. Sent on a timer by SharedPoller on the main thread.
+   */
+  | { type: "poll_url_request" }
+  /**
+   * Write the URL fetch result to the Emscripten FS so the Mac can read it.
+   * `path` must match /Shared/__url-result-<id>.html (validated in worker).
+   * `bytes` is the MacRoman-encoded HTML body to write.
+   */
+  | { type: "url_result_write"; path: string; bytes: Uint8Array };
