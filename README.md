@@ -1,7 +1,7 @@
 # classic-vibe-mac
 
 A 1993 Macintosh that lives at a URL — and lets you build apps for it
-in the same tab. System 7.5.5 boots in your browser. Two demo apps
+in the same tab. System 7.5.5 boots in your browser. Three demo apps
 launch. Open the source panel and you can edit them, hit Build, and
 the page returns a real `.bin`; hit Build & Run and the Mac above
 reboots ~1s later with your edits applied, no reload, no toolchain.
@@ -61,7 +61,7 @@ architecturally honest version. See
 [`docs/ARCHITECTURE.md` § What we deliberately avoid](./docs/ARCHITECTURE.md#what-we-deliberately-avoid)
 for the long version.
 
-The two demo apps under `src/app/` are deliberately minimal but
+The three demo apps under `src/app/` are deliberately minimal but
 real:
 
 - **Reader** (`CVMR`) — a classic-Mac HTML viewer in C. Reads HTML
@@ -74,13 +74,16 @@ real:
   at `:Unix:weather.json`; MacWeather watches the file, parses
   the JSON in pure C, and draws current conditions plus a 3-day
   forecast with pixel-art QuickDraw glyphs.
+- **Hello Mac** (`CVHM`) — the smallest possible Toolbox application:
+  a single window with "Hello, World!" drawn in the middle, a Quit
+  command, and nothing else. Start here if you're new to Toolbox
+  programming; it's also the default playground sample you edit.
 
-Both apps coexist on the same boot disk. `src/app/CMakeLists.txt`
-is a tiny aggregator (`add_subdirectory(reader)` /
-`add_subdirectory(macweather)`); the boot-disk script installs
+All three apps coexist on the same boot disk. `src/app/CMakeLists.txt`
+is a tiny aggregator; the boot-disk script installs
 each `.bin` into `:System Folder:Startup Items:` (auto-launch on
 boot) and `:Applications:` (re-launch from the desktop). Adding a
-third app is one directory plus one line — see
+fourth app is one directory plus one line — see
 [`src/app/README.md`](./src/app/README.md).
 
 ## Try it
@@ -94,7 +97,7 @@ trip to install) and for the System 7.5.5 boot animation to
 finish. Reader and MacWeather will auto-launch.
 
 Scroll past the Mac to the source panel. The C and Rez files for
-both apps are listed; clicking a file opens it in the editor.
+all three apps are listed; clicking a file opens it in the editor.
 Type into it. Reload the page — your edits are still there
 (IndexedDB). Hit "Download as zip" to grab a snapshot of your
 edits.
@@ -136,7 +139,7 @@ gh run download \
 
 ART="$(echo /tmp/cvm-artifact/classic-vibe-mac-*)"
 
-# Build the bootable System 7.5.5 disk. Both apps go into the disk's
+# Build the bootable System 7.5.5 disk. All three apps go into the disk's
 # Startup Items + :Applications:; src/web/public/shared/*.html gets
 # baked into :Shared:.
 bash scripts/build-boot-disk.sh \
