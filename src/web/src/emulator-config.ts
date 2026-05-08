@@ -30,20 +30,20 @@ export interface EmulatorConfig {
   /** Logical screen size for the emulated Mac. 512x342 = original Mac. */
   screen: { width: number; height: number };
   /**
-   * Static seed for the `Shared` Mac volume.
+   * Static seed for the `extfs /Shared/` mount in the Emscripten FS.
    *
-   * BasiliskII's `extfs /Shared/` pref (see BASE_PREFS in emulator-worker.ts)
-   * exposes whatever lives at `/Shared/` in the Emscripten in-memory FS as a
-   * Mac volume named "Shared". We populate that directory at boot by
-   * fetching each entry below and writing it to FS via `FS.createDataFile`
-   * inside the Module's preRun hook.
+   * NOTE: as of 2026-05-08 this is no longer the path Reader uses for
+   * its HTML. extfs in upstream macemu hard-codes the volume name to
+   * "Unix" (BasiliskII/src/Unix/user_strings_unix.cpp), so the Mac sees
+   * the mount as `Unix:`, not `Shared:`. Reader's hard-coded `:Shared:`
+   * prefix can't resolve through it. The HTML files are baked into the
+   * boot disk's :Shared: folder by scripts/build-boot-disk.sh; that's
+   * what Reader actually opens.
    *
-   * The Reader app (src/app/reader.c) reads `:Shared:index.html` on launch
-   * and resolves links by name against `:Shared:`, so the file names listed
-   * here must include `index.html` plus any pages the Reader links to.
-   *
-   * URLs are absolute or relative-to-page paths; the worker resolves them
-   * against `self.location.href` before fetching.
+   * We retain this seed because the volume IS mounted (just under the
+   * wrong name) and future Uploads/Downloads features may want host-
+   * supplied files visible on the guest. URLs are resolved by the
+   * worker against `self.location.href` before fetching.
    */
   sharedFolder: {
     /** List of files to seed under `/Shared/`. `name` is what the Mac sees
@@ -64,12 +64,12 @@ export const emulatorConfig: EmulatorConfig = {
   bootDiskUrl: `${BASE}system755-vibe.dsk`,
   appDiskUrl: `${BASE}app.dsk`,
   screen: { width: 640, height: 480 },
-  // Sample HTML content seeded by the C-side Reader app's prerequisite
-  // (commit 46fe8c4). These files live under src/web/public/shared/ and
-  // are served by Vite at `${BASE}shared/<name>` in dev/production. The
-  // worker fetches them and copies their bytes into the Emscripten FS at
-  // `/Shared/<name>` on boot, which BasiliskII then surfaces to System 7
-  // as the `Shared` Mac volume via the `extfs /Shared/` pref.
+  // Sample HTML content. These files live under src/web/public/shared/.
+  // They are baked directly into the boot disk's :Shared: folder by
+  // scripts/build-boot-disk.sh (see "extfs volume name" learning),
+  // which is what Reader opens. The worker also still seeds them into
+  // the Emscripten /Shared/ tree (mounted as the Mac `Unix:` volume),
+  // so future Uploads/Downloads tooling can use them.
   sharedFolder: {
     files: [
       { name: "index.html", url: `${BASE}shared/index.html` },
