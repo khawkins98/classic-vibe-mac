@@ -39,6 +39,7 @@ import {
   triggerDownload,
   fetchPrecompiled,
 } from "./build";
+import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
   lintExtensions,
   setEditorDiagnostics,
@@ -74,9 +75,20 @@ export interface PlaygroundHandle {
   setVisible(visible: boolean): void;
 }
 
+/** Callback the playground invokes after a successful Build & Run to swap
+ *  the secondary disk and reboot the Mac. main.ts wires this to the
+ *  EmulatorHandle's `reboot` method. Returning a Promise lets the
+ *  playground show a spinner until the new boot is fully ready. */
+export type HotLoadCallback = (opts: {
+  bytes: Uint8Array;
+  /** Volume name as the Mac will see it on the desktop. */
+  volumeName: string;
+}) => Promise<void>;
+
 export async function mountPlayground(
   rootEl: HTMLElement,
   baseUrl: string,
+  hotLoad?: HotLoadCallback,
 ): Promise<PlaygroundHandle> {
   const persistent = await initPersistence();
   const ctx: PlaygroundContext = { rootEl, baseUrl, persistent };
@@ -91,6 +103,9 @@ export async function mountPlayground(
     "#cvm-pg-download",
   )!;
   const buildBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-build")!;
+  const buildRunBtn = rootEl.querySelector<HTMLButtonElement>(
+    "#cvm-pg-buildrun",
+  )!;
   const statusEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-status")!;
   const editorMount = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-editor-mount",
@@ -368,6 +383,93 @@ export async function mountPlayground(
     }
   });
 
+  // Build & Run: same Phase 2 build pipeline, but instead of a download,
+  // we patch the empty HFS template with the freshly-compiled MacBinary
+  // and hand it to the emulator's reboot() path.
+  buildRunBtn.addEventListener("click", async () => {
+    if (!hotLoad) {
+      setStatus(
+        statusEl,
+        "Build & Run isn't wired in this build (no emulator).",
+        "err",
+      );
+      return;
+    }
+    await flushSave();
+    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    if (!proj) return;
+
+    // Disable BOTH build buttons while a reboot is in progress; re-enable
+    // in the finally. Quick double-clicks otherwise queue resets that
+    // race with worker spawning.
+    buildBtn.disabled = true;
+    buildRunBtn.disabled = true;
+    rootEl.setAttribute("data-rebooting", "");
+    const tStart = performance.now();
+    setStatus(statusEl, "Compiling…", "info");
+
+    try {
+      const result = await runBuild(baseUrl, proj, view, current.filename);
+      if (!result.ok) {
+        const first = result.diagnostics[0];
+        const msg = first
+          ? `${first.severity}: ${first.message} (${first.file}:${first.line})`
+          : "Build failed (no diagnostics)";
+        setStatus(statusEl, msg, "err");
+        return;
+      }
+      const buildMs = performance.now() - tStart;
+      setStatus(
+        statusEl,
+        `Built in ${buildMs.toFixed(0)}ms — patching disk…`,
+        "info",
+      );
+      // Fetch the empty HFS template and patch it with the new binary.
+      // The volume label is "Apps" (baked into the template). We name
+      // the file inside it after the project's outputName minus the .bin
+      // extension so the Finder sees, e.g., "Reader" / "MacWeather".
+      const fname = proj.outputName.replace(/\.bin$/i, "");
+      const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
+      if (!tmplResp.ok) {
+        throw new Error(
+          `empty-secondary.dsk fetch failed: HTTP ${tmplResp.status}`,
+        );
+      }
+      const tmplBytes = new Uint8Array(await tmplResp.arrayBuffer());
+      const patched = patchEmptyVolumeWithBinary({
+        templateBytes: tmplBytes,
+        macBinary: result.bytes!,
+        filename: fname,
+      });
+      setStatus(statusEl, "Mounting disk…", "info");
+      // Hand to emulator reboot — main.ts wired this up.
+      await hotLoad({ bytes: patched, volumeName: "Apps" });
+      const totalMs = performance.now() - tStart;
+      setStatus(
+        statusEl,
+        `Done in ${totalMs.toFixed(0)}ms — double-click "Apps" on the desktop.`,
+        "ok",
+      );
+      // Smooth-scroll the page back up to the emulator window so the
+      // user sees the boot. The Mac window has id="emulator"; if the
+      // user has scrolled down to the editor, this brings them back.
+      const emWin = document.getElementById("emulator");
+      if (emWin) {
+        emWin.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    } catch (e) {
+      setStatus(
+        statusEl,
+        `Build & Run error: ${(e as Error).message}`,
+        "err",
+      );
+    } finally {
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+      rootEl.removeAttribute("data-rebooting");
+    }
+  });
+
   // Visibility toggle. We hide the entire section, not just the editor,
   // so the caption + dropdowns disappear too.
   return {
@@ -439,8 +541,9 @@ function renderShell(persistent: boolean): string {
     <div class="window__body">
       <p class="cvm-pg-intro">
         This is the actual source for the bundled apps. Edits save locally in
-        your browser. Compiling and running your edits is the next milestone —
-        for now, hit <em>Download</em> to take your changes with you.
+        your browser. Hit <em>Build .bin</em> to compile and download a
+        MacBinary, or <em>Build &amp; Run</em> to reboot the Mac with your
+        changes mounted as a secondary disk.
       </p>
       ${banner}
       <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
@@ -454,6 +557,9 @@ function renderShell(persistent: boolean): string {
         </label>
         <button type="button" id="cvm-pg-build" class="cvm-pg-button cvm-pg-button--primary">
           Build .bin
+        </button>
+        <button type="button" id="cvm-pg-buildrun" class="cvm-pg-button cvm-pg-button--primary">
+          Build &amp; Run
         </button>
         <button type="button" id="cvm-pg-download" class="cvm-pg-button">
           Download .zip
@@ -543,6 +649,35 @@ async function runBuild(
   // canonical .r file which may be a different file in the dropdown).
   // readOrSeedFile falls back to the bundled copy on first read.
   const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
+
+  // Issue #31: lock Type/Creator. The Finder's Desktop DB binds icons by
+  // creator code; changing the creator on a single launch invalidates
+  // every existing document's binding (the old icon resource is orphaned
+  // until the DB rebuilds, which doesn't always happen automatically).
+  // Cheapest guard: refuse the build if the user has touched the
+  // signature resource declaration. We don't allow editing this *yet*;
+  // when we do, it'll be a deliberate UX with a "rebuild Desktop"
+  // affordance.
+  const expectedSig = `data '${proj.appCreator}' (0`;
+  if (!topSource.includes(expectedSig)) {
+    return {
+      ok: false,
+      totalMs: performance.now() - t0,
+      diagnostics: [
+        {
+          file: proj.rezFile,
+          line: 1,
+          column: 1,
+          message:
+            `Type/Creator is locked in this build. The signature resource ` +
+            `'${proj.appCreator}' must remain unchanged — restore the ` +
+            `\`data '${proj.appCreator}' (0, "Owner signature")\` declaration ` +
+            `to compile.`,
+          severity: "error",
+        },
+      ],
+    };
+  }
 
   // Build the VFS and warm it. We pre-fetch every project file plus the
   // bundled RIncludes so the synchronous preprocessor pass can resolve
