@@ -75,7 +75,17 @@ function loadModule(baseUrl: string): Promise<RezModule> {
         printErr: (s) => {
           stderrBuffer += s + "\n";
         },
-        locateFile: (path: string) => `${baseUrl}wasm-rez/${path}`,
+        // Emscripten's glue (wasm-rez.js) hardcodes the WASM filename it
+        // emitted from CMake — `mini-rez.wasm`, the legacy spike name.
+        // We renamed the production blob to `wasm-rez.wasm` for naming
+        // consistency, so we remap here. Anything else (e.g. data files
+        // we may add later) goes through verbatim under wasm-rez/.
+        locateFile: (path: string) => {
+          if (path === "mini-rez.wasm") {
+            return `${baseUrl}wasm-rez/wasm-rez.wasm`;
+          }
+          return `${baseUrl}wasm-rez/${path}`;
+        },
       }).then(resolve, reject);
     };
     script.onerror = () =>
