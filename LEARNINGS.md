@@ -28,6 +28,32 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-08 — CodeMirror 6 needs `style-src 'unsafe-inline'`; theme rules ship as inline `<style>` tags
+**Context:** Wiring strict CSP on the playground page (Phase 1 of Issue
+#21). Started with `default-src 'self'; script-src 'self'; style-src
+'self'; object-src 'none'; base-uri 'none'`. CodeMirror loaded but the
+editor rendered without any of its theme — gutter colors, font, line
+heights, selection background were all stripped.
+**Finding:** CodeMirror 6's `EditorView.theme()` injects a generated
+`<style>` element into the document head at construction time. The
+browser blocks that under `style-src 'self'` because there's no nonce
+and no hash. There is no documented way to feed CM a precomputed CSS
+file as the theme — it needs to mutate styles when the document changes
+size, when extensions reconfigure, etc. The same applies to the bundled
+`@codemirror/view` core styles. Without `'unsafe-inline'` (or a
+hash-based allowlist for every theme rule, recomputed on every CM
+upgrade), CM is effectively unstyled.
+**Action:** Allow `style-src 'self' 'unsafe-inline'`. Acceptable trade-off
+for Phase 1 because (a) we ship no user-controlled style strings — every
+inline style is generated from the bundled CM source, (b) `script-src
+'self'` is still strict, which is where XSS lives, and (c) the editor
+reviewer's scope cap doesn't gate on style-src tightness. Alternatives
+considered: precomputed CSS file (CM team explicitly says no), runtime
+nonce injection (would need an HTML transformer plugin in Vite, and
+nonces leak in dev tools anyway), hash allowlist (brittle across CM
+releases). Document the carve-out in `index.html` so the next agent
+doesn't re-derive it.
+
 ### 2026-05-08 — Retro68 RIncludes ship no `Finder.r`; BNDL/FREF/ICN# must be raw `data` resources
 **Context:** Adding the standard Finder-binding resource set (signature
 + BNDL + FREF + ICN# + STR ) to Reader so double-clicking `.html` files
