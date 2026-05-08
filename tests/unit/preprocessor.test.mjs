@@ -279,6 +279,24 @@ test("real macweather.r preprocesses", () => {
   );
 });
 
+test("## in macro body emits warning diagnostic", () => {
+  const vfs = makeVfs(new Map());
+  const r = preprocess(`#define PASTE(a,b) a##b\nPASTE(foo,bar)\n`, "in.r", vfs);
+  const warns = r.diagnostics.filter(
+    (d) => d.severity === "warning" && /token-pasting/.test(d.message),
+  );
+  assert.equal(warns.length, 1, `expected 1 token-pasting warning, got ${warns.length}`);
+});
+
+test("#param stringification in macro body emits warning diagnostic", () => {
+  const vfs = makeVfs(new Map());
+  const r = preprocess(`#define STR(x) #x\nSTR(hello)\n`, "in.r", vfs);
+  const warns = r.diagnostics.filter(
+    (d) => d.severity === "warning" && /stringification/.test(d.message),
+  );
+  assert.equal(warns.length, 1, `expected 1 stringification warning, got ${warns.length}`);
+});
+
 // ── Summary ─────────────────────────────────────────────────────────────
 
 console.log(`\n${pass} passed, ${fail} failed`);
