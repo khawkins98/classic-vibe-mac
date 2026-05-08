@@ -307,6 +307,27 @@ export function preprocess(
           });
           return;
         }
+        // Warn on unsupported preprocessor features used in the body so
+        // users get a diagnostic at definition time rather than silent
+        // corruption or a confusing Rez error at the call site.
+        if (def.body.includes("##")) {
+          diagnostics.push({
+            file,
+            line,
+            column: 1,
+            message: `token-pasting (##) is not supported by this preprocessor and will be left in the output literally`,
+            severity: "warning",
+          });
+        }
+        if (def.params && /#[A-Za-z_]/.test(def.body)) {
+          diagnostics.push({
+            file,
+            line,
+            column: 1,
+            message: `stringification (#param) is not supported by this preprocessor and will be left in the output literally`,
+            severity: "warning",
+          });
+        }
         macros.set(def.name, def);
         return;
       }
