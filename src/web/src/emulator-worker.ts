@@ -310,9 +310,21 @@ function buildPrefs(opts: {
 }): string {
   let s = BASE_PREFS;
   s += `rom ${opts.romFileName}\n`;
-  // Quadra 650 = 68040 (cpu 4), gestaltID 36. Mirrors upstream macemu config.
+  // Quadra 650 = 68040 (cpu 4). The BasiliskII `modelid` pref is the Mac
+  // Gestalt machine ID *minus 6* — see macemu/BasiliskII/src/prefs_items.cpp
+  // ("Mac Model ID (Gestalt Model ID minus 6)") and rom_patches.cpp where
+  // `*bp = PrefsFindInt32("modelid")` writes the value to UniversalInfo+18
+  // (productKind), which the Gestalt selector then reports back as
+  // productKind+6. So Quadra 650 (gestalt 36) → modelid 30. Infinite Mac's
+  // src/emulator/common/emulators.ts encodes the same formula:
+  //   `emulatorModelId(type, gestaltID) => gestaltID - 6`
+  // We previously wrote `modelid 36` here, which made Gestalt return 42 —
+  // not a valid Mac model. System 7.5.5 keys its INIT load + Toolbox patch
+  // installation off Gestalt; an unknown gestalt skips patches that supply
+  // traps Retro68's runtime calls, surfacing as the "unimplemented trap"
+  // bomb on app launch. See LEARNINGS.md 2026-05-08.
   s += `cpu 4\n`;
-  s += `modelid 36\n`;
+  s += `modelid 30\n`;
   s += `ramsize ${opts.ramSizeMB * 1024 * 1024}\n`;
   s += `screen win/${opts.screenWidth}/${opts.screenHeight}\n`;
   for (const name of opts.diskNames) s += `disk ${name}\n`;
