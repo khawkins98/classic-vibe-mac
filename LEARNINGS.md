@@ -28,10 +28,59 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-08 — Phase-2 precompiled `.code.bin` missing in production
+**Context:** The Build button on the deployed playground was 404'ing on
+`precompiled/<project>.code.bin`, killing the headline Phase-2 feature
+in production even though local `npm run dev` worked fine.
+**Finding:** The CI workflow had a step "Co-locate .code.bin precompiles
+into web public/" whose comment claimed it ran BEFORE `npm run build` so
+Vite would pick the files up via `publicDir`. It actually ran AFTER —
+ordering nudged during a refactor, comment didn't follow. So vite's
+`copyPrecompilesToPublic()` plugin found nothing (CI's artifact lives at
+`artifact/build/` not `<repo>/build/`), the post-build copy populated
+`src/web/public/precompiled/` after dist had already been written, and
+the deploy artifact (`src/web/dist`) shipped without those files.
+Locally the gap was invisible because a previous `cmake --build` had left
+real files in `<repo>/build/<project>/<App>.code.bin`, so the vite
+plugin DID copy them.
+**Action:** Copy the `.code.bin` files directly into `src/web/dist/precompiled/`
+*after* `npm run build`, the same pattern the workflow already uses for
+`app.dsk` and `system755-vibe.dsk`. Two reasons over "just reorder":
+(1) it bypasses the vite plugin entirely, so a future refactor of the
+plugin can't break deploy again; (2) it parallels the disk-image step,
+which is the reviewer's mental model for "CI artefacts that aren't
+source assets".
+**Generalisation:** If a step's comment says "must run BEFORE step X",
+consider whether the step really needs to be before X — or whether
+"after X, write straight to the X output dir" is a more robust pattern
+that doesn't depend on ordering. Order-of-CI-steps is a load-bearing
+invariant that nothing enforces; output-dir writes are checked by the
+next step's `test -s` assertion.
+
+### 2026-05-08 — MacWeather "(baked)" caption was misleading users
+**Context:** Live-deployed MacWeather always rendered "(baked)" under
+the timestamp even when the host page had successfully fetched
+open-meteo (visible in network tab as HTTP 200). Code-side state
+`gReadFromBoot` apparently never flips to false on the C side; the
+JS-to-C signal path through the extfs `:Unix:weather.json` write isn't
+currently surfacing freshness to the running app.
+**Finding:** The caption is more harmful than helpful — users see
+"(baked)" and think the live fetch failed, when in reality the data
+above it is already live. The "Updated HH:MM" line on its own already
+tells the user when the weather was refreshed; the freshness label is
+redundant when right and misleading when wrong.
+**Action:** Suppress the caption in `macweather.c` (Phase 3 owns the
+JS poller fix; deleting the misleading caption is a C-side, no-conflict
+way to stop the user-facing miscommunication). Phase 3 can reintroduce
+a real freshness signal once the JS poller pipeline reliably surfaces
+one. Big-picture lesson: a UI element that depends on a fragile
+cross-process signal should fail invisibly, not display "everything is
+broken" by default — render-nothing > render-wrong.
+
 ### 2026-05-08 — Playground Phase 2: do the C preprocessor in TypeScript, not in WASM
 **Context:** Phase 2 of Issue #21 needed `#include` / `#define` / `#if` /
 macro coverage for real Apple `.r` files. The spike's MiniLexer.cc
-(`spike/wasm-rez/vendor/MiniLexer.cc`) skips lines starting with `#` —
+(`tools/wasm-rez/vendor/MiniLexer.cc`) skips lines starting with `#` —
 fine for the trivial STR# case the spike validated, fatal for
 `reader.r`'s 5 `#include`s.
 **Finding:** The obvious play is "extend MiniLexer in C++". I went the

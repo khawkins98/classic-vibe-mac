@@ -94,10 +94,11 @@ window."
      change can be relayed without re-allocating.
    - **input ring** — `Int32Array` whose offsets match Infinite Mac's
      `InputBufferAddresses` exactly. The four-state cyclical lock
-     (`UI_LOCK_FREE` → `UI_LOCK_HELD` → `UI_WORKER_HELD` →
-     `UI_WORKER_NOTIFIED`) is `Atomics.wait`/`Atomics.notify` on
-     index 0; the layout has to match the WASM ABI byte-for-byte or
-     mouse coords arrive transposed.
+     (`READY_FOR_UI_THREAD` → `UI_THREAD_LOCK` →
+     `READY_FOR_EMUL_THREAD` → `EMUL_THREAD_LOCK`) is
+     `Atomics.wait`/`Atomics.notify` on index 0; the layout has to
+     match the WASM ABI byte-for-byte or mouse coords arrive
+     transposed. (Names mirror `emulator-worker-types.ts`.)
 5. **Disk + prefs into Emscripten FS.** Worker reads ROM via
    `fetch().arrayBuffer()`, renders the prefs template (the `BASE_PREFS`
    string in `emulator-worker.ts`, including the load-bearing

@@ -128,10 +128,9 @@ onboarding affordance.
 [ ] Settings: "Show editor" checkbox (default ON when ≥1200px)
 ```
 
-Status (2026-05-08): in flight on `feat/playground-phase1`. Files
-are landing under `src/web/src/playground/` (`editor.ts`,
-`persistence.ts`, `types.ts`) plus sample bundles under
-`src/web/public/sample-projects/`.
+Status (2026-05-08): ✅ shipped on main. Files live under
+`src/web/src/playground/` (`editor.ts`, `persistence.ts`, `types.ts`)
+plus sample bundles under `src/web/public/sample-projects/`.
 
 ### Phase 2 — Rez compilation in-browser (~4-6 weeks, gated on spike)
 
@@ -167,10 +166,13 @@ claimed). First compile after page load: ~1.5s. Warm compile:
 **<500ms**. The Epic's "sub-second" claim is **warm sub-second**, not
 first-call. Be honest about that in the UX copy.
 
-Status (2026-05-08): spike in flight on `spike/wasm-rez`. PR opened
-as `do-not-merge`; vehicle for the writeup. See
-[#30](https://github.com/khawkins98/classic-vibe-mac/issues/30) for
-the build-out tracker.
+Status (2026-05-08): ✅ shipped on main. WASM-Rez source vendored
+under `tools/wasm-rez/`; compiled artefacts under
+`src/web/public/wasm-rez/`. The Build button on the playground
+preprocesses, runs WASM-Rez, splices a fresh resource fork onto the
+CI-precompiled `.code.bin`, and downloads the resulting MacBinary.
+See [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30)
+for the build-out tracker.
 
 ### Phase 3 — Hot-load into the running Mac (~5-7 days, gated on Phase 2)
 

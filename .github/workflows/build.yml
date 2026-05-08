@@ -260,16 +260,23 @@ jobs:
           gz_size=$(gzip -9c src/web/public/wasm-rez/wasm-rez.wasm | wc -c)
           echo "wasm-rez.wasm.gz = $gz_size B"
 
-      # Co-locate the .code.bin precompiles into the public assets so the
-      # playground's Build button can fetch them and splice the fresh
-      # resource fork on top. We do this BEFORE `npm run build` so Vite
-      # picks them up from public/ during the build.
-      - name: Co-locate .code.bin precompiles into web public/
+      # Co-locate the .code.bin precompiles next to index.html so the
+      # playground's Build button can fetch them at
+      # /<repo>/precompiled/<project>.code.bin and splice the fresh
+      # resource fork on top. Done AFTER `npm run build` (analogous to
+      # how the disk images are placed below) because the artifact is
+      # downloaded into ./artifact/ AFTER `npm ci` but the previous
+      # ordering ran this step after vite had already finished — so the
+      # files never made it into dist/. See LEARNINGS.md
+      # ("Phase-2 precompiled .code.bin missing in production").
+      - name: Co-locate .code.bin precompiles into web dist
         run: |
-          mkdir -p src/web/public/precompiled
-          cp artifact/build/reader/Reader.code.bin src/web/public/precompiled/reader.code.bin
-          cp artifact/build/macweather/MacWeather.code.bin src/web/public/precompiled/macweather.code.bin
-          ls -la src/web/public/precompiled/
+          mkdir -p src/web/dist/precompiled
+          cp artifact/build/reader/Reader.code.bin src/web/dist/precompiled/reader.code.bin
+          cp artifact/build/macweather/MacWeather.code.bin src/web/dist/precompiled/macweather.code.bin
+          ls -la src/web/dist/precompiled/
+          test -s src/web/dist/precompiled/reader.code.bin
+          test -s src/web/dist/precompiled/macweather.code.bin
 
       # Co-locate the disk images next to index.html so they're reachable at
       # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —

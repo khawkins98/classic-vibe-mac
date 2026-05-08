@@ -413,11 +413,14 @@ static void DrawWeather(void)
 
     MoveTo((short)(cr.left + 8), (short)(cr.bottom - 8));
     DrawString(time);
-    if (gReadFromBoot) {
-        DrawCStr("  (baked)");
-    } else {
-        DrawCStr("  (live)");
-    }
+    /* The "(baked)" / "(live)" caption is intentionally suppressed: until
+     * the JS-side poller (weather-poller.ts, owned by Phase 3) reliably
+     * surfaces a freshness signal the C side can read, the caption was
+     * misleading users into thinking the live fetch had failed even when
+     * the host page had successfully fetched open-meteo. Phase 3 can
+     * reintroduce this once it has a real signal — for now, the
+     * "Updated HH:MM" line above already tells the user when the data
+     * was refreshed. See LEARNINGS.md. */
 
     {
         const char *hint = "Cmd-R to refresh";

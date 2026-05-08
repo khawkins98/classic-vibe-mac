@@ -7,8 +7,8 @@ import { visionAssert, hasVisionApiKey } from "./vision-assert";
  * When the real BasiliskII emulator lands, this file should grow assertions
  * like:
  *   - "a System 7 desktop is visible (menu bar at top, trash can at bottom-right)"
- *   - "a window titled 'Minesweeper' is open"
- *   - "the Minesweeper grid has 9 rows and 9 columns of cells"
+ *   - "a window titled 'Reader' is open"
+ *   - "the MacWeather window shows three forecast columns"
  *
  * For now we just prove the wiring: load the placeholder page, screenshot it,
  * and assert something trivially true via the vision API.
