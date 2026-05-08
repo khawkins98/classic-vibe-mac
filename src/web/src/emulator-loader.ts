@@ -34,6 +34,7 @@ import {
 } from "./emulator-worker-types";
 import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator-input";
 import { startWeatherPoller } from "./weather-poller";
+import { startSharedPoller } from "./shared-poller";
 import {
   isPauseWhenHiddenEnabled,
   onPauseWhenHiddenChange,
@@ -83,6 +84,7 @@ interface ActiveSession {
   unwireInput: (() => void) | undefined;
   teardownVisibility: (() => void) | undefined;
   stopWeather: (() => void) | undefined;
+  stopSharedPoller: (() => void) | undefined;
   /** AudioContext created when BasiliskII opens its audio subsystem. */
   audioContext: AudioContext | undefined;
   /** AudioWorkletNode that receives PCM chunks forwarded from the worker. */
@@ -108,6 +110,7 @@ function makeSession(): ActiveSession {
     unwireInput: undefined,
     teardownVisibility: undefined,
     stopWeather: undefined,
+    stopSharedPoller: undefined,
     audioContext: undefined,
     audioWorkletNode: undefined,
     readyPromise,
@@ -125,6 +128,7 @@ function disposeSession(s: ActiveSession): void {
   // terminated worker on the next interval/visibilitychange. Previously
   // this leak was silent — the message hit a dead port.
   s.stopWeather?.();
+  s.stopSharedPoller?.();
   s.worker?.terminate();
   // Tell the audio worklet to flush its queue before closing the context —
   // prevents stale PCM chunks from the old session bleeding into the next boot.
@@ -286,6 +290,7 @@ async function boot(
     session.teardownVisibility = td;
   };
   const setStopWeather = (s: () => void) => { session.stopWeather = s; };
+  const setStopSharedPoller = (s: () => void) => { session.stopSharedPoller = s; };
   // ── Phase 0: cross-origin isolation gate. ──
   // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
   // Vite dev sets COOP/COEP, and on GH Pages we install coi-serviceworker
@@ -632,6 +637,13 @@ async function boot(
     setStopWeather(stopWeather);
   } catch (err) {
     console.warn("[emulator] weather poller failed to start:", err);
+  }
+
+  try {
+    const stopSharedPoller = startSharedPoller({ worker });
+    setStopSharedPoller(stopSharedPoller);
+  } catch (err) {
+    console.warn("[emulator] shared-poller failed to start:", err);
   }
 
   // ── Phase 4: render loop. ──

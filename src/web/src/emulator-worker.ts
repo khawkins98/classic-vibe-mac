@@ -436,6 +436,34 @@ self.addEventListener("message", (ev: MessageEvent) => {
     } else {
       pendingWeather.push(data.bytes);
     }
+  } else if (data?.type === "poll_url_request") {
+    // Main thread asks for the current URL request file contents.
+    if (sharedReady && activeFs) {
+      try {
+        const bytes: Uint8Array = activeFs.readFile(
+          "/Shared/__url-request.txt",
+        );
+        self.postMessage({ type: "url_request_data", bytes });
+      } catch {
+        self.postMessage({ type: "url_request_data", bytes: null });
+      }
+    } else {
+      self.postMessage({ type: "url_request_data", bytes: null });
+    }
+  } else if (data?.type === "url_result_write" && typeof data.path === "string" && data.bytes instanceof Uint8Array) {
+    // Safety: only allow /Shared/__url-result-<id>.html
+    const path: string = data.path;
+    if (sharedReady && activeFs && /^\/Shared\/__url-result-\d+\.html$/.test(path)) {
+      try {
+        if (!activeFs.analyzePath("/Shared").exists) activeFs.mkdir("/Shared");
+        if (activeFs.analyzePath(path).exists) activeFs.unlink(path);
+        const filename = path.slice("/Shared/".length);
+        activeFs.createDataFile("/Shared", filename, data.bytes, true, true, true);
+        console.log(`[worker] wrote ${data.bytes.length} bytes to ${path}`);
+      } catch (err) {
+        console.warn("[worker] url_result_write failed:", err);
+      }
+    }
   }
 });
 
