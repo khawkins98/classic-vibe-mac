@@ -1,13 +1,37 @@
 /*
  * macweather.r — Rez resources for the classic-vibe-mac weather app.
  *
+ * What's a Rez file: this is the source for the app's "resource fork" —
+ * the parallel data stream attached to the executable that holds menus,
+ * windows, dialogs, icons, strings, version info, and Finder-binding
+ * metadata. Rez (Apple's resource compiler; here we use Retro68's port)
+ * reads this file and emits a binary resource fork the Mac OS Resource
+ * Manager can later look up by (type, ID). The reader.r file in the
+ * sibling Reader app uses the same shape — see it for a slightly more
+ * featureful walk-through (it owns a document type, a Find dialog, etc).
+ *
+ * What MacWeather has, by resource type:
+ *   MENU  (128, 129, 130)  Apple, File, Edit menus
+ *   MBAR  (128)            wires the three MENUs into a menu bar
+ *   WIND  (128)            the main window's bounds + style
+ *   DITL  (128)            About-box dialog item list (the layout)
+ *   ALRT  (128)            About-box alert template (the chrome)
+ *   STR   (0)              friendly app name shown by some Finder dialogs
+ *   vers  (1)              user-facing version string (Get Info shows this)
+ *   SIZE  (-1)             memory partition + Finder behavior flags
+ *   BNDL  (128)            Finder binding bundle (icon → app wiring)
+ *   FREF  (128)            Finder file reference (we register only APPL)
+ *   ICN#  (128)            32x32 1-bit app icon + mask
+ *   CVMW  (0)              creator-code "owner stamp" (one byte per app)
+ *
  * Resource IDs:
  *   128 — Apple menu / MBAR / WIND / About ALRT/DITL
  *   129 — File menu (Refresh, Quit)
  *   130 — Edit menu
  *
- * Window: 480x340 documentProc (no grow). Big enough to show current
- * conditions plus 3 daily forecast cells.
+ * Window: 360x240 documentProc (no grow). Big enough to show current
+ * conditions plus 3 daily forecast cells. (The comment in WIND below
+ * has the actual rect — the title above predates a resize.)
  *
  * Creator code: 'CVMW' — "Classic Vibe Mac Weather". Reader uses 'CVMR';
  * we pick a sibling code to keep the namespace tidy. Same Finder-binding
@@ -77,7 +101,7 @@ resource 'WIND' (128) {
     visible,
     goAway,
     0,
-    "MacWeather",
+    "MacWeather",                /* ← try changing this — it's the title-bar text */
     noAutoCenter
 };
 
