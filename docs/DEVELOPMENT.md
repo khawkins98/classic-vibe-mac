@@ -296,7 +296,7 @@ once per emulator session, in the worker's `preRun`).
 
 ### Replace the demo app with your own
 
-See [`src/app/README.md`](../src/app/README.md#how-to-replace-this-app-with-your-own).
+See [`src/app/README.md`](../src/app/README.md#how-to-add-a-new-app).
 The short version: replace `reader.c` / `reader.r`, keep the
 Toolbox-shell + pure-C-engine split, update `CMakeLists.txt`'s
 `add_application(...)` target, update `tests/unit/Makefile`, and check

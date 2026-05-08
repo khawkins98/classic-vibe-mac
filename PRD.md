@@ -11,7 +11,7 @@ licensing. Want to see what writing for System 7.5.5 feels like in
 
 This project closes both gaps in the same browser tab:
 
-1. A 1993 Macintosh boots at a URL with two real demo apps already
+1. A 1993 Macintosh boots at a URL with three real demo apps already
    running, so visitors can use one before deciding to build one.
 2. A source-code editor sits below the Mac with the same C and Rez
    files that produced the apps running above it. Edits persist
@@ -35,7 +35,7 @@ A Vite + TypeScript page that:
 
 - Boots **Basilisk II** (compiled to WebAssembly by the Infinite
   Mac project) against a self-hosted, chunked **System 7.5.5** boot
-  disk. Both demo apps auto-launch from `:System Folder:Startup
+  disk. All three demo apps auto-launch from `:System Folder:Startup
   Items:`.
 - Mounts a CodeMirror 6 editor seeded with the same C and Rez
   sources that built the apps. Edits persist in IndexedDB
@@ -348,22 +348,16 @@ sequencing.
 
 ### Playground polish
 
-The build-out (Phases 2 + 3) shipped on `main`. Remaining items
-are polish + deferred follow-ups:
+All planned playground polish shipped. Summary:
 
-- [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22)
-  — file tree + tabs + dirty-state in editor.
-- [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23)
-  — Rez (.r) syntax highlighting.
-- [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24)
-  — 3-way diff migration UI for upstream sample changes.
-- [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25)
-  — side-by-side editor + emulator at viewport ≥1200px.
-- [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26)
-  — "Hello, Mac!" minimal starter sample
-  (gated on end-to-end re-verify post-`modelid` fix).
+- [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22) ✅ — file tree + tabs + dirty-state
+- [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23) ✅ — Rez (.r) syntax highlighting
+- [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24) ✅ — smart bundle migration
+- [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25) ✅ — side-by-side editor + emulator
+- [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26) ✅ — "Hello, Mac!" starter sample
+- [#49](https://github.com/khawkins98/classic-vibe-mac/issues/49) ✅ — architecture review (all critical findings resolved)
 
-### Pre-playground roadmap (sequenced behind, not dropped)
+### Demo apps roadmap
 
 - [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9)
   — Markdown viewer + basic editor as a third demo app. Reuses
