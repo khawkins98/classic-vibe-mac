@@ -244,7 +244,15 @@ jobs:
       - name: Build web frontend
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-        run: npm run build
+        run: |
+          # Validate VITE_BASE is a root-relative path (e.g. /repo-name/).
+          # Rejects absolute URLs like https://attacker.com/ which would
+          # redirect all WASM/ROM/disk fetches to an attacker-controlled host.
+          if [[ ! "$VITE_BASE" =~ ^/[^/].*/$ ]]; then
+            echo "ERROR: VITE_BASE must be a root-relative path (e.g. /classic-vibe-mac/). Got: '$VITE_BASE'"
+            exit 1
+          fi
+          npm run build
 
       # Verify the vendored prebuilt WASM-Rez blobs are present and roughly
       # the right size. We ship them committed to git (Track 1b of Issue
