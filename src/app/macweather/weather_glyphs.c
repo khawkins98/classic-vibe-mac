@@ -1,6 +1,32 @@
 /*
  * weather_glyphs.c — 1-bit pixel-art weather glyphs drawn with QuickDraw.
  *
+ * What this file is: hand-drawn pixel art rendered with QuickDraw
+ * primitives, one function per weather "look" (sun, cloud, rain, snow,
+ * fog, thunder, partly-cloudy, fallback). Each function takes a top-left
+ * (x, y) and a target size in pixels; the rest of the geometry is
+ * computed proportionally so the same code path handles the 48-pixel
+ * "now" glyph and the 24-pixel forecast cells.
+ *
+ * Why pixel art (and not, say, a TIFF or PICT resource): on a 1-bit
+ * display at 9pt UI scale, drawing-by-code wins on every axis. The
+ * artwork scales to whatever target the caller asks for, costs zero
+ * resource-fork bytes, and reads as "obviously a sun" / "obviously a
+ * cloud" without any anti-aliasing budget. The glyphs are deliberately
+ * crude; the goal is "instantly readable at 32x32, still
+ * distinguishable at 16x16", not Susan Kare.
+ *
+ * QuickDraw primitives we use:
+ *   FrameOval / PaintOval     stroked / filled ellipses (sun core, clouds)
+ *   Move / LineTo             pen strokes (rays, rain dashes, fog lines)
+ *   FrameRect / EraseRect     unknown-glyph border + cloud silhouette mask
+ *   PenSize / PenState        pen width + save/restore around the glyph
+ *
+ * The dispatch function `WeatherDrawGlyph` (bottom of the file) maps a
+ * WMO weather code to one of these draw functions. The same WMO →
+ * category grouping is mirrored in macweather.c's WmoLabel — keep the
+ * two tables in sync if you add a new code.
+ *
  * The glyph palette covers the WMO weather codes that open-meteo's
  * forecast endpoint emits in practice:
  *
@@ -13,13 +39,8 @@
  *   85-86  snow showers
  *   95-99  thunderstorm
  *
- * We deliberately keep the artwork crude. The goal is "instantly readable
- * at 32x32, still distinguishable at 16x16", not Susan Kare. QuickDraw's
- * primitives are: FrameOval/PaintOval, Move/LineTo, FillRect, with a few
- * Pattern constants from Quickdraw.h for shading.
- *
- * All drawing happens in the current GrafPort. We save/restore pen state
- * so callers don't need to.
+ * All drawing happens in the current GrafPort. We save/restore pen
+ * state at the dispatch boundary so callers don't need to.
  */
 
 #include <Quickdraw.h>

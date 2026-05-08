@@ -1,39 +1,88 @@
 /*
  * macweather.c — Mac Toolbox UI shell for the classic-vibe-mac weather app.
  *
- * Reads weather data from `:Unix:weather.json` (the Emscripten /Shared/
- * tree, mounted by BasiliskII's extfs as the Mac volume "Unix:" — see
- * LEARNINGS.md, "extfs surfaces as Mac volume `Unix:`"). The host JS
- * (src/web/src/weather-poller.ts) fetches from api.open-meteo.com and
- * writes the JSON there every 15 minutes.
+ * What this file is: the entire on-screen Mac side of "MacWeather", a
+ * tiny weather app for System 7. It opens a window, runs an event loop,
+ * polls a JSON file off a host-shared volume, asks weather_parse.c to
+ * decode the bytes, and draws a current-conditions panel + 3-day
+ * forecast with QuickDraw.
  *
- * Pipeline:
- *   :Unix:weather.json  --HOpen/FSRead-->  raw bytes (gJsonBuf)
- *   raw bytes           --weather_parse--> WeatherData
- *   WeatherData         --DrawWeather-->   on-screen pixels (QuickDraw)
+ * Pattern: classic Mac "Toolbox shell". A Mac app of this era is a
+ * `main()` that initialises the Toolbox managers, builds a window, and
+ * spins forever in `WaitNextEvent` until the user picks Quit. Every
+ * paint, click, and menu pick is something we explicitly handle. Modern
+ * devs: think of it as writing your own miniature window manager + main
+ * loop in one C file.
  *
- * Refresh:
- *   - Every 30-tick null event: stat the file, redraw if mtime advanced.
- *   - Cmd-R (View > Refresh): force re-read and redraw.
- *   - We never fetch the network ourselves — that's the JS host's job.
+ * If you've already read reader.c's top-of-file: same shape, same
+ * register. The crash-course on Pascal strings, Resources, WaitNextEvent,
+ * QuickDraw, the Memory Manager, and the File Manager lives there — we
+ * won't repeat it here. What's different in MacWeather:
+ *
+ *   - Data source. Reader opens HTML at :Shared:index.html (a volume
+ *     baked into the boot disk). MacWeather wants live data, so it
+ *     prefers a separately-mounted volume named "Unix:" — that's
+ *     BasiliskII's extfs surfacing the host's /Shared/ directory as a
+ *     Mac volume (see LEARNINGS.md, "extfs surfaces as Mac volume
+ *     `Unix:`"). The JS host (src/web/src/weather-poller.ts) fetches
+ *     from api.open-meteo.com every 15 minutes and writes the response
+ *     into that directory. If the extfs volume isn't mounted (bare
+ *     hardware, or the timing-flaky BasiliskII case from LEARNINGS),
+ *     we fall back to :Shared:weather.json baked into the boot disk —
+ *     stale, but always present.
+ *
+ *   - Refresh model. We never fetch the network ourselves (no TCP/IP
+ *     stack, and even if MacTCP existed in the emulator, parsing TLS
+ *     in a 68k codebase is a non-starter). Instead the C side polls
+ *     the file's modtime: every 30-tick (~½-second) null event in the
+ *     event loop, we PBHGetFInfo the file, and if its mtime advanced
+ *     we re-read and redraw. Cmd-R forces a re-read.
+ *
+ *   - No scrolling. The window is a fixed 360x240 panel — everything
+ *     fits at once, so there's no scroll bar, no Controls, no link
+ *     hit-testing.
+ *
+ * Pipeline (data flow):
+ *   :Unix:weather.json   --HOpen/FSRead------->   raw bytes (gJsonBuf)
+ *   raw bytes            --weather_parse------>   WeatherData
+ *   WeatherData          --DrawWeather-------->   QuickDraw paints pixels
+ *
+ * The Toolbox shell is intentionally thin: all parsing lives in
+ * weather_parse.c, all glyph artwork in weather_glyphs.c, both
+ * host-tested. This file owns the event loop, the window, file I/O,
+ * the modtime poll, and the on-screen layout.
  *
  * Target: 68k Mac, System 7+, compiled with Retro68. If :Unix: isn't
- * mounted (bare hardware, no JS host) the app shows a friendly "no data"
- * banner and keeps looking.
+ * mounted (no JS host, or the extfs mount is wedged) the app shows a
+ * friendly "Waiting for weather data..." banner and keeps polling.
+ *
+ * If you're editing this file in the in-browser playground: change a
+ * string, hit Build & Run, see the result in the emulator within ~1
+ * second. Good first edits: the "Cmd-R to refresh" hint string, the
+ * temperature-unit suffix ("°F"), or the WMO label table at the top of
+ * the drawing section.
  */
 
-#include <Quickdraw.h>
-#include <Windows.h>
-#include <Menus.h>
-#include <Events.h>
-#include <Fonts.h>
-#include <Dialogs.h>
-#include <TextEdit.h>
-#include <TextUtils.h>
-#include <Devices.h>
-#include <OSUtils.h>
-#include <Resources.h>
-#include <Files.h>
+/* Toolbox managers. Same headers as reader.c (minus AppleEvents — we
+ * don't register a Finder document type) — each header corresponds to
+ * one of Apple's "managers", the classic-Mac equivalent of standard
+ * library subsystems. There's no big "mac.h"; you include exactly the
+ * managers you use. Most function names are unprefixed: NewWindow,
+ * DrawString, FSRead, etc. are real top-level symbols. */
+#include <Quickdraw.h>      /* drawing primitives: MoveTo, DrawString, ... */
+#include <Windows.h>        /* WindowPtr, GetNewWindow, FindWindow         */
+#include <Menus.h>          /* MBAR, GetMenuHandle, MenuSelect             */
+#include <Events.h>         /* WaitNextEvent, EventRecord                  */
+#include <Fonts.h>          /* TextFont, applFont, font IDs                */
+#include <Dialogs.h>        /* Alert (the About box)                       */
+#include <TextEdit.h>       /* TEInit (Toolbox wants this even if we never */
+                            /* use a TEHandle — desk accessories may rely  */
+                            /* on it being initialised)                    */
+#include <TextUtils.h>      /* NumToString, GetIndString                   */
+#include <Devices.h>        /* OpenDeskAcc — Apple-menu desk accessories   */
+#include <OSUtils.h>        /* SysBeep                                     */
+#include <Resources.h>      /* GetResource (resource fork access)          */
+#include <Files.h>          /* HOpen, FSRead, FSClose, PBHGetVInfoSync     */
 
 #include "weather_parse.h"
 #include "weather_glyphs.h"
@@ -115,7 +164,18 @@ static void PStrFromC(StringPtr out, const char *c)
 
 /* Get modtime of weather.json. Tries the Unix volume first (live updates
  * from the JS poll) and falls back to :Shared:weather.json on the boot
- * volume (baked at build time by scripts/build-boot-disk.sh). */
+ * volume (baked at build time by scripts/build-boot-disk.sh).
+ *
+ * How the C side knows the file changed: there is no inotify, no
+ * filesystem watcher, no callback API in System 7 for "this file has
+ * been written by another process". Our trick is the simplest possible:
+ * stat-poll. PBHGetFInfo returns the file's HFS catalog record — among
+ * many other things it carries `ioFlMdDat`, the file's modification
+ * timestamp in seconds since 1904 (the classic Mac epoch). On every
+ * idle tick of the event loop we call this, compare against gLastModSecs,
+ * and re-read iff the timestamp moved. The host's JS poller bumps the
+ * file's mtime as a side-effect of writing it, which is what makes the
+ * scheme work. */
 static unsigned long GetWeatherFileModTime(void)
 {
     short unixVRef = FindUnixVRefNum();
@@ -151,7 +211,13 @@ static char  gReadFromBoot = 0;   /* 1 if last read fell back to :Shared: */
 
 /* Try to read the weather JSON. Tries Unix:weather.json first (live
  * updates from the JS poller); falls back to :Shared:weather.json baked
- * onto the boot disk at build time. Returns the byte count or -1. */
+ * onto the boot disk at build time. Returns the byte count or -1.
+ *
+ * The HOpen/FSRead/FSClose dance is the Mac File Manager's basic read
+ * loop — same pattern as Reader's ReadHtmlFile in reader.c. (HOpen by
+ * vRefNum + Pascal-string filename; FSRead with a count by reference;
+ * always FSClose to free the path control block, even on error.) The
+ * one wrinkle here is the two-tier lookup: live first, baked fallback. */
 static long ReadWeatherFile(void)
 {
     short unixVRef = FindUnixVRefNum();
@@ -194,7 +260,15 @@ static long ReadWeatherFile(void)
 /* ------------------------------------------------------------ Refresh */
 
 /* Try to read + parse weather.json. Returns true if data changed (i.e.
- * caller should redraw). `force` skips the modtime short-circuit. */
+ * caller should redraw). `force` skips the modtime short-circuit.
+ *
+ * Why we redraw on data-change rather than continuously: continuous
+ * redraw on a 68k Mac is wasteful — every paint flushes the screen
+ * buffer and the panel is otherwise static. Modtime-gated redraw also
+ * means a window left open all afternoon costs zero CPU until the host
+ * actually pushes new weather. The price: a 30-tick (~½-second) latency
+ * after the JS host writes the file before pixels move, which is fine
+ * for weather. */
 static Boolean RefreshWeather(Boolean force)
 {
     unsigned long mt = GetWeatherFileModTime();
@@ -234,6 +308,13 @@ static void DrawCStr(const char *s)
     DrawString(p);
 }
 
+/* WMO code → human label mapping. open-meteo emits World Meteorological
+ * Organization weather codes (a small enumeration: 0=clear, 1-3 cloud
+ * gradient, 45/48 fog, 51-67 drizzle/rain, 71-77 snow, 80-86 showers,
+ * 95-99 thunderstorm). We render textual labels here and a matching
+ * glyph in weather_glyphs.c — the dispatch table in WeatherDrawGlyph
+ * groups the same codes the same way as WmoLabel below. Keep them in
+ * sync if you add a code. */
 static const char *kWmoNames[] = {
     /* Loose textual labels for the WMO codes we care about. */
     "Clear", "Mainly clear", "Partly cloudy", "Overcast"
@@ -257,6 +338,12 @@ static const char *kCompass[16] = {
     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
 };
 
+/* Repaint the entire window. Called from the update event (BeginUpdate
+ * .. EndUpdate) and after every successful refresh. QuickDraw is
+ * immediate-mode: there's no retained scene graph or invalidate-by-
+ * region (well, there is — InvalRect — but we just clear and redraw the
+ * whole panel; the area is small). The whole repaint takes ~1 ms on a
+ * fast emulator. */
 static void DrawWeather(void)
 {
     SetPort(gWindow);
@@ -541,6 +628,12 @@ int main(void)
     /* Initial probe — non-blocking, just primes the cache. */
     RefreshWeather(false);
 
+    /* Main loop. WaitNextEvent blocks for up to 30 ticks (≈½ second) and
+     * returns true with an event, or false (giving us a "null event") if
+     * the timeout elapsed. We use the null-event tick as our polling
+     * cadence: on every quiet half-second we check the JSON file's
+     * modtime; if it advanced, refresh + redraw. No threads, no timers,
+     * no callbacks — the event loop *is* the timer. */
     while (!gQuit) {
         EventRecord e;
         if (WaitNextEvent(everyEvent, &e, 30L, NULL)) {
