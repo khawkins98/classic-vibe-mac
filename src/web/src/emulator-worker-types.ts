@@ -64,6 +64,23 @@ export type EmulatorChunkedFileSpec = {
   prefetchChunks: number[];
 };
 
+/**
+ * Pause flag SharedArrayBuffer layout. A single Int32 at offset 0:
+ *   0 = running (worker proceeds normally)
+ *   1 = paused  (worker blocks on Atomics.wait(pauseFlag, 0, 1))
+ *
+ * The main thread sets this on `visibilitychange` (when the setting is on)
+ * and notifies the worker thread. The worker checks it at the top of the
+ * idle/sleep shims (the only places the BasiliskII core voluntarily yields)
+ * and parks itself on Atomics.wait until the flag flips back to 0. This is
+ * the cheapest possible way to stall a worker thread — it literally suspends
+ * the OS thread, dropping CPU to ~0%.
+ */
+export const PauseFlagState = {
+  RUNNING: 0,
+  PAUSED: 1,
+} as const;
+
 /** Start message: main → worker. */
 export type EmulatorWorkerStartMessage = {
   type: "start";
@@ -79,6 +96,14 @@ export type EmulatorWorkerStartMessage = {
   screenHeight: number;
   /** RAM size in megabytes. Quadra 650 supports up to 128M. */
   ramSizeMB: number;
+  /**
+   * Single-Int32 SharedArrayBuffer used for the visibility pause flag.
+   * See {@link PauseFlagState}. Allocated by the main thread (so it owns
+   * the lifecycle) and handed to the worker at start so the worker can
+   * Atomics.wait on it from inside its idleWait/sleep shims. Optional for
+   * back-compat with tests that build start messages by hand.
+   */
+  pauseFlagBuffer?: SharedArrayBuffer;
   /**
    * Files to seed into the Emscripten FS at `/Shared/<name>` before
    * BasiliskII boots, so the `extfs /Shared/` pref can surface them as a

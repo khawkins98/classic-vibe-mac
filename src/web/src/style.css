@@ -343,6 +343,138 @@ body {
   background: var(--paper);
   outline: none;
   cursor: default;
+  /* Smooth the dim transition when entering / leaving paused state. */
+  transition: filter 200ms ease-out;
+}
+
+/*
+ * --- Paused state ---------------------------------------------------
+ *
+ * When the emulator is paused (page hidden, sleep-when-hidden ON) we
+ * leave the LAST RENDERED FRAME on the canvas — we want the user to
+ * see the Mac waiting where they left it, not a black/cleared screen.
+ * A subtle brightness dip + a "💤" caption tells them it's paused.
+ */
+body.cvm-paused .emulator-canvas {
+  filter: brightness(0.78) saturate(0.85);
+}
+
+.emulator-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 4px 2px 0;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  color: var(--ink);
+  user-select: none;
+}
+
+.emulator-caption__status {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  /* Reserve space so the caption row doesn't reflow when the indicator
+     toggles on/off. */
+  min-width: 80px;
+  text-align: right;
+  color: var(--shadow);
+}
+
+.emulator-caption__status--paused {
+  color: var(--ink);
+  /* Tiny breathing animation on the indicator to signal "alive but idle". */
+  animation: cvm-paused-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes cvm-paused-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/*
+ * --- Period-styled checkbox -----------------------------------------
+ *
+ * System 7 checkboxes were a 12px square with a 1px black border, white
+ * fill, and (when checked) a 2-stroke "X" or check glyph in black. We
+ * hide the native checkbox and draw our own square + glyph entirely in
+ * CSS (no SVG asset). The native input remains keyboard-focusable and
+ * is what assistive tech / Playwright targets — we just style around it.
+ */
+.cvm-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  color: var(--ink);
+  /* Make the whole row clickable. */
+  padding: 2px 0;
+}
+
+.cvm-check input[type="checkbox"] {
+  /* Visually hide but stay focusable + click-targetable. */
+  position: absolute;
+  opacity: 0;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  pointer-events: none;
+}
+
+.cvm-check__box {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  position: relative;
+  /* Mild bevel to match other inset chrome. */
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+}
+
+/*
+ * The check glyph: a thick "✓" rendered as two black pseudo-element
+ * rectangles rotated to form a checkmark, sized to fit a 12px box.
+ * Period-correct enough — the actual System 7 checkbox used a small
+ * filled "X" or "✓" rendered from a QuickDraw bitmap; this approximates
+ * the silhouette without an asset.
+ */
+.cvm-check input[type="checkbox"]:checked + .cvm-check__box::before,
+.cvm-check input[type="checkbox"]:checked + .cvm-check__box::after {
+  content: "";
+  position: absolute;
+  background: var(--ink);
+}
+.cvm-check input[type="checkbox"]:checked + .cvm-check__box::before {
+  /* Short stroke (lower-left half of the check). */
+  width: 4px;
+  height: 2px;
+  left: 1px;
+  top: 6px;
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
+.cvm-check input[type="checkbox"]:checked + .cvm-check__box::after {
+  /* Long stroke (upper-right half). */
+  width: 8px;
+  height: 2px;
+  left: 3px;
+  top: 5px;
+  transform: rotate(-45deg);
+  transform-origin: left center;
+}
+
+/* Focus outline: a 1px black dotted ring, consistent with classic Mac
+   focus treatment on form widgets. */
+.cvm-check input[type="checkbox"]:focus-visible + .cvm-check__box {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
 }
 
 /* --- Typography inside windows ------------------------------------- */

@@ -25,6 +25,7 @@
 
 import type { EmulatorConfig } from "./emulator-config";
 import {
+  PauseFlagState,
   type EmulatorChunkedFileSpec,
   type EmulatorWorkerMessage,
   type EmulatorWorkerStartMessage,
@@ -32,7 +33,18 @@ import {
 } from "./emulator-worker-types";
 import { wireInput, setInputBuffer } from "./emulator-input";
 import { startWeatherPoller } from "./weather-poller";
+import {
+  isPauseWhenHiddenEnabled,
+  onPauseWhenHiddenChange,
+} from "./settings";
 export { wireInput } from "./emulator-input";
+
+/**
+ * Class applied to <body> whenever the emulator is currently paused due to
+ * the page being hidden. Drives the visual "💤" indicator and any tinting
+ * we want on the canvas. Tests assert on this class.
+ */
+const PAUSED_BODY_CLASS = "cvm-paused";
 
 type LoaderPhase =
   | { kind: "idle" }
@@ -56,6 +68,7 @@ export function startEmulator(
   let worker: Worker | undefined;
   let rafId = 0;
   let unwireInput: (() => void) | undefined;
+  let teardownVisibility: (() => void) | undefined;
 
   void boot(config, handles, ac.signal, (w) => {
     worker = w;
@@ -63,6 +76,8 @@ export function startEmulator(
     rafId = raf;
   }, (un) => {
     unwireInput = un;
+  }, (td) => {
+    teardownVisibility = td;
   }).catch((err) => {
     if ((err as Error).name === "AbortError") return;
     console.error("[emulator] boot failed:", err);
@@ -77,7 +92,90 @@ export function startEmulator(
       ac.abort();
       if (rafId) cancelAnimationFrame(rafId);
       unwireInput?.();
+      teardownVisibility?.();
       worker?.terminate();
+    },
+  };
+}
+
+// ── Visibility / pause-flag controller ───────────────────────────────
+//
+// Owns the SharedArrayBuffer-backed pause flag plus the visibilitychange
+// listener that flips it. The contract:
+//   - `enable()` is called only AFTER `emulator_ready` so we don't pause
+//     in the middle of boot (which would deadlock the loader).
+//   - The setting (`cvm.pauseWhenHidden`) is checked AT EVERY visibility
+//     change, so toggling the checkbox takes effect on the next switch.
+//   - Pausing/resuming flips the body class so the chrome can show the
+//     "💤" hint and CSS can tint the canvas without touching the canvas
+//     element itself (which the loader has handed off to the worker).
+//
+// The pause flag lives in its own SAB rather than piggybacking on the
+// existing input SAB so the cyclical input lock semantics stay clean
+// (we just fixed those — see emulator-input.ts header).
+type VisibilityController = {
+  /** SAB to hand to the worker at start. */
+  buffer: SharedArrayBuffer;
+  /** Wire up the visibilitychange listener (called after emulator_ready). */
+  enable(): void;
+  /** Stop listening; also un-pauses to be safe. */
+  teardown(): void;
+};
+
+function makeVisibilityController(opts: {
+  onPausedChange?: (paused: boolean) => void;
+}): VisibilityController {
+  const buffer = new SharedArrayBuffer(4);
+  const view = new Int32Array(buffer);
+  Atomics.store(view, 0, PauseFlagState.RUNNING);
+
+  let enabled = false;
+  let lastApplied: 0 | 1 = 0;
+
+  const apply = () => {
+    if (!enabled) return;
+    // Setting OFF means the visibility handler still fires but never pauses.
+    // Toggling the setting back ON while already hidden will pause on the
+    // very next visibilitychange event — that's acceptable; the alternative
+    // (re-evaluating immediately on toggle) risks pausing while the user is
+    // mid-interaction with the settings UI.
+    const wantPaused =
+      isPauseWhenHiddenEnabled() && document.visibilityState === "hidden";
+    const next: 0 | 1 = wantPaused ? PauseFlagState.PAUSED : PauseFlagState.RUNNING;
+    if (next === lastApplied) return;
+    lastApplied = next;
+    Atomics.store(view, 0, next);
+    if (next === PauseFlagState.RUNNING) {
+      // Wake the worker thread (Atomics.wait inside idleWait/sleep).
+      Atomics.notify(view, 0, /*count=*/ Infinity);
+    }
+    opts.onPausedChange?.(next === PauseFlagState.PAUSED);
+  };
+
+  const onVisibility = () => apply();
+  const offSetting = onPauseWhenHiddenChange(() => apply());
+
+  return {
+    buffer,
+    enable() {
+      if (enabled) return;
+      enabled = true;
+      document.addEventListener("visibilitychange", onVisibility);
+      // Apply current state immediately in case the user loaded the page
+      // already in a hidden tab (rare but possible: open in background).
+      apply();
+    },
+    teardown() {
+      enabled = false;
+      document.removeEventListener("visibilitychange", onVisibility);
+      offSetting();
+      // Be safe: if we're tearing down while paused, wake the worker so
+      // it can observe whatever shutdown signal we send next.
+      if (lastApplied === PauseFlagState.PAUSED) {
+        Atomics.store(view, 0, PauseFlagState.RUNNING);
+        Atomics.notify(view, 0, Infinity);
+      }
+      opts.onPausedChange?.(false);
     },
   };
 }
@@ -91,6 +189,7 @@ async function boot(
   setWorker: (w: Worker) => void,
   setRaf: (id: number) => void,
   setUnwire: (un: () => void) => void,
+  setTeardownVisibility: (td: () => void) => void,
 ): Promise<void> {
   // ── Phase 0: cross-origin isolation gate. ──
   // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
@@ -197,6 +296,20 @@ async function boot(
   let firstFrameLogged = false;
   let lastBlitRect: EmulatorWorkerVideoBlitRect | undefined;
 
+  let isPaused = false;
+  const visibility = makeVisibilityController({
+    onPausedChange(paused) {
+      isPaused = paused;
+      document.body.classList.toggle(PAUSED_BODY_CLASS, paused);
+      // Surface as a custom event so the chrome (or tests) can react
+      // without importing this module's internals.
+      window.dispatchEvent(
+        new CustomEvent("cvm:paused-change", { detail: { paused } }),
+      );
+    },
+  });
+  setTeardownVisibility(() => visibility.teardown());
+
   let canvasMounted = false;
   worker.addEventListener("message", (ev: MessageEvent<EmulatorWorkerMessage>) => {
     const m = ev.data;
@@ -267,6 +380,11 @@ async function boot(
 
       case "emulator_ready":
         handles.setPhase({ kind: "running" });
+        // Only NOW arm the visibility-pause path. Pausing during boot
+        // (chunk fetch, runtime init, FS materialization) would leave
+        // the worker stuck on Atomics.wait inside a code path that
+        // hasn't yet finished bringing the emulator up.
+        visibility.enable();
         break;
 
       case "emulator_error":
@@ -306,6 +424,7 @@ async function boot(
       name: f.name,
       url: absoluteUrl(f.url),
     })),
+    pauseFlagBuffer: visibility.buffer,
   };
   worker.postMessage(startMsg);
 
@@ -328,8 +447,19 @@ async function boot(
   }
 
   // ── Phase 4: render loop. ──
+  // We skip the actual blit work when paused — the worker has stopped
+  // posting `emulator_blit` messages anyway (it's parked on Atomics.wait),
+  // so there's nothing new to draw, but rAF still fires on hidden tabs in
+  // some cases and it would be silly to keep walking the framebuffer.
+  // We DO keep scheduling rAF so resume picks up immediately. (Browsers
+  // throttle rAF to ~0Hz when the document is hidden anyway, so the
+  // scheduling cost is negligible.)
   const draw = () => {
     if (signal.aborted) return;
+    if (isPaused) {
+      setRaf(requestAnimationFrame(draw));
+      return;
+    }
     if (videoView && videoModeView && imageData && ctx && canvas) {
       const size = videoModeView[0];
       if (size > 0) {
