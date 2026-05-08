@@ -126,7 +126,7 @@ resource 'STR#' (128) {
         ":Shared:";
         "index.html";
         "(no document)";
-        "Reader";
+        "Reader";  /* ← try changing this to your name and clicking Build & Run */
         "<h1>No content found</h1>"
         "<p>The host page is supposed to mount a folder of HTML files "
         "as a Mac volume named <b>Shared</b>, with at least an "

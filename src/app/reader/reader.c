@@ -1,48 +1,96 @@
 /*
  * reader.c — Mac Toolbox UI shell for the classic-vibe-mac HTML viewer.
  *
- * Name choice — "Reader": the app's job is to read HTML files from a
- * shared volume and render them. "Reader" is concrete and accurate (a
- * document reader); "Pages" was the runner-up but reads as a different
- * Apple-branded product. We pick neutrality + clarity.
+ * What this file is: the entire on-screen Mac side of "Reader", a tiny HTML
+ * browser for System 7. It opens a window, runs an event loop, reads HTML
+ * files off a shared volume, and asks html_parse.c to turn the bytes into
+ * draw ops which it then paints with QuickDraw.
  *
- * Pipeline:
- *   :Shared:<name>.html  --FSpOpenDF/FSRead-->  raw bytes
- *   raw bytes            --html_tokenize-->     HtmlTokenList
- *   HtmlTokenList        --html_layout_build--> HtmlLayout (DrawOps)
- *   DrawOps              --DrawText / TextFace--> on-screen pixels
+ * Pattern: classic Mac "Toolbox shell". A Mac app of this era is just a
+ * `main()` that initialises the Toolbox managers, builds a window, and
+ * spins forever in `WaitNextEvent` until the user picks Quit. There is no
+ * runtime, no framework — every paint, click, and menu pick is something
+ * we explicitly handle. Modern devs: think of it as writing your own
+ * miniature browser engine + window manager + main loop in one C file.
+ *
+ * Crash course in classic-Mac concepts you'll see below — each is
+ * re-explained inline the first time it appears:
+ *   - Pascal strings:  "\pHello" — a length-prefixed byte buffer (NOT a
+ *                      C-string). The Toolbox APIs want these.
+ *   - Resources:       data baked into the app's "resource fork" (see
+ *                      reader.r). Loaded by numeric ID (e.g. WIND 128).
+ *   - WaitNextEvent:   the System 7 main loop. Hands us mouse, key,
+ *                      window-update, and Apple events one at a time.
+ *   - QuickDraw:       Apple's 2D drawing API. MoveTo + DrawString =
+ *                      "set pen position, draw text". No retained-mode
+ *                      scene graph: you redraw on every update event.
+ *   - Memory Manager:  NewHandle / HLock / MoreMasters. Manual heap
+ *                      bookkeeping; we only touch it lightly here.
+ *   - File Manager:    HOpen / FSRead / FSClose. NOT POSIX. Pascal-string
+ *                      paths, vRefNum/dirID volume identifiers.
+ *   - AppleEvents:     Inter-app messages. The Finder uses these to tell
+ *                      us "the user double-clicked this document".
+ *
+ * Pipeline (data flow):
+ *   :Shared:<name>.html  --HOpen/FSRead--------->  raw bytes
+ *   raw bytes            --html_tokenize--------->  HtmlTokenList
+ *   HtmlTokenList        --html_layout_build----->  HtmlLayout (DrawOps)
+ *   DrawOps              --DrawText / TextFace--->  on-screen pixels
  *
  * The Toolbox shell is intentionally dumb: all parsing/layout lives in
  * html_parse.c and is host-tested. This file owns the event loop, scroll
  * bar, file I/O, link clicks, and font setup.
  *
- * Target: 68k Mac, System 7+, compiled with Retro68. The shared-folder
- * mount (Mac volume named "Shared") is provided by BasiliskII's extfs
- * machinery wired up by the JS host — this app just opens files via
- * FSpOpenDF on a pre-existing path.
+ * Target: 68k Mac, System 7+, compiled with Retro68 (a modern GCC that
+ * cross-compiles to vintage Motorola 68000). The shared-folder mount
+ * (Mac volume named "Shared") is provided by BasiliskII's extfs machinery
+ * wired up by the JS host — this app just opens files at the
+ * pre-existing path ":Shared:index.html".
+ *
+ * If you're editing this file in the in-browser playground: you can
+ * change anything you like, hit Build & Run, and see the result in the
+ * emulator within ~1 second. A good first edit is one of the strings
+ * inside the alert dialogs or the STR# table in reader.r.
  */
 
-#include <Quickdraw.h>
-#include <Windows.h>
-#include <Menus.h>
-#include <Events.h>
-#include <Fonts.h>
-#include <Dialogs.h>
-#include <TextEdit.h>
-#include <TextUtils.h>
-#include <Devices.h>
-#include <OSUtils.h>
-#include <Resources.h>
-#include <Files.h>
-#include <AppleEvents.h>
+/* Each header below corresponds to one of Apple's "managers" — the
+ * classic-Mac equivalent of standard library subsystems. There's no big
+ * "mac.h"; you include exactly the managers you use. Most function names
+ * are unprefixed (Apple owned the namespace), so e.g. `NewWindow`,
+ * `DrawString`, and `FSRead` are real top-level symbols. */
+#include <Quickdraw.h>      /* drawing primitives: MoveTo, DrawString, ... */
+#include <Windows.h>        /* WindowPtr, GetNewWindow, Drag/Grow/SetPort  */
+#include <Menus.h>          /* MBAR, GetMenuHandle, MenuSelect             */
+#include <Events.h>         /* WaitNextEvent, EventRecord                  */
+#include <Fonts.h>          /* TextFont, applFont, font IDs                */
+#include <Dialogs.h>        /* Alert, StandardGetFile (Open dialog)        */
+#include <TextEdit.h>       /* TEInit (the Toolbox wants this even if      */
+                            /* we never use a TEHandle — desk accessories  */
+                            /* in the Apple menu may rely on it)           */
+#include <TextUtils.h>      /* GetIndString — pulls strings out of STR#    */
+#include <Devices.h>        /* OpenDeskAcc — Apple-menu desk accessories   */
+#include <OSUtils.h>        /* SysBeep                                     */
+#include <Resources.h>      /* GetResource, etc. (resource fork access)    */
+#include <Files.h>          /* HOpen, FSRead, FSClose, FSSpec              */
+#include <AppleEvents.h>    /* AEInstallEventHandler, AEProcessAppleEvent  */
 /* Controls Manager (NewControl, TrackControl, GetControlValue, ...) is
  * declared in Windows.h in Retro68's multiversal interfaces — there is
- * no standalone Controls.h header in this toolchain. AppleEvents.h pulls
- * in AEDataModel symbols too via the multiversal headers. */
+ * no standalone Controls.h header in this toolchain (a known Retro68
+ * quirk; #include <Controls.h> would fail). AppleEvents.h pulls in
+ * AEDataModel symbols too via the multiversal headers. */
 
 #include "html_parse.h"
 
 /* ------------------------------------------------------------------ IDs */
+
+/* Resource IDs. On classic Mac OS, almost every UI asset (menus, windows,
+ * dialogs, icons, strings) lives in the app's "resource fork" — a parallel
+ * stream of bytes attached to the same file as the executable. We refer
+ * to those assets by numeric ID. The actual bytes for these IDs are
+ * declared in reader.r and compiled into the resource fork by Rez.
+ *
+ * Why the IDs start at 128: Apple convention. IDs 0..127 are reserved for
+ * the system; user resources start at 128. Our app, our menus, our IDs. */
 
 enum {
     kMenuApple = 128,
@@ -73,6 +121,9 @@ enum {
     kStrEmptyTitle  = 3,    /* "(no document)" */
     kStrErrTitle    = 4,    /* "Reader" */
     kStrFallbackHtml = 5    /* HTML body shown when no content found */
+    /* ← These IDs index into the STR# 128 resource defined in reader.r.
+     * Open reader.r in the playground editor, change one of those strings,
+     * click Build & Run, and watch your edit show up in the Mac above. */
 };
 
 enum {
@@ -100,14 +151,30 @@ static long        gHtmlLen        = 0;
 static HtmlTokenList gTokens;
 static HtmlLayout    gLayout;
 
-/* Pascal-string global initialised at runtime — Retro68's GCC won't
- * implicitly cast a "\p..." char array literal into the unsigned char
- * Str63 type at file scope. SetCurrentDocName() in main() seeds it. */
+/* Pascal-string globals, initialised at runtime in main().
+ *
+ * Pascal strings — the Toolbox's native string type. Layout:
+ *     [length byte][byte 1][byte 2]...[byte N]
+ * No NUL terminator; the length lives in byte 0. Type aliases:
+ *     Str63   = unsigned char[64]   (1 length + 63 chars)
+ *     Str255  = unsigned char[256]  (1 length + 255 chars)
+ * Source-code literals use a `\p` prefix: `"\pHello"` becomes the bytes
+ * { 5, 'H','e','l','l','o' }.
+ *
+ * Why initialised at runtime: Retro68's GCC won't implicitly cast a
+ * "\p..." char-array literal into the unsigned char Str63 type at file
+ * scope. (See LEARNINGS.md — this is a known Retro68 quirk.) main()
+ * seeds them with GetIndString or BlockMoveData. */
 static Str63       gCurrentDoc;
 static Str63       gHistory[kHistoryDepth];
 static short       gHistoryDepth   = 0;
 
 /* ----------------------------------------------------- Pascal-string utils */
+
+/* Tiny Pascal-string helpers — there's a stdlib for C-strings (string.h)
+ * but the Toolbox uses Pascal strings, so we roll our own. Each one
+ * mirrors a `str*` from string.h; the only twist is the length is at
+ * byte 0 instead of after a trailing NUL. */
 
 /* Concatenate two Pascal strings into dest. dest must be Str255-sized. */
 static void PStrCat(StringPtr dest, ConstStr255Param src)
@@ -131,12 +198,25 @@ static Boolean PStrEqual(ConstStr255Param a, ConstStr255Param b)
     return true;
 }
 
-/* Build a Str255 holding ":Shared:<docName>". docName is a Pascal string. */
+/* Build a Str255 holding ":Shared:<docName>". docName is a Pascal string.
+ *
+ * On classic Mac OS, file paths use COLONS as separators, not slashes.
+ * ":Shared:index.html" means "in the volume named Shared, the file
+ * index.html". A leading colon means "absolute, starting at a volume
+ * name". This is one of the deepest cultural differences from Unix:
+ * paths are colon-separated, volumes are first-class, and there is no
+ * universal root /. */
 static void BuildSharedPath(StringPtr out, ConstStr255Param docName)
 {
     Str255 prefix;
+    /* Pull string #1 ("\":Shared:\"") out of the STR# 128 list defined in
+     * reader.r. GetIndString writes a Pascal string into prefix. */
     GetIndString(prefix, kStrListID, kStrShared);   /* ":Shared:" */
     if (prefix[0] == 0) {
+        /* Belt-and-braces fallback if the resource lookup ever fails:
+         * hand-build the Pascal string from a C-string literal.
+         * `prefix[0] = 8;` is the length byte; `BlockMoveData` (the
+         * Toolbox's memcpy) copies the 8 chars after the length. */
         prefix[0] = 8;
         BlockMoveData(":Shared:", prefix + 1, 8);
     }
@@ -147,7 +227,19 @@ static void BuildSharedPath(StringPtr out, ConstStr255Param docName)
 /* ------------------------------------------------------ File I/O */
 
 /* Read the file at the given full path into gHtmlBuf. Returns
- * the number of bytes read, or -1 on error. */
+ * the number of bytes read, or -1 on error.
+ *
+ * This is the File Manager — the classic Mac equivalent of POSIX open/
+ * read/close. None of these are POSIX (no errno, no fd, no `<sys/...>`):
+ *   HOpen   ~ open(path, O_RDONLY)   — returns a "refNum" (~ fd)
+ *   FSRead  ~ read(fd, buf, n)        — reads up to *count bytes
+ *   FSClose ~ close(fd)
+ * Errors come back as OSErr (a SInt16). 0 = noErr; everything else is a
+ * negative number defined in MacErrors.h.
+ *
+ * "H" in HOpen is "hierarchical" — the older flat File Manager from the
+ * Mac 128K days didn't know about folders, so the H-prefixed variants
+ * were added later (ca. HFS, 1985). All modern code should use them. */
 static long ReadHtmlFile(ConstStr255Param fullPath)
 {
     short refNum = 0;
@@ -155,13 +247,16 @@ static long ReadHtmlFile(ConstStr255Param fullPath)
 
     /* HOpen takes vRefNum=0 + dirID=0 + a colon-rooted volume:path Pascal
      * string. This works for absolute Mac paths starting with the volume
-     * name. */
+     * name (e.g. ":Shared:index.html"). fsRdPerm = open read-only. */
     err = HOpen(0, 0, fullPath, fsRdPerm, &refNum);
     if (err != noErr) return -1;
 
+    /* FSRead's `count` is in/out: caller fills it with the buffer size,
+     * the call updates it to bytes actually read. */
     long count = kHtmlBufferBytes;
     err = FSRead(refNum, &count, gHtmlBuf);
-    /* eofErr is fine — it just means we got the rest of the file. */
+    /* eofErr is fine — it just means we got the rest of the file
+     * (we hit EOF before filling the buffer). Any other OSErr is fatal. */
     FSClose(refNum);
     if (err != noErr && err != eofErr) return -1;
     return count;
@@ -169,6 +264,16 @@ static long ReadHtmlFile(ConstStr255Param fullPath)
 
 /* ------------------------------------------------------ Window plumbing */
 
+/* QuickDraw primer for the window code below:
+ *   - A WindowPtr is also a "GrafPort" — a drawing destination. SetPort
+ *     tells QuickDraw "send subsequent draw calls here".
+ *   - portRect is the window's content area in *local* coordinates
+ *     (origin at top-left of the content area, not the screen).
+ *   - Rect is { top, left, bottom, right } — note the order, classic Mac
+ *     puts the y-coordinates on the outside.
+ *   - All drawing happens in pixels. The Mac of this era is a 1-bit
+ *     monochrome display — black or white, no gray.
+ */
 static void GetContentRect(Rect *r)
 {
     SetPort(gWindow);
@@ -180,7 +285,11 @@ static void GetContentRect(Rect *r)
 }
 
 /* Resize the scroll bar to match the current window. Called on init and
- * after layout (to recompute scrollable range). */
+ * after layout (to recompute scrollable range).
+ *
+ * "Control" in classic Mac OS = any clickable widget the Toolbox ships:
+ * scroll bar, button, checkbox, radio. They have a min/max/value tuple
+ * and a part code system for hit-testing. */
 static void ConfigureScrollBar(void)
 {
     if (!gScrollBar) return;
@@ -208,14 +317,25 @@ static void ConfigureScrollBar(void)
 
 /* ------------------------------------------------------ Drawing */
 
+/* QuickDraw text rendering, for the uninitiated:
+ *   TextFont(id) — pick the font (by numeric Font Manager ID).
+ *   TextSize(n)  — point size.
+ *   TextFace(b)  — bold/italic/underline/etc bits.
+ *   MoveTo(x,y)  — move the pen. y is the BASELINE, not the top.
+ *   DrawString(\p"...")    — draw a Pascal string at the pen.
+ *   DrawText(buf, off, n)  — draw n bytes from a non-Pascal buffer.
+ *
+ * There's no font name lookup — every font has a numeric ID. `applFont`
+ * is the application font (Geneva on default System 7). `monaco` would
+ * be a name but Retro68's Fonts.h doesn't export it, so we use the
+ * Font Manager's hardcoded ID 4. (LEARNINGS.md catches this Retro68
+ * quirk: applFont yes, geneva/monaco names no.) */
 static void ApplyDrawOpFont(const DrawOp *op)
 {
     /* family→font: applFont (Geneva on default System 7) for body,
-     * Monaco (font ID 4 on System 7) for monospace. Retro68's Fonts.h
-     * exposes applFont/systemFont but not per-family aliases like
-     * `monaco` or `geneva` — use the numeric ID directly. If Monaco is
-     * missing on the user's system the Font Manager falls back
-     * gracefully to the system font. */
+     * Monaco (font ID 4 on System 7) for monospace. If Monaco is missing
+     * on the user's system the Font Manager falls back gracefully to the
+     * system font. */
     if (op->family == DRAW_FAMILY_MONO) {
         TextFont(4);   /* Monaco */
     } else {
@@ -237,8 +357,10 @@ static void DrawCBytes(short x, short y, const char *bytes, short len)
 
 static void DrawBullet(short x, short y, unsigned char size)
 {
-    /* QuickDraw circle as a small filled oval. The bullet sits ~2px above
-     * the baseline, sized to match the body font. */
+    /* QuickDraw circle as a small filled oval. PaintOval(&r) fills the
+     * given rect with the current pen pattern (default: solid black).
+     * The bullet sits ~2px above the baseline, sized to match the body
+     * font. */
     Rect r;
     short half = (short)(size / 4);
     if (half < 2) half = 2;
@@ -249,19 +371,29 @@ static void DrawBullet(short x, short y, unsigned char size)
     PaintOval(&r);
 }
 
+/* Repaint the content area from the current HtmlLayout. Called on every
+ * update event (the OS sends one whenever a region of our window has
+ * been exposed and needs re-drawing — there's no automatic backing
+ * store on classic Mac OS, so the app is responsible for redrawing on
+ * demand). */
 static void DrawContent(void)
 {
     SetPort(gWindow);
     Rect cr;
     GetContentRect(&cr);
 
-    /* Erase the content area (not the scroll bar — that paints itself). */
+    /* Erase the content area to white (the scroll bar paints itself
+     * separately, so we leave its rect alone). EraseRect uses the
+     * GrafPort's *background* pattern, which defaults to white. */
     Rect erase = cr;
     EraseRect(&erase);
 
     short scrollY = gScrollBar ? GetControlValue(gScrollBar) : 0;
 
-    /* Clip so wrapped text doesn't bleed onto the scroll bar or chrome. */
+    /* RgnHandle = a handle to a "region" — QuickDraw's flexible 2D mask
+     * type (think arbitrary-shaped clip path). Here we save the current
+     * clip, restrict drawing to the content rect so wrapped text doesn't
+     * bleed onto the scroll bar or chrome, and restore at the bottom. */
     RgnHandle clip = NewRgn();
     GetClip(clip);
     ClipRect(&cr);
@@ -300,6 +432,11 @@ static void DrawContent(void)
     if (gScrollBar) Draw1Control(gScrollBar);
 }
 
+/* Mark the whole window as needing a redraw. The OS will then post an
+ * `updateEvt` to our event loop on the next pass — that's where the
+ * actual repaint happens (DoUpdate → DrawContent). This is the
+ * Mac-equivalent of "setNeedsDisplay" / "scheduleRepaint": we don't
+ * draw immediately, we ask to be notified later. */
 static void InvalidateContent(void)
 {
     SetPort(gWindow);
@@ -326,9 +463,13 @@ static void SetWindowTitleFromDoc(void)
 {
     Str255 title;
     title[0] = 0;
+    /* "\pReader — " is a Pascal-string literal: the \p prefix tells the
+     * compiler to emit a length byte at offset 0 followed by the chars.
+     * Try changing the title text here and clicking Build & Run to see
+     * the change in the emulator within ~1 second. */
     PStrCat(title, "\pReader — ");
     PStrCat(title, gCurrentDoc);
-    SetWTitle(gWindow, title);
+    SetWTitle(gWindow, title);   /* Set Window Title — Toolbox call */
 }
 
 /* Load the no-content fallback HTML from STR# 5. Used when ReadHtmlFile
@@ -486,6 +627,14 @@ static void DoMenuCommand(long cmd)
 /* ------------------------------------------------------ AppleEvents */
 
 /*
+ * AppleEvents are the classic-Mac inter-process messaging system —
+ * roughly analogous to Unix signals + DBus + an RPC layer all at once.
+ * The Finder uses them to tell apps "the user double-clicked one of
+ * your documents", "please quit", and so on. Each event has a 4-char
+ * event class + 4-char event ID; the four "core" events
+ * ('aevt'/'oapp', 'aevt'/'odoc', 'aevt'/'pdoc', 'aevt'/'quit') are the
+ * ones every well-behaved app handles.
+ *
  * Finder integration: when the user double-clicks a TEXT/CVMR file (i.e. an
  * .html that scripts/build-boot-disk.sh tagged), the Process Manager
  * launches us if needed and posts a kCoreEventClass / kAEOpenDocuments
@@ -732,17 +881,31 @@ static void DoKeyDown(EventRecord *e)
 
 int main(void)
 {
-    /* Standard System 7 init dance. MoreMasters preallocates master pointer
-     * blocks so future NewHandle calls don't fragment the heap. */
+    /* The classic-Mac-app boot sequence. Every System 7 application opens
+     * with this incantation, in this order. Each call wakes up one of the
+     * Toolbox managers — none of them have implicit init.
+     *
+     * Memory Manager primer: the Mac heap is divided into "master pointer
+     * blocks", and every Handle (a pointer-to-pointer that the OS can
+     * relocate to compact the heap) needs a master pointer. The OS
+     * allocates them in batches; if you exhaust the initial pool mid-app,
+     * the heap fragments. MoreMasters preallocates an extra batch.
+     * Calling it 3x is cargo-culted from Inside Macintosh sample code —
+     * it gives us 3*64 = 192 master pointers up front, plenty for a
+     * one-window app.
+     *
+     * MaxApplZone expands the application heap to its max size right at
+     * launch so it doesn't grow incrementally (which can also fragment).
+     */
     MaxApplZone();
     MoreMasters(); MoreMasters(); MoreMasters();
-    InitGraf(&qd.thePort);
-    InitFonts();
-    InitWindows();
-    InitMenus();
-    TEInit();
-    InitDialogs(NULL);
-    InitCursor();
+    InitGraf(&qd.thePort);   /* QuickDraw — wakes up the global GrafPort */
+    InitFonts();             /* Font Manager — needed before any TextFont */
+    InitWindows();           /* Window Manager */
+    InitMenus();             /* Menu Manager */
+    TEInit();                /* TextEdit (used by Apple-menu DAs)        */
+    InitDialogs(NULL);       /* Dialog Manager (Alert/Modal dialogs)     */
+    InitCursor();            /* Sets cursor to standard arrow            */
 
     Handle mbar = GetNewMBar(128);
     SetMenuBar(mbar);
