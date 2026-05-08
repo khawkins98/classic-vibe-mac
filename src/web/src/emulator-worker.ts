@@ -430,12 +430,17 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
   const romArrayBuffer = await romRes.arrayBuffer();
 
   // ── Pre-fetch the Shared-volume seed files ──
-  // These materialize as `:Shared:<name>` once BasiliskII boots (the
-  // `extfs /Shared/` pref turns the in-memory `/Shared/` directory into a
-  // Mac volume). We fetch here — outside the synchronous preRun hook —
-  // because preRun cannot await. Failures are non-fatal: the Reader app
-  // has its own "no content found" fallback when :Shared:index.html is
-  // missing, so a 404 on one file should not abort the whole boot.
+  // We seed these into the Emscripten FS at /Shared/ so BasiliskII's
+  // `extfs /Shared/` mount has them visible. NOTE: as of 2026-05-08 the
+  // Reader app does NOT consume this path — extfs in upstream macemu
+  // mounts the volume with the hard-coded name "Unix" (see
+  // BasiliskII/src/Unix/user_strings_unix.cpp STR_EXTFS_VOLUME_NAME),
+  // not "Shared", so Reader's `:Shared:index.html` never resolves through
+  // it. The HTML files are baked into the boot disk's :Shared: folder by
+  // scripts/build-boot-disk.sh instead. We keep this seed for future
+  // Uploads/Downloads use cases where the volume name doesn't matter
+  // (clients access via /Shared/Downloads/ on the host side).
+  // Failures are non-fatal.
   type SharedSeed = { name: string; bytes: Uint8Array };
   const sharedToWrite: SharedSeed[] = [];
   await Promise.all(
@@ -526,15 +531,14 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
         const FS = moduleOverrides.FS;
         if (!FS.analyzePath("/Shared").exists) FS.mkdir("/Shared");
         if (!FS.analyzePath("/Shared/Downloads").exists) FS.mkdir("/Shared/Downloads");
-        // Seed the Shared volume with the HTML pages the Reader app reads
-        // on launch (and links to). BasiliskII's `extfs /Shared/` pref will
-        // expose this directory as the Mac volume named "Shared", so
-        // `/Shared/index.html` becomes `:Shared:index.html` from the Mac's
-        // perspective. The directory listing is built when MacOS mounts the
-        // volume at startup, so writing files BEFORE the Module's main()
-        // runs (which is what preRun guarantees) is the right ordering.
-        // See LEARNINGS.md 2026-05-08 for the upstream-Infinite-Mac
-        // reference (worker.ts: same FS.createDataFile pattern).
+        // Seed /Shared/ in the Emscripten FS. extfs surfaces this as a
+        // Mac volume named "Unix:" (not "Shared:"), so Reader can't find
+        // its HTML through this path — the Reader's :Shared: folder is
+        // baked into the boot disk by scripts/build-boot-disk.sh instead.
+        // We keep the seed because the volume IS mounted (just under the
+        // wrong name) and future Uploads/Downloads features may want
+        // host-side files visible on the guest.
+        // See LEARNINGS.md 2026-05-08 (extfs volume name).
         for (const f of sharedToWrite) {
           // Overwrite if a previous boot left the file (defensive — in
           // practice the FS is fresh every page load).
