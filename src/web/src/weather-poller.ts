@@ -103,6 +103,16 @@ async function fetchAndPost(
  * Safe to call before the Mac side is ready — the worker buffers the
  * write until preRun has created /Shared/, and the Mac picks the file
  * up on the next 30-tick poll inside MacWeather's event loop.
+ *
+ * Visibility gating: when the page is hidden, the emulator worker is
+ * paused (see emulator-loader.ts → makeVisibilityController). There's no
+ * point fetching weather data the user can't see — the Mac side is
+ * frozen and would just buffer one more snapshot. We skip the periodic
+ * fetch when `document.visibilityState === "hidden"`, and trigger an
+ * immediate fetch on the next visibility-restore so the data is fresh
+ * when the user comes back. The first fetch always runs (the page
+ * starting hidden is rare; if it happens, MacWeather just sees the
+ * data slightly later than usual).
  */
 export function startWeatherPoller(cfg: WeatherPollerConfig): () => void {
   const lat = typeof cfg.lat === "number" ? cfg.lat : cfg.fallbackLat;
@@ -117,8 +127,30 @@ export function startWeatherPoller(cfg: WeatherPollerConfig): () => void {
   );
 
   const handle = setInterval(() => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      // User can't see it; the Mac side is paused anyway. Skip.
+      return;
+    }
     void fetchAndPost(cfg.worker, lat, lon);
   }, intervalMs);
 
-  return () => clearInterval(handle);
+  // When the user comes back, fire one immediately if it's been a while.
+  // We don't track "last successful fetch" precisely — fetching on every
+  // restore is fine (open-meteo is rate-permissive, and the data is small).
+  let onVisibility: (() => void) | undefined;
+  if (typeof document !== "undefined") {
+    onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void fetchAndPost(cfg.worker, lat, lon);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+  }
+
+  return () => {
+    clearInterval(handle);
+    if (onVisibility && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibility);
+    }
+  };
 }
