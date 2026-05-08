@@ -107,6 +107,10 @@ in-memory disk and re-spawns the emulator worker so your change
 boots back into the Mac running above in ~820ms warm), download as
 zip. See [Status](#status) for the full breakdown.
 
+Something not working? See
+[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md)
+for the symptom → cause → fix table.
+
 ### Locally (full template flow)
 
 Three pieces have to land in `src/web/public/` before the page
@@ -232,44 +236,13 @@ documented in [`docs/AGENT-PROCESS.md`](./docs/AGENT-PROCESS.md).
 
 ## Status
 
-Honest as of 2026-05-08.
+All three playground phases shipped on `main` as of 2026-05-08: editor + IDB
+persistence (Phase 1), in-browser Rez compilation (Phase 2), and hot-load
+into the running Mac in ~820ms warm (Phase 3).
 
-- **Boot loop, multi-app demo:** ✅ shipped. System 7.5.5 boots in
-  the browser, Reader and MacWeather both auto-launch, two-way data
-  flow is live (host fetches weather, Mac renders it). Mouse +
-  keyboard input works. Live at the URL above.
-- **Playground Phase 1 — editor + persistence:** ✅ shipped (PR #32
-  on `main`). CodeMirror 6, C syntax, single-file editor, IndexedDB
-  persistence with `bundleVersion` invalidation, download-as-zip via
-  JSZip, sample projects seeded at Vite build time. Mobile shows an
-  "open on desktop" message. Reset-to-default per file. Strict CSP.
-  Edits persist; compile-and-run is not yet wired.
-- **Playground Phase 2 — in-browser Rez compilation:** ✅ shipped on
-  `main`. The research spike landed first under `spike/wasm-rez`
-  (PR #34, do-not-merge); WASM-Rez source vendored under
-  `tools/wasm-rez/` and compiled artefacts under
-  `src/web/public/wasm-rez/`. Output bytes are SHA-256-identical to
-  native Retro68 Rez at 103KB gzipped. The Build button preprocesses,
-  runs WASM-Rez, splices a fresh resource fork onto the
-  CI-precompiled `.code.bin`, and downloads a complete MacBinary.
-- **Playground Phase 3 — hot-load into the running Mac:** ✅ shipped
-  on `main`. Template-splice path (patch a precompiled empty-volume
-  `.dsk` in-browser) plus an `InMemoryDisk` class for the BasiliskII
-  disks API plus worker re-spawn. Build & Run round-trips in ~820ms
-  warm in production. Tracked at
-  [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27),
-  [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28),
-  [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31).
-- **Closed after review:** Epic #12 (real Mac TCP/IP via relay,
-  killed for ToS + architecture + IP reasons) and Epic #19 (full
-  in-browser IDE with C compilation, killed for needing OAuth +
-  HFS-writer + a 4-9 engineer-month GCC-to-WASM port). Both are
-  documented at length in
-  [`docs/PLAYGROUND.md` § Closed-Epic graveyard](./docs/PLAYGROUND.md#closed-epic-graveyard).
-
-The full issue tracker — open and closed Epics, child issues, the
-roadmap — is at
-<https://github.com/khawkins98/classic-vibe-mac/issues>.
+The canonical shipped-state checklist — what's live, what's closed-Epic,
+what's next — lives in
+[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md#status).
 
 ## Coming soon
 
