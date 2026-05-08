@@ -131,25 +131,30 @@ static void DrawWindowContent(void)
      * here when it exposed the region) show through. */
     EraseRect(&gWindow->portRect);
 
-    /* The visible string. Try changing this and clicking Build & Run
-     * to see your edit in the emulator within a second or two. */
-    /* ← try changing this and clicking Build & Run */
-    Str255 message = "\pHello, World!";
-
-    /* Pascal strings — the Toolbox's native string type. Layout:
-     *     [length byte][byte 1][byte 2]...[byte N]
-     * No NUL terminator; the length lives in byte 0. The `\p` prefix
-     * on the literal above tells the compiler to emit the length byte
-     * for us, so `"\pHello, World!"` is the bytes
-     * { 13, 'H','e','l','l','o',',',' ','W','o','r','l','d','!' }. */
-
     /* Pick a font + size. applFont is Geneva on stock System 7. 24pt
      * is big enough to feel intentional in a small window. */
     TextFont(applFont);
     TextSize(24);
     TextFace(0);    /* plain — no bold/italic/underline */
 
-    /* Centre the text horizontally and vertically.
+    /* Pascal strings — the Toolbox's native string type. Layout:
+     *     [length byte][byte 1][byte 2]...[byte N]
+     * No NUL terminator; the length lives in byte 0. The `\p` prefix
+     * on the literal below tells the compiler to emit the length byte
+     * for us, so `"\pHello, World!"` is the bytes
+     * { 13, 'H','e','l','l','o',',',' ','W','o','r','l','d','!' }.
+     *
+     * We pass the literal straight into StringWidth + DrawString
+     * rather than into a `Str255 message = "\p..."` local. Why: under
+     * Retro68's modern GCC, a Pascal-string literal won't implicitly
+     * cast into a `Str255` (`unsigned char[256]`) array initialiser —
+     * the compiler errors out with "cannot initialize array of
+     * 'unsigned char' from a string literal with type array of
+     * 'unsigned char'". Function arguments (typed `ConstStr255Param`)
+     * accept the literal cleanly, which is how reader.c also handles
+     * it. See LEARNINGS.md for the full story.
+     *
+     * Centre the text horizontally and vertically.
      *
      * Rect is { top, left, bottom, right } — note the order, classic
      * Mac puts the y-coordinates on the outside.
@@ -159,12 +164,13 @@ static void DrawWindowContent(void)
      * of the glyphs, and Geneva 24 sits ~8px above its baseline. */
     short windowWidth  = gWindow->portRect.right  - gWindow->portRect.left;
     short windowHeight = gWindow->portRect.bottom - gWindow->portRect.top;
-    short textWidth    = StringWidth(message);
+    /* ← try changing this and clicking Build & Run */
+    short textWidth    = StringWidth("\pHello, World!");
     short x = (short)((windowWidth  - textWidth) / 2);
     short y = (short)(windowHeight / 2 + 8);
 
     MoveTo(x, y);
-    DrawString(message);
+    DrawString("\pHello, World!");
 }
 
 /* ------------------------------------------------------ About box */
