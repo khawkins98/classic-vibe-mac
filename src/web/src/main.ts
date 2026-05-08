@@ -109,12 +109,20 @@ root.innerHTML = /* html */ `
         <li>Cross-compiles C to a 68k Mac binary using
           <a href="https://github.com/autc04/Retro68">Retro68</a>, in
           GitHub Actions.</li>
-        <li>Packs the binary into a small HFS disk image with
-          <code>hfsutils</code>.</li>
+        <li>Packs the binary into a bootable HFS System&nbsp;7.5.5 disk
+          with <code>hfsutils</code>; the Finder auto-launches it
+          on boot.</li>
         <li>Hosts a Vite + TypeScript page that mounts Basilisk&nbsp;II
           (GPL-2.0, vendored from
           <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>'s
           Apache-2.0 build) and boots System&nbsp;7.5.5.</li>
+        <li>Ships two demo apps side-by-side:
+          <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/reader">Reader</a>
+          (a tiny HTML viewer that reads from <code>:Shared:</code> on
+          the boot disk) and
+          <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/macweather">MacWeather</a>
+          (live forecast data via a JS poller, rendered with 1-bit
+          QuickDraw glyphs).</li>
         <li>Three-layer testing: host C unit tests, Playwright end-to-end,
           and AI vision assertions on canvas screenshots.</li>
       </ul>
@@ -131,9 +139,9 @@ npm run dev</pre>
 
       <h2>Status</h2>
       <p>
-        The build pipeline compiles. The HFS disk image is packed. The
-        BasiliskII core boots. Minesweeper is wired into the boot disk's
-        Startup Items. See
+        The pipeline runs end-to-end. Two apps ship on the boot disk
+        and the Finder auto-launches them. Reader renders HTML; MacWeather
+        renders the live forecast. See
         <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/PRD.md">PRD.md</a>
         for what's still on the list.
       </p>
