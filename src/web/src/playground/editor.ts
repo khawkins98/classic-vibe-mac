@@ -4,22 +4,24 @@
  * Phase 1 scope (per the editor reviewer's "scope down" note on Issue #21):
  *   - One CodeMirror instance, swapped in-place when the file dropdown
  *     changes (no tabs, no file tree).
- *   - C syntax highlighting via `@codemirror/lang-cpp`. `.r` (Rez) gets
- *     no highlighting in Phase 1; that's a Phase 2 item.
+ *   - C syntax highlighting via `@codemirror/lang-cpp`. `.r` (Rez) files
+ *     get Rez syntax highlighting via the local `lang-rez` module (issue #23).
+ *     Everything else gets plain text.
  *   - Edits debounce-save to IDB on every keystroke (1s) AND save
  *     immediately on file/project switch.
  *   - "Download project as zip" button packages the user's CURRENT edits
  *     for the selected project as a `.zip` (no boot disks, no build
  *     outputs, just `.c` / `.r` / `.h`).
  *
- * No file-tree, no tabs, no Rez highlighting, no diff UI, no side-by-side
- * layout. Those all live in the deferred "Phase 2+" pile.
+ * No file-tree, no tabs, no diff UI, no side-by-side layout. Those all live
+ * in the deferred "Phase 2+" pile.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
 import { cpp } from "@codemirror/lang-cpp";
+import { rez } from "./lang-rez";
 import JSZip from "jszip";
 
 import { SAMPLE_PROJECTS, type SampleProject } from "./types";
@@ -508,12 +510,15 @@ export async function mountPlayground(
 
 /**
  * Pick CodeMirror language extensions for a filename. C/H/CPP get the
- * cpp grammar; everything else (notably `.r` Rez) gets no highlighting
- * in Phase 1 — plain text is fine and Rez highlighting is a Phase 2 item.
+ * cpp grammar; `.r` Rez resource files get the Rez grammar (issue #23);
+ * everything else gets plain text (no highlighting).
  */
 function extensionsForFile(filename: string) {
   if (/\.(c|h|cpp|hpp|cc|hh)$/i.test(filename)) {
     return [cpp()];
+  }
+  if (/\.r$/i.test(filename)) {
+    return [rez()];
   }
   return [];
 }
