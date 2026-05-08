@@ -60,6 +60,11 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "macweather", f),
   })),
+  ...["hello.c", "hello.r"].map((f) => ({
+    project: "hello-mac",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "hello-mac", f),
+  })),
 ];
 
 /**
@@ -84,6 +89,7 @@ interface PrecompileSpec {
 const PRECOMPILE_SPECS: PrecompileSpec[] = [
   { project: "reader", appName: "Reader" },
   { project: "macweather", appName: "MacWeather" },
+  { project: "hello-mac", appName: "HelloMac" },
 ];
 
 function copyPrecompilesToPublic(): void {
