@@ -24,13 +24,27 @@
  * `isPersistent()` lets the chrome render a banner saying so.
  */
 
-import { fileKey, BUNDLE_VERSION } from "./types";
+import { fileKey, BUNDLE_VERSION, SAMPLE_PROJECTS } from "./types";
 
 const DB_NAME = "cvm-playground";
 const DB_VERSION = 1;
 const STORE_FILES = "files";
 const STORE_UI = "ui-state";
 const KEY_BUNDLE_VERSION = "bundleVersion";
+const SEED_HASH_PREFIX = "seedHash:";
+
+/**
+ * djb2-inspired 32-bit hash of a string — fast change detection.
+ * Not cryptographically strong, but collision resistance is fine for
+ * "did the user edit this file?" comparisons.
+ */
+function hashString(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(h, 33) + s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
 
 let dbPromise: Promise<IDBDatabase | null> | null = null;
 let persistent = true;
@@ -192,22 +206,83 @@ export async function writeUiState(key: string, value: unknown): Promise<void> {
 }
 
 /**
- * Initialize storage. Opens the DB, performs the bundle-version check, and
- * (if the version flipped) wipes all stored files so the next read pulls
- * the freshly bundled sources from `/sample-projects/`.
- *
- * Returns `true` if persistence is working (IDB-backed), `false` if we're
- * in the in-memory fallback. The caller uses this to render a banner.
+ * Record the hash of a file's bundled content at seeding time.
+ * Used later to detect whether the user has edited the file.
  */
-export async function initPersistence(): Promise<boolean> {
+async function recordSeedHash(
+  project: string,
+  filename: string,
+  content: string,
+): Promise<void> {
+  await writeUiState(SEED_HASH_PREFIX + fileKey(project, filename), hashString(content));
+}
+
+/**
+ * Retrieve a previously recorded seed hash. Returns `undefined` if none
+ * was stored (e.g., files seeded before this feature was deployed).
+ */
+async function readSeedHash(
+  project: string,
+  filename: string,
+): Promise<string | undefined> {
+  return readUiState<string>(SEED_HASH_PREFIX + fileKey(project, filename));
+}
+
+/**
+ * Smart bundle migration: instead of wiping all stored files when the
+ * bundle version changes, only update files the user hasn't edited.
+ * Files where `hash(user content) !== seedHash` are preserved untouched.
+ *
+ * Returns the count of files that were preserved (user has edits).
+ */
+async function smartMigrateFiles(baseUrl: string): Promise<number> {
+  let preservedCount = 0;
+  for (const project of SAMPLE_PROJECTS) {
+    for (const filename of project.files) {
+      const stored = await readFile(project.id, filename);
+      if (stored === undefined) continue; // not seeded yet — skip
+
+      const seedHash = await readSeedHash(project.id, filename);
+      if (seedHash !== undefined && hashString(stored) !== seedHash) {
+        // User has edited this file — preserve it.
+        preservedCount++;
+        continue;
+      }
+
+      // No edits detected (or first migration with no seed hash history):
+      // silently refresh to the new bundled version.
+      const newBundled = await fetchBundledFile(baseUrl, project.id, filename);
+      if (newBundled) {
+        await writeFile(project.id, filename, newBundled);
+        await recordSeedHash(project.id, filename, newBundled);
+      }
+      // If fetch failed, keep the existing content — better than an empty editor.
+    }
+  }
+  return preservedCount;
+}
+
+/**
+ * Initialize storage. Opens the DB, performs the bundle-version check.
+ * On version change, runs a smart migration that preserves user edits
+ * instead of blindly wiping all stored files.
+ *
+ * Returns `{ persistent, preservedCount }`:
+ *   - `persistent`: true iff IDB is backing storage (false = in-memory fallback)
+ *   - `preservedCount`: number of files with user edits that were kept as-is
+ */
+export async function initPersistence(
+  baseUrl: string,
+): Promise<{ persistent: boolean; preservedCount: number }> {
   await openDb();
-  if (!persistent) return false;
+  if (!persistent) return { persistent: false, preservedCount: 0 };
   const stored = await readUiState<string>(KEY_BUNDLE_VERSION);
+  let preservedCount = 0;
   if (stored !== BUNDLE_VERSION) {
-    await clearAllFiles();
+    preservedCount = await smartMigrateFiles(baseUrl);
     await writeUiState(KEY_BUNDLE_VERSION, BUNDLE_VERSION);
   }
-  return persistent;
+  return { persistent, preservedCount };
 }
 
 /**
@@ -249,7 +324,11 @@ export async function readOrSeedFile(
   const stored = await readFile(project, filename);
   if (stored !== undefined) return stored;
   const bundled = await fetchBundledFile(baseUrl, project, filename);
-  // Seed IDB so subsequent reads are local. Best-effort.
-  if (bundled) await writeFile(project, filename, bundled);
+  // Seed IDB so subsequent reads are local. Record the seed hash so we
+  // can later detect whether the user has edited this file.
+  if (bundled) {
+    await writeFile(project, filename, bundled);
+    await recordSeedHash(project, filename, bundled);
+  }
   return bundled;
 }
