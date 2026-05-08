@@ -1031,6 +1031,140 @@ body.cvm-paused .emulator-canvas {
   vertical-align: middle;
 }
 
+/* --- Two-pane split layout (issue #45) -------------------------------- */
+
+/*
+ * `.cvm-split-layout` is always in the DOM. Below 1200px it's a plain block
+ * container — the panes and divider are invisible wrappers and the windows
+ * inside stack normally. At ≥1200px we switch to an IDE-style flex layout:
+ *   - left pane: Macintosh + Read Me + Config (scrolls independently)
+ *   - drag divider: 6px wide, Mac-chrome styled, pointer + keyboard resize
+ *   - right pane: Playground editor (scrolls independently)
+ *
+ * The split percentage is stored in the --split-pct CSS custom property on
+ * the element itself (set via JS), defaulting to 65%.
+ */
+
+.cvm-split-layout {
+  --split-pct: 65%;
+}
+
+/* At desktop width, activate the side-by-side layout. */
+@media (min-width: 1200px) {
+  /* Make the body viewport-locked so the two panes can independently scroll. */
+  body {
+    overflow: hidden;
+    height: 100dvh;
+    padding-bottom: 0;
+  }
+
+  /* The split layout fills the remaining height below the body's top padding
+     (30px accounts for the fixed menubar + breathing room). */
+  .cvm-split-layout {
+    display: flex;
+    height: calc(100dvh - 30px);
+    overflow: hidden;
+    gap: 0;
+  }
+
+  /* Both panes scroll their own content. min-width: 0 lets flex shrink
+     below intrinsic content width (critical for CodeMirror). */
+  .cvm-split-pane {
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-width: 0;
+    padding: 0 8px 16px;
+  }
+
+  /* Left pane: fixed at --split-pct; contains the Mac + supporting windows. */
+  .cvm-split-pane--left {
+    flex: 0 0 var(--split-pct);
+  }
+
+  /* Right pane: takes the remaining space; contains the editor. */
+  .cvm-split-pane--right {
+    flex: 1 1 0;
+  }
+
+  /* Windows inside panes should fill the available width, overriding the
+     max-width caps that exist for the centered-stack layout. */
+  .cvm-split-pane .window,
+  .cvm-split-pane .window--wide,
+  .cvm-split-pane .window--narrow {
+    max-width: 100%;
+    /* Remove the centering margin used in the stacked layout. */
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  /* Hover lift on windows inside panes would shift layout — disable it. */
+  .cvm-split-pane .window:hover {
+    transform: none;
+  }
+
+  /* Editor hidden: collapse right pane and divider; left pane expands full. */
+  .cvm-split-layout[data-editor-visible="false"] .cvm-split-pane--right,
+  .cvm-split-layout[data-editor-visible="false"] .cvm-split-divider {
+    display: none;
+  }
+
+  .cvm-split-layout[data-editor-visible="false"] .cvm-split-pane--left {
+    flex-basis: 100%;
+  }
+
+  /* The desktop icon is decorative. Hide it in the IDE layout to avoid
+     it appearing awkwardly above the split container. */
+  .desktop-icon {
+    display: none;
+  }
+}
+
+/* Drag divider — visible and styled only at desktop. */
+.cvm-split-divider {
+  display: none; /* hidden below 1200px — no drag handle in stacked layout */
+}
+
+@media (min-width: 1200px) {
+  .cvm-split-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 6px;
+    cursor: col-resize;
+    /* Subtle vertical dots pattern reminiscent of Mac OS drag handles. */
+    background:
+      radial-gradient(circle, var(--shadow) 1px, transparent 1px) center / 4px 4px;
+    background-color: var(--platinum);
+    border-left: 1px solid var(--shadow);
+    border-right: 1px solid var(--highlight);
+    transition: background-color 0.1s;
+    outline: none;
+  }
+
+  .cvm-split-divider:hover {
+    background-color: var(--platinum-light);
+  }
+
+  .cvm-split-divider:focus-visible {
+    outline: 2px solid var(--selection);
+    outline-offset: -1px;
+  }
+}
+
+/* Body cursor + pointer-event muting during active drag. */
+body.cvm-resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.cvm-resizing .cvm-split-pane {
+  pointer-events: none;
+}
+
+body.cvm-resizing .cvm-split-divider {
+  pointer-events: auto;
+}
+
 /* --- Responsive ----------------------------------------------------- */
 
 @media (max-width: 540px) {
