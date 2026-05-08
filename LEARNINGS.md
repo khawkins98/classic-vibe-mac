@@ -28,6 +28,125 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-08 — Playground Phase 2: do the C preprocessor in TypeScript, not in WASM
+**Context:** Phase 2 of Issue #21 needed `#include` / `#define` / `#if` /
+macro coverage for real Apple `.r` files. The spike's MiniLexer.cc
+(`spike/wasm-rez/vendor/MiniLexer.cc`) skips lines starting with `#` —
+fine for the trivial STR# case the spike validated, fatal for
+`reader.r`'s 5 `#include`s.
+**Finding:** The obvious play is "extend MiniLexer in C++". I went the
+other way — implemented the entire preprocessor in TypeScript
+(`src/web/src/playground/preprocessor.ts`) BEFORE the source hits the
+WASM. The WASM only ever sees the post-preprocess slice (comments
+stripped, includes inlined, defines substituted, conditionals already
+resolved). Three things made this the right call:
+
+1. **The WASM artefact stays stable.** No emsdk in CI's hot path,
+   prebuilt blobs are committed under `src/web/public/wasm-rez/`.
+   Vendoring is Track 1b of Issue #30. Faster turnaround on every
+   future preprocessor improvement.
+2. **The IDB-VFS bridge is naturally a JS concern.** `#include` has to
+   resolve against IndexedDB user files plus a `RIncludes/` static
+   asset bundle. Doing that through Emscripten's FS would be a
+   bidirectional async-file callback nightmare; doing it in JS is just
+   a `Map` lookup.
+3. **Error reporting carries the include stack as text the editor can
+   render directly.** `error-markers.ts` remaps a diagnostic on an
+   included header to the `#include` line of the active buffer with a
+   "in <file>:<line>:" prefix.
+
+End-to-end validation: piping the TS-preprocessed reader.r and
+macweather.r through the spike's mini-rez native build produces a
+resource fork that's SHA-256-identical to native Retro68 Rez's output.
+So the architectural pivot doesn't lose fidelity; it just moves the
+preprocessor stage out of the WASM and into JS.
+**Action:** Phase 2 ships the JS preprocessor. The agreed week-2
+fallback (vendor mcpp as an additional WASM blob) is documented in
+`tools/wasm-rez/README.md` for the day a real `.r` trips on
+variadic macros, `#x` stringification, or `##` token-paste — none of
+which our existing apps use.
+
+### 2026-05-08 — `.code.bin` is misnamed: it's resource-fork-heavy, not data-fork-only
+**Context:** Phase 2 spec for Issue #30 Track 7 said "splice the
+freshly-WASM-Rez-compiled resource fork onto the precompiled `.code.bin`
+(the data-fork-only intermediate)". I trusted the description and built
+the splice as `header + data fork (from .code.bin) + new resource fork
+(from WASM-Rez)`. First end-to-end test threw: "precompiled .code.bin
+has rsrc=20460 (expected 0)".
+**Finding:** Despite the name `Reader.code.bin`, the file is a *resource*
+fork heavy MacBinary. Layout for our reader: data fork = 20 bytes (a
+tiny CFM stub for PowerPC interop), resource fork = 20460 bytes
+containing the real CODE 1, CODE 2, ..., DATA, RELA, BNDL, ICN#, FREF,
+SIZE-from-toolchain, cfrg etc. resources. The user's `.r`-defined
+resources (MENU, WIND, DITL, ALRT, STR#, vers) are NOT in `.code.bin`
+— they get appended by the upstream CMake recipe via `Rez --copy
+<code.bin>`. Reader.bin = Reader.code.bin's resource fork merged with
+reader.r.rsrc.bin's resource fork.
+**Action:** Implemented a real Mac resource fork merge in `build.ts`:
+parse both forks (Inside Macintosh "Format of a Resource Fork"),
+catenate the (type, refList, data) catalogs, user wins on (type, id)
+collision, emit a fresh fork. Verified the result is structurally
+identical to the on-disk `Reader.bin` (16 types, same per-type counts,
+same fork header). The bytes differ in type ordering (insertion-order
+vs alphabetical) and per-resource data offsets, but the Resource Manager
+reads through the offsets so a `Reader.bin` produced by the playground
+loads exactly like a `Reader.bin` produced by the toolchain.
+
+### 2026-05-08 — WebAssembly under strict CSP needs `'wasm-unsafe-eval'`
+**Context:** Phase 1's CSP was `script-src 'self'`. Phase 2's Build
+button calls `WebAssembly.instantiate()` to load wasm-rez.{js,wasm}.
+First page-load attempt threw `CompileError: WebAssembly.instantiate()
+violates Content Security policy directive ... 'unsafe-eval' is not an
+allowed source of script`.
+**Finding:** Browsers treat WebAssembly compilation as eval-like. The
+CSP3 `'wasm-unsafe-eval'` source-keyword specifically permits WASM
+compilation while still blocking `eval()` proper. Browser support:
+Chrome 102+, Firefox 116+, Safari 16+. Older browsers ignore the
+unknown token and reject WASM with the same error — the playground's
+Build button silently degrades on those.
+**Action:** Added `'wasm-unsafe-eval'` to `script-src` in
+`src/web/index.html`, leaving `unsafe-eval` itself off. Long comment
+in the HTML explains the reasoning so the next agent doesn't widen
+the carve-out.
+
+### 2026-05-08 — Multiversal RIncludes are generated, not source: ship `Multiverse.r` umbrella + named stubs
+**Context:** Phase 2 needed to vendor Apple's `.r` headers
+(Processes.r, Menus.r, Windows.r, Dialogs.r, MacTypes.r) so reader.r /
+macweather.r compile against them. First pass: copy
+`/usr/local/share/Retro68/RIncludes/*.r` from a Retro68 install. We
+don't have one in CI.
+**Finding:** Those headers are emitted by `multiversal/make-multiverse.rb`
+from YAML defs. Running Ruby in the playground's CI just to materialize
+five files is overkill, and Ruby itself adds a ~200 MB CI dependency.
+Meanwhile, the spike's `multiversal/custom/Multiverse.r` (300 lines,
+hand-curated) already defines every type our two apps need — STR/STR#,
+MENU, MBAR, WIND, DLOG, DITL, ALRT, vers, SIZE, ICN#, BNDL, FREF, cfrg,
+rdes — and is byte-identical-output for the spike's smoke tests.
+**Action:** Vendor `Multiverse.r` directly under
+`src/web/public/wasm-rez/RIncludes/` and provide 5 one-line named stubs
+(`Processes.r` etc.) that re-include it. `reader.r` / `macweather.r`
+compile unchanged because to the preprocessor `#include "Menus.r"` and
+`#include "Multiverse.r"` resolve to the same token stream. Total size
+on the wire: 28 KB unpacked (well under the 600 KB / 80-150 KB gzipped
+budget). If a future app needs a richer header surface, vendor the
+generated multiversal output from a Retro68 install instead.
+
+### 2026-05-08 — Emscripten's glue hardcodes the original CMake target name; remap via `locateFile`
+**Context:** Renamed the prebuilt WASM artefact from the spike's
+`mini-rez.wasm` to `wasm-rez.wasm` for naming consistency under
+`src/web/public/wasm-rez/`. First Build click in the browser failed
+with "expected magic word 00 61 73 6d, found 3c 21 64 6f" — i.e. the
+fetch returned `<!do…` (an HTML 404 page).
+**Finding:** Emscripten's JS glue (`wasm-rez.js`) embeds the WASM
+filename it emitted from CMake — `mini-rez.wasm` — as a string and
+fetches it relative to the document URL. Renaming the file on the
+server doesn't help; the glue still asks for the old name.
+**Action:** `locateFile` callback in the Module factory call remaps
+`mini-rez.wasm` → `${baseUrl}wasm-rez/wasm-rez.wasm`. Documented
+inline in `src/web/src/playground/rez.ts`. If the WASM ever gets
+rebuilt with `--target-name wasm-rez` in the CMake config, the remap
+becomes a no-op and can be deleted.
+
 ### 2026-05-08 — CodeMirror 6 needs `style-src 'unsafe-inline'`; theme rules ship as inline `<style>` tags
 **Context:** Wiring strict CSP on the playground page (Phase 1 of Issue
 #21). Started with `default-src 'self'; script-src 'self'; style-src

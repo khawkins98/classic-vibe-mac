@@ -62,6 +62,51 @@ const SEED_FILES: SeedSpec[] = [
   })),
 ];
 
+/**
+ * Phase 2 (Issue #30 Track 7): copy the CMake-built `<App>.code.bin`
+ * artifacts into public/precompiled/ so the playground's Build button
+ * can fetch them via plain HTTP. The .code.bin holds the m68k CODE
+ * resources we splice the user's freshly-compiled .r resources on top of.
+ *
+ * In CI, the GH Actions web-build job does this from the artifact tarball
+ * (see .github/workflows/build.yml). For local dev we just look in
+ * `build/<project>/<App>.code.bin` and copy in if present. Missing is
+ * tolerated — the Build button surfaces a clear error to the user.
+ */
+interface PrecompileSpec {
+  /** Stable id used in URLs / IDB. */
+  project: string;
+  /** Capitalized App name (CMake target). Used to build the source path
+   *  `build/<project>/<AppName>.code.bin`. */
+  appName: string;
+}
+
+const PRECOMPILE_SPECS: PrecompileSpec[] = [
+  { project: "reader", appName: "Reader" },
+  { project: "macweather", appName: "MacWeather" },
+];
+
+function copyPrecompilesToPublic(): void {
+  for (const spec of PRECOMPILE_SPECS) {
+    const src = join(REPO_ROOT, "build", spec.project, `${spec.appName}.code.bin`);
+    const dst = join(PUBLIC_DIR, "precompiled", `${spec.project}.code.bin`);
+    if (!existsSync(src)) continue;
+    mkdirSync(dirname(dst), { recursive: true });
+    let needsWrite = true;
+    try {
+      const a = readFileSync(src);
+      const b = readFileSync(dst);
+      if (a.length === b.length && a.equals(b)) needsWrite = false;
+    } catch {
+      // dst doesn't exist — needs write.
+    }
+    if (needsWrite) {
+      const bytes = readFileSync(src);
+      writeFileSync(dst, bytes);
+    }
+  }
+}
+
 function readSeedContents(): { contents: Map<string, string>; hash: string } {
   const contents = new Map<string, string>();
   const hasher = createHash("sha256");
@@ -103,6 +148,7 @@ function playgroundSeedPlugin(): Plugin {
       const { contents, hash } = readSeedContents();
       bundleHash = hash;
       writeSeedToPublic(contents);
+      copyPrecompilesToPublic();
       return {
         define: {
           __CVM_BUNDLE_VERSION__: JSON.stringify(hash),

@@ -31,6 +31,19 @@ import {
   readUiState,
   writeUiState,
 } from "./persistence";
+import { preprocess } from "./preprocessor";
+import { createVfs } from "./vfs";
+import { compile } from "./rez";
+import {
+  spliceResourceFork,
+  triggerDownload,
+  fetchPrecompiled,
+} from "./build";
+import {
+  lintExtensions,
+  setEditorDiagnostics,
+  clearEditorDiagnostics,
+} from "./error-markers";
 
 /** UI-state IDB keys. */
 const UI_PROJECT = "openProject";
@@ -77,6 +90,8 @@ export async function mountPlayground(
   const downloadBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-download",
   )!;
+  const buildBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-build")!;
+  const statusEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-status")!;
   const editorMount = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-editor-mount",
   )!;
@@ -146,6 +161,7 @@ export async function mountPlayground(
       history(),
       keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
       langCompartment.of(extensionsForFile(filename)),
+      ...lintExtensions(),
       EditorView.theme(
         {
           "&": {
@@ -188,6 +204,10 @@ export async function mountPlayground(
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           scheduleSave();
+          // Clear stale diagnostics on any edit. Squiggles on a now-edited
+          // line are misleading — better to vanish until the next Build
+          // run replays them on the freshly-compiled output.
+          clearEditorDiagnostics(update.view);
         }
         if (update.selectionSet) {
           scheduleCursorSave();
@@ -312,6 +332,42 @@ export async function mountPlayground(
     }
   });
 
+  buildBtn.addEventListener("click", async () => {
+    await flushSave();
+    const projectId = current.project;
+    const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+    if (!proj) return;
+
+    buildBtn.disabled = true;
+    setStatus(statusEl, "Compiling…", "info");
+
+    try {
+      const result = await runBuild(baseUrl, proj, view, current.filename);
+      if (result.ok) {
+        setStatus(
+          statusEl,
+          `Built ${proj.outputName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
+          "ok",
+        );
+        triggerDownload(result.bytes!, proj.outputName);
+      } else {
+        const first = result.diagnostics[0];
+        const msg = first
+          ? `${first.severity}: ${first.message} (${first.file}:${first.line})`
+          : "Build failed (no diagnostics)";
+        setStatus(statusEl, msg, "err");
+      }
+    } catch (e) {
+      setStatus(
+        statusEl,
+        `Build error: ${(e as Error).message}`,
+        "err",
+      );
+    } finally {
+      buildBtn.disabled = false;
+    }
+  });
+
   // Visibility toggle. We hide the entire section, not just the editor,
   // so the caption + dropdowns disappear too.
   return {
@@ -396,10 +452,14 @@ function renderShell(persistent: boolean): string {
           <span class="cvm-pg-field__label">File</span>
           <select id="cvm-pg-file" class="cvm-pg-select"></select>
         </label>
+        <button type="button" id="cvm-pg-build" class="cvm-pg-button cvm-pg-button--primary">
+          Build .bin
+        </button>
         <button type="button" id="cvm-pg-download" class="cvm-pg-button">
-          Download project as .zip
+          Download .zip
         </button>
       </div>
+      <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor"></div>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
@@ -436,5 +496,114 @@ async function downloadProjectAsZip(
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+function setStatus(
+  el: HTMLElement,
+  text: string,
+  kind: "info" | "ok" | "err",
+): void {
+  el.textContent = text;
+  el.dataset.kind = kind;
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+interface BuildOutcome {
+  ok: boolean;
+  bytes?: Uint8Array;
+  totalMs: number;
+  diagnostics: { file: string; line: number; column: number; message: string; severity: "error" | "warning" }[];
+}
+
+/**
+ * The Build pipeline, end-to-end. Owned here in editor.ts because it
+ * touches the live view (for diagnostics) and the active project. The
+ * individual stages live in their own modules:
+ *
+ *    user buffer (IDB) ── preprocessor.ts ──> flat source
+ *    flat source ────── rez.ts ──────────> resource fork bytes
+ *    rsrc fork + .code.bin ── build.ts ───> spliced MacBinary
+ *
+ * Returns the spliced bytes on success, or a structured error otherwise.
+ * The caller renders whichever appropriate.
+ */
+async function runBuild(
+  baseUrl: string,
+  proj: SampleProject,
+  view: EditorView,
+  activeFile: string,
+): Promise<BuildOutcome> {
+  const t0 = performance.now();
+
+  // Read the latest .r source from IDB (the user's edits, possibly NOT
+  // the buffer currently shown in the editor — we Build on the project's
+  // canonical .r file which may be a different file in the dropdown).
+  // readOrSeedFile falls back to the bundled copy on first read.
+  const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
+
+  // Build the VFS and warm it. We pre-fetch every project file plus the
+  // bundled RIncludes so the synchronous preprocessor pass can resolve
+  // every #include without going async mid-walk.
+  const vfs = createVfs(baseUrl, proj.id);
+  await vfs.prefetch(proj.id, proj.files);
+
+  // Run the preprocessor. We seed the same handful of macros the spike's
+  // MiniLexer addDefine sets at startup so existing .r files compile
+  // identically.
+  const pp = preprocess(topSource, proj.rezFile, vfs, {
+    Rez: "1",
+    DeRez: "0",
+    true: "1",
+    false: "0",
+    TRUE: "1",
+    FALSE: "0",
+  });
+
+  // Show preprocessor diagnostics on the editor (cross-file ones get
+  // remapped to the include line of the active buffer per the
+  // error-markers contract).
+  setEditorDiagnostics(view, pp.diagnostics, activeFile);
+
+  if (pp.diagnostics.some((d) => d.severity === "error")) {
+    return {
+      ok: false,
+      totalMs: performance.now() - t0,
+      diagnostics: pp.diagnostics,
+    };
+  }
+
+  // Compile through WASM-Rez.
+  const rez = await compile(baseUrl, pp.output, proj.rezFile);
+  // Combine pp + rez diagnostics so the user sees everything.
+  const allDiags = [...pp.diagnostics, ...rez.diagnostics];
+  setEditorDiagnostics(view, allDiags, activeFile);
+
+  if (!rez.ok || !rez.resourceFork) {
+    return {
+      ok: false,
+      totalMs: performance.now() - t0,
+      diagnostics: allDiags,
+    };
+  }
+
+  // Splice onto the precompiled .code.bin.
+  const dataForkBin = await fetchPrecompiled(baseUrl, proj.id);
+  const bytes = spliceResourceFork({
+    dataForkBin,
+    resourceFork: rez.resourceFork,
+  });
+
+  return {
+    ok: true,
+    bytes,
+    totalMs: performance.now() - t0,
+    diagnostics: allDiags,
+  };
+}
+
 // Re-export for use elsewhere (e.g. tests).
 export { isPersistent };
+export { runBuild };

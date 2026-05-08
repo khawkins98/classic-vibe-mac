@@ -1,0 +1,3 @@
+# CMake build output. The committed prebuilt WASM artefacts live in
+# src/web/public/wasm-rez/, not here.
+build/
