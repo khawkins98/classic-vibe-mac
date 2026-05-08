@@ -1,0 +1,19 @@
+# Spike-only ignores. The rest of the repo's .gitignore still applies.
+
+# Build outputs
+build/
+
+# Vendored upstream sources (clone instructions in README.md). 150k+ files,
+# 800+ MB. Out of scope to vendor in-tree — the CMakeLists references it
+# by relative path and the README has the clone command.
+vendor/retro68/
+
+# Built WASM artefacts inside demo/ — these are produced by the build and
+# copied here for the demo. Re-run `cmake --build build/mini-wasm` to make
+# them appear locally.
+demo/mini-rez.js
+demo/mini-rez.wasm
+
+# Stray test scratch
+/tmp-*
+*.bin

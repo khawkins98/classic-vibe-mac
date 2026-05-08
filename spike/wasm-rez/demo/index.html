@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spike: WASM-Rez (mini)</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, monospace; max-width: 980px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  textarea { width: 100%; min-height: 220px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; box-sizing: border-box; }
+  .row { display: flex; gap: 1rem; align-items: center; margin: 0.6rem 0; }
+  pre { background: #f4f4f4; padding: 0.7rem; border: 1px solid #ddd; max-height: 280px; overflow: auto; font-size: 12px; }
+  button { padding: 0.45rem 0.9rem; font-size: 14px; }
+  .ok { color: #097509; }
+  .err { color: #b22; white-space: pre-wrap; }
+  .stat { color: #555; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Spike: WASM-Rez (mini), in-browser resource compiler</h1>
+
+<p>
+  This page hosts the mini variant of <a href="https://github.com/autc04/Retro68">Retro68's Rez</a>
+  compiled to WebAssembly. <strong>The "mini" variant ditches Boost.Wave</strong>
+  (the upstream C preprocessor) and substitutes a hand-rolled lexer; it covers
+  the slice of Rez needed for resource-fork-only edits with the type definitions
+  inlined into the .r file (or, in a follow-up, emitted by a <code>#include</code>-aware
+  stage).
+</p>
+
+<p>
+  WASM bundle: <span id="wasm-size" class="stat">…</span>.
+  Cold-load + Module init: <span id="init-ms" class="stat">…</span>.
+</p>
+
+<p>
+  <strong>Source (.r):</strong>
+</p>
+<textarea id="src">/* Minimal STR# Rez input for the spike. */
+
+type 'STR#' {
+    integer = $$CountOf(strings);
+    array strings { pstring; };
+};
+
+resource 'STR#' (128) {
+    {
+        "Hello",
+        "World"
+    }
+};
+</textarea>
+
+<div class="row">
+  <button id="btn-compile">Compile</button>
+  <span id="status" class="stat"></span>
+</div>
+
+<p><strong>Resource fork (bytes after MacBinary header strip):</strong></p>
+<pre id="rfork-hex"></pre>
+
+<p><strong>Raw stderr from Rez:</strong></p>
+<pre id="rez-log"></pre>
+
+<script>
+(function () {
+  const fmtBytes = (n) => n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB';
+  const setStatus = (msg, ok) => {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = ok ? 'stat ok' : (ok === false ? 'stat err' : 'stat');
+  };
+
+  // Show .wasm size from a HEAD request.
+  fetch('mini-rez.wasm', { method: 'HEAD' })
+    .then(r => {
+      const sz = parseInt(r.headers.get('content-length') || '0', 10);
+      document.getElementById('wasm-size').textContent =
+        sz ? fmtBytes(sz) + ' (uncompressed)' : 'unknown size';
+    });
+
+  let modulePromise = null;
+  let stderrBuffer = '';
+
+  function loadModule() {
+    if (modulePromise) return modulePromise;
+    setStatus('Downloading + instantiating WASM…');
+    const t0 = performance.now();
+
+    modulePromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'mini-rez.js';
+      s.onload = () => {
+        // global createRezModule provided by mini-rez.js (MODULARIZE=1, EXPORT_NAME=createRezModule)
+        createRezModule({
+          noInitialRun: true,
+          print: (s) => { stderrBuffer += s + '\n'; },
+          printErr: (s) => { stderrBuffer += s + '\n'; },
+        }).then((Module) => {
+          const t1 = performance.now();
+          document.getElementById('init-ms').textContent =
+            (t1 - t0).toFixed(0) + ' ms';
+          resolve(Module);
+        }, reject);
+      };
+      s.onerror = reject;
+      document.body.appendChild(s);
+    });
+    return modulePromise;
+  }
+
+  function hexdump(bytes, perLine = 16) {
+    let out = '';
+    for (let i = 0; i < bytes.length; i += perLine) {
+      const slice = bytes.slice(i, i + perLine);
+      const hex = Array.from(slice).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const ascii = Array.from(slice).map(b => (b >= 32 && b < 127) ? String.fromCharCode(b) : '.').join('');
+      out += i.toString(16).padStart(6, '0') + '  ' + hex.padEnd(perLine * 3) + ' |' + ascii + '|\n';
+    }
+    return out;
+  }
+
+  function extractRsrcFork(macBin) {
+    if (macBin.length < 128) return new Uint8Array(0);
+    const dataLen = (macBin[83] << 24) | (macBin[84] << 16) | (macBin[85] << 8) | macBin[86];
+    const rsrcLen = (macBin[87] << 24) | (macBin[88] << 16) | (macBin[89] << 8) | macBin[90];
+    const pad = (n) => ((n + 127) >> 7) << 7;
+    const dataStart = 128;
+    const rsrcStart = dataStart + pad(dataLen);
+    return macBin.slice(rsrcStart, rsrcStart + rsrcLen);
+  }
+
+  document.getElementById('btn-compile').addEventListener('click', async () => {
+    document.getElementById('rez-log').textContent = '';
+    document.getElementById('rfork-hex').textContent = '';
+    stderrBuffer = '';
+
+    let Module;
+    try { Module = await loadModule(); }
+    catch (e) { setStatus('Failed to load WASM: ' + e, false); return; }
+
+    const src = document.getElementById('src').value;
+    try { Module.FS.unlink('/in.r'); } catch (_) { /* fine */ }
+    try { Module.FS.unlink('/out.bin'); } catch (_) { /* fine */ }
+    Module.FS.writeFile('/in.r', src);
+
+    const t0 = performance.now();
+    let rc;
+    try { rc = Module.callMain(['/in.r', '-o', '/out.bin']); }
+    catch (e) { setStatus('Rez threw: ' + e, false); return; }
+    const t1 = performance.now();
+
+    if (rc !== 0) {
+      setStatus('rez exited rc=' + rc + ' in ' + (t1 - t0).toFixed(1) + ' ms', false);
+      document.getElementById('rez-log').textContent = stderrBuffer;
+      return;
+    }
+
+    let out;
+    try { out = Module.FS.readFile('/out.bin'); }
+    catch (e) { setStatus('No output produced', false); return; }
+
+    const rfork = extractRsrcFork(out);
+    setStatus('Compiled OK in ' + (t1 - t0).toFixed(1) + ' ms — '
+              + out.length + ' B MacBinary, ' + rfork.length + ' B resource fork', true);
+    document.getElementById('rfork-hex').textContent = hexdump(rfork);
+    document.getElementById('rez-log').textContent = stderrBuffer || '(no stderr output)';
+  });
+})();
+</script>
+</body>
+</html>
