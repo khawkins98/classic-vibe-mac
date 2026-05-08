@@ -48,3 +48,12 @@ tests/unit/*.dSYM/
 # truth that's easy to forget to refresh.
 src/web/public/sample-projects/
 
+# Playground precompiled .code.bin assets — copied at build time from the
+# CMake build output by the GH Actions web-build job. Same single-source-of-
+# truth reasoning as sample-projects above.
+src/web/public/precompiled/
+
+# spike/ holds research artefacts checked out from the spike/wasm-rez
+# branch for local reference. It's intentionally not part of feat/ branches.
+spike/
+
