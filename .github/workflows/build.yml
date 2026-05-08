@@ -37,7 +37,7 @@ jobs:
       image: ghcr.io/autc04/retro68:latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Install hfsutils into the Retro68 container so scripts/build-disk-image.sh
       # can produce our custom app.dsk. The Retro68 image is Debian-based and runs
@@ -106,7 +106,7 @@ jobs:
       # archive.org on every push; the cache key is the BOOT_DISK_URL pin
       # (effectively constant within a SHA pin in the script).
       - name: Cache upstream System 7.5.5 image
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .cache/boot-disk
           key: boot-disk-system755-v1
@@ -139,7 +139,7 @@ jobs:
           fi
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: classic-vibe-mac-${{ github.sha }}
           path: |
@@ -165,10 +165,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: "npm"
@@ -177,7 +177,7 @@ jobs:
       # next to the Vite output. Downloads to ./artifact/ preserving the
       # original directory structure (build/, dist/).
       - name: Download app artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: classic-vibe-mac-${{ github.sha }}
           path: artifact
@@ -251,7 +251,7 @@ jobs:
       # contract. upload-pages-artifact tars the directory with the right
       # metadata that deploy-pages expects on the other side.
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: src/web/dist
 
@@ -284,7 +284,7 @@ jobs:
       # fix is the emulator-integration-engineer; this job just flags it.
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
 # TODO — remaining pipeline pieces from PRD.md, to be wired up by follow-up PRs:
 #   - Auto-launch: Startup Items on a secondary disk doesn't fire (see
