@@ -811,6 +811,170 @@ body.cvm-paused .emulator-canvas {
   }
 }
 
+/* --- Build & Run explainer modal (issue #46) ------------------------ */
+
+/*
+ * Fullscreen overlay / scrim. position:fixed keeps it above all page
+ * content including the Mac canvas. The 30% black tint is discreet — we
+ * still want the Mac visible behind the dialog.
+ */
+.cvm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/*
+ * Dialog box. Classic Mac alert: white interior, 1px black outer border,
+ * beveled inner shadow, hard drop-shadow at 4px to create the "floating"
+ * look that old mac dialogs had.
+ */
+.cvm-modal {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    4px 4px 0 0 rgba(0, 0, 0, 0.4);
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+/* Title bar — Platinum chrome identical to .window__titlebar */
+.cvm-modal__titlebar {
+  background: var(--platinum);
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  font-weight: bold;
+  user-select: none;
+}
+
+/*
+ * Close box. Matches the window close box convention: 11×11px square,
+ * beveled, no label. Screen reader users get an aria-label on the <button>.
+ */
+.cvm-modal__closebox {
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid var(--ink);
+  background: var(--platinum-light);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.cvm-modal__closebox:hover {
+  background: var(--platinum);
+}
+
+.cvm-modal__closebox:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
+}
+
+.cvm-modal__title {
+  flex: 1;
+  text-align: center;
+}
+
+.cvm-modal__body {
+  padding: 16px 20px 10px;
+  line-height: 1.5;
+}
+
+.cvm-modal__summary {
+  font-weight: bold;
+  margin: 0 0 10px;
+}
+
+.cvm-modal__body > p {
+  margin: 0 0 8px;
+}
+
+.cvm-modal__steps {
+  margin: 8px 0 0;
+  padding-left: 22px;
+}
+
+.cvm-modal__steps li {
+  margin-bottom: 6px;
+}
+
+/* Button row — right-aligned like classic Mac alerts */
+.cvm-modal__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 6px 20px 16px;
+}
+
+/*
+ * Default-button double-ring: the classic Mac "pressing Return triggers
+ * this button" visual cue. We overlay a 2px solid ring via outline.
+ * The .cvm-pg-button class from the toolbar provides all bevel/font styles.
+ */
+.cvm-modal__btn--default {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.cvm-modal__btn--default:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* "What just happened?" help button — inline with the status line */
+.cvm-pg-status-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.cvm-pg-status-row .cvm-pg-status {
+  margin: 0;
+  flex: 1;
+}
+
+.cvm-pg-btn-what {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--shadow);
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  color: var(--shadow);
+  padding: 1px 7px;
+  height: 18px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.cvm-pg-btn-what:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.cvm-pg-btn-what:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
+}
+
 /* --- Responsive ----------------------------------------------------- */
 
 @media (max-width: 540px) {
