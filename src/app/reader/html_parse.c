@@ -1,9 +1,53 @@
 /*
  * html_parse.c — pure-C HTML tokenizer + layout for the Reader app.
  *
+ * Why this file is split out from reader.c: it touches no Mac Toolbox
+ * symbols, so the host gcc/clang can compile and exercise it from
+ * tests/unit/test_html_parse.c. That host-testability is the whole reason
+ * the engine and the Toolbox shell are separate translation units. If you
+ * find yourself reaching for QuickDraw or the File Manager here, you're in
+ * the wrong file — go put it in reader.c.
+ *
  * Standard C99 only. Nothing in here may include MacTypes.h, Quickdraw.h,
- * or anything Toolbox-flavored. Compiles under both Retro68 (m68k) and the
- * host gcc/clang for unit tests.
+ * or anything Toolbox-flavored. Compiles under both Retro68 (m68k) for the
+ * Mac and the host toolchain for unit tests.
+ *
+ * --- The 3-stage pipeline ----------------------------------------------
+ *
+ *   raw HTML bytes  --html_tokenize-------->  HtmlTokenList
+ *   HtmlTokenList   --html_layout_build---->  HtmlLayout (flat DrawOps)
+ *   HtmlLayout      --(consumed by reader.c, not us)-->  pixels
+ *
+ *   stage 1 (tokenize):  Walk the bytes once. For each `<...>` produce a
+ *                        tag token (open / close / self-closing); for runs
+ *                        of body text produce a text token. Permissive:
+ *                        malformed markup never errors, it just gets
+ *                        dropped. Output: a flat array of HtmlToken.
+ *
+ *   stage 2 (layout):    Walk the tokens, maintaining a tiny style/cursor
+ *                        state machine (current font face/size, pen x/y,
+ *                        list-indent depth, active-link bounding box).
+ *                        Word-wrap on the fly. Emit DrawOp records with
+ *                        absolute positions — viewport coordinates, top
+ *                        left = (0, 0). The shell offsets by the current
+ *                        scroll position when it actually paints.
+ *
+ *   stage 3 (paint):     Lives in reader.c. The shell walks the DrawOp
+ *                        list left-to-right and translates each op into
+ *                        QuickDraw calls (TextFont/TextSize/TextFace +
+ *                        MoveTo + DrawText, or a bullet, or it stashes
+ *                        a link-region bounding box for hit-testing).
+ *
+ * Why DrawOp is a flat tagged union of ops (rather than a tree of nodes,
+ * a la a real DOM): the renderer doesn't need a tree. The layout pass
+ * has already resolved style cascading + wrapping; everything left is a
+ * bake-flat list of "draw this glyph here in this face at this size".
+ * Cheaper to walk, cheaper to allocate, cheaper to test.
+ *
+ * Why layout returns positions in viewport coordinates (and not in line
+ * numbers + offsets): the shell's update event fires once per scroll, and
+ * absolute positions let us scissor-paint just the visible band by
+ * skipping ops whose y is outside the dirty rect. No reflow on scroll.
  *
  * The tokenizer is intentionally permissive: it never errors on malformed
  * markup, just skips what it can't parse. The layout pass is similarly
@@ -102,6 +146,17 @@ static int find_href(const char *src, size_t len, const char **out, size_t *out_
     return 0;
 }
 
+/* Stage 1 entry point: linear-scan tokenizer.
+ *
+ * State machine in two states: "scanning text" (default) and "inside a
+ * tag" (after we hit a `<`). We flush any pending text run as a TEXT
+ * token, then parse the tag header (name + optional attributes), emit
+ * one TAG_OPEN / TAG_CLOSE / TAG_SELF token, and resume text scanning
+ * after the closing `>`.
+ *
+ * Token text/href pointers reference the input buffer directly — we do
+ * not copy. Callers must keep `src` alive while they use the token list.
+ * The layout pass copies what it needs into the layout's strpool. */
 int html_tokenize(const char *src, size_t src_len, HtmlTokenList *out)
 {
     out->count = 0;
@@ -409,6 +464,12 @@ static void emit_bullet(HtmlLayout *L, LayoutCtx *ctx)
     ctx->cur_x += 14;
 }
 
+/* Greedy word-wrap. We accumulate characters into a small word buffer,
+ * flush on whitespace, and check before each flush whether the word
+ * still fits in the remaining viewport width. If not, we drop a newline
+ * first and emit the word at the start of the next line. No
+ * hyphenation, no look-ahead — a "word" longer than the content width
+ * just overflows the right margin, same as a 1990s browser. */
 /* Process a text run: collapse whitespace (unless in <pre> — caller decides),
  * emit words, wrap on overflow. */
 static void layout_text_run(HtmlLayout *L, LayoutCtx *ctx,
@@ -489,6 +550,24 @@ static unsigned char heading_size(HtmlTagId t, unsigned char body)
     return body;
 }
 
+/* Stage 2 entry point: turn tokens into a flat list of positioned DrawOps.
+ *
+ * What we maintain as we walk tokens:
+ *   - cursor (cur_x, cur_y) in viewport coordinates
+ *   - current style stack (face bits, font family, current font size)
+ *   - list-indent depth for <ul><li>
+ *   - an "active link" bounding box that grows as we emit words inside
+ *     <a>...</a>, then gets frozen as a single LINK_REGION op on </a>
+ *
+ * Output is self-contained: token list + source HTML can be freed after
+ * this returns. The DrawOps reference strings interned into out->strpool.
+ *
+ * Why we track the link bbox here rather than in the shell: the shell
+ * sees one DrawOp at a time at paint time, but a link can span several
+ * words (and even wrap across lines). Computing the click target during
+ * layout — once, while we already know each word's geometry — keeps the
+ * shell dumb. On a line wrap inside a link (see newline()) we close out
+ * the existing region and start a fresh one for the next line. */
 int html_layout_build(const HtmlTokenList *tokens,
                       HtmlLayout *out,
                       short content_width,
