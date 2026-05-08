@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   build-app:
-    name: Cross-compile Minesweeper (68k)
+    name: Cross-compile Reader (68k)
     runs-on: ubuntu-latest
 
     # Official Retro68 image, rebuilt on every commit to Retro68 master.
@@ -64,8 +64,8 @@ jobs:
       - name: Verify build artifacts
         run: |
           ls -la build/
-          test -s build/Minesweeper.bin
-          test -s build/Minesweeper.dsk
+          test -s build/Reader.bin
+          test -s build/Reader.dsk
 
       # Pack the compiled MacBinary into our own HFS disk image. Feeds the
       # .bin (MacBinary, both forks intact) — NOT the .APPL (data-fork-only,
@@ -74,7 +74,7 @@ jobs:
       - name: Build custom app.dsk (HFS disk image with Startup Items)
         run: |
           mkdir -p dist
-          ./scripts/build-disk-image.sh build/Minesweeper.bin dist/app.dsk
+          ./scripts/build-disk-image.sh build/Reader.bin dist/app.dsk
           ls -la dist/
           test -s dist/app.dsk
 
@@ -111,7 +111,7 @@ jobs:
         # back into BOOT_DISK_SHA256 in the script and remove this `|| true`.
         # Track in PRD risks table.
         run: |
-          ./scripts/build-boot-disk.sh build/Minesweeper.bin dist/system755-vibe.dsk || {
+          ./scripts/build-boot-disk.sh build/Reader.bin dist/system755-vibe.dsk || {
             status=$?
             echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
           }
@@ -125,11 +125,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Minesweeper-${{ github.sha }}
+          name: Reader-${{ github.sha }}
           path: |
-            build/Minesweeper.bin
-            build/Minesweeper.dsk
-            build/Minesweeper.APPL
+            build/Reader.bin
+            build/Reader.dsk
+            build/Reader.APPL
             dist/app.dsk
             dist/system755-vibe.dsk
             dist/system755-vibe.dsk.json
@@ -157,10 +157,10 @@ jobs:
       # Pull the artifact from build-app so we can co-locate dist/app.dsk
       # next to the Vite output. Downloads to ./artifact/ preserving the
       # original directory structure (build/, dist/).
-      - name: Download Minesweeper artifact
+      - name: Download Reader artifact
         uses: actions/download-artifact@v4
         with:
-          name: Minesweeper-${{ github.sha }}
+          name: Reader-${{ github.sha }}
           path: artifact
 
       - name: Verify downloaded app.dsk

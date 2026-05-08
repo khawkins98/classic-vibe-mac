@@ -387,6 +387,7 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     screenWidth,
     screenHeight,
     ramSizeMB,
+    sharedFolderFiles,
   } = msg;
 
   // ── Allocate the shared memory regions ──
@@ -427,6 +428,34 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
   const romRes = await fetch(romUrl);
   if (!romRes.ok) throw new Error(`ROM fetch failed: ${romUrl} → ${romRes.status}`);
   const romArrayBuffer = await romRes.arrayBuffer();
+
+  // ── Pre-fetch the Shared-volume seed files ──
+  // These materialize as `:Shared:<name>` once BasiliskII boots (the
+  // `extfs /Shared/` pref turns the in-memory `/Shared/` directory into a
+  // Mac volume). We fetch here — outside the synchronous preRun hook —
+  // because preRun cannot await. Failures are non-fatal: the Reader app
+  // has its own "no content found" fallback when :Shared:index.html is
+  // missing, so a 404 on one file should not abort the whole boot.
+  type SharedSeed = { name: string; bytes: Uint8Array };
+  const sharedToWrite: SharedSeed[] = [];
+  await Promise.all(
+    (sharedFolderFiles ?? []).map(async (f) => {
+      try {
+        const r = await fetch(f.url);
+        if (!r.ok) {
+          console.warn(`[worker] shared-folder fetch ${f.url} → HTTP ${r.status}`);
+          return;
+        }
+        const buf = new Uint8Array(await r.arrayBuffer());
+        sharedToWrite.push({ name: f.name, bytes: buf });
+      } catch (e) {
+        console.warn(`[worker] shared-folder fetch ${f.url} failed:`, e);
+      }
+    }),
+  );
+  console.log(
+    `[worker] shared-folder: ${sharedToWrite.length}/${sharedFolderFiles?.length ?? 0} files ready to seed into /Shared/`,
+  );
 
   // ── Build the disks. Synchronous XHR happens inside read(); we still
   // pre-fetch the prefetch list so first-boot reads don't stall on each
@@ -497,6 +526,22 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
         const FS = moduleOverrides.FS;
         if (!FS.analyzePath("/Shared").exists) FS.mkdir("/Shared");
         if (!FS.analyzePath("/Shared/Downloads").exists) FS.mkdir("/Shared/Downloads");
+        // Seed the Shared volume with the HTML pages the Reader app reads
+        // on launch (and links to). BasiliskII's `extfs /Shared/` pref will
+        // expose this directory as the Mac volume named "Shared", so
+        // `/Shared/index.html` becomes `:Shared:index.html` from the Mac's
+        // perspective. The directory listing is built when MacOS mounts the
+        // volume at startup, so writing files BEFORE the Module's main()
+        // runs (which is what preRun guarantees) is the right ordering.
+        // See LEARNINGS.md 2026-05-08 for the upstream-Infinite-Mac
+        // reference (worker.ts: same FS.createDataFile pattern).
+        for (const f of sharedToWrite) {
+          // Overwrite if a previous boot left the file (defensive — in
+          // practice the FS is fresh every page load).
+          const path = `/Shared/${f.name}`;
+          if (FS.analyzePath(path).exists) FS.unlink(path);
+          FS.createDataFile("/Shared", f.name, f.bytes, true, true, true);
+        }
         // Materialize the prefs file + ROM into the Emscripten FS so the
         // BasiliskII binary can find them at startup. Args are `--config prefs`.
         FS.createDataFile("/", "prefs", new TextEncoder().encode(prefs), true, true, true);
