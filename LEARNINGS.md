@@ -30,6 +30,52 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — `modelid` in BasiliskII prefs is `gestaltID − 6`, not the gestalt itself (was likely the bomb)
+**Context:** Round-3 of the "unimplemented trap" investigation. Prior
+rounds ruled out the C code, the resource fork, and the resource layout.
+The remaining hypothesis was "Quadra-650 ROM lacks Toolbox traps Retro68
+references" — the recommended single-iteration fix was to swap to a
+later 68k ROM. Investigated swap candidates first.
+**Finding (ROM swap rejected):** Infinite Mac at the pinned commit
+(`30112da0db`) ships exactly **one** 68040-class ROM:
+`Quadra-650.rom`. The other 68k ROMs they vendor are all OLDER:
+Mac-IIfx (1990, 68030), Mac-II/IIx (1987-88, 68020), Mac-Plus/SE/Classic
+(68000). The "Universal" / Quadra-840AV / Performa-588 ROMs that would
+have a more complete trap table are not in the upstream tree, and
+sourcing them from elsewhere would mean an unpinnable URL of
+unverifiable provenance. So a single-iteration ROM swap from Infinite
+Mac was not actually available. **Did NOT change the ROM.**
+**Finding (real bug):** While reading
+`mihaip/macemu/BasiliskII/src/prefs_items.cpp` and `rom_patches.cpp` to
+work out the modelid for alternative ROMs, found that the BasiliskII
+`modelid` pref is documented as "Mac Model ID (**Gestalt Model ID minus
+6**)". The implementation (`patch_rom_32`) writes the raw modelid into
+ROM at UniversalInfo offset 18 (`productKind`), and the Gestalt selector
+reports back `productKind + 6`. Cross-checked against Infinite Mac's
+own config layer (`src/emulator/common/emulators.ts`):
+`emulatorModelId(type, gestaltID) => gestaltID - 6`. **Quadra 650 has
+gestaltID 36, so the correct modelid is 30 — not 36.** Our worker had
+been hardcoding `modelid 36`, which made Gestalt report machine type
+42, which is not a valid production Mac. System 7.5.5 selects which
+INITs to load and which Toolbox patches to install based on Gestalt
+machine type; an unknown machine type skips a meaningful chunk of the
+patch ladder. Several of those patches install traps Retro68's C
+runtime calls during pre-`main()` startup. A patch that doesn't install
+leaves an A-line vector pointing at the "unimplemented trap" handler.
+That's exactly the dialog we see.
+**Action:** Changed `modelid 36` → `modelid 30` in
+`src/web/src/emulator-worker.ts`, with an inline comment explaining the
+−6 offset. ROM stays Quadra-650.rom; `cpu 4` (68040) stays;
+`fetch-emulator.sh` is untouched.
+**Verified locally:** Built the Vite bundle, copied the boot disk +
+chunks into `src/web/dist/`, ran `vite preview`, and screenshotted
+with Playwright (`public/screenshot-debug-rom.png`). System 7.5.5
+boots cleanly and **Minesweeper actually launches and renders its
+window** with the 10×10 grid and "Mines: 10 :)" UI. No bomb. The
+Quadra-650 ROM was never the problem — three rounds of bisection
+were chasing a wrong-gestalt artifact. Lesson: when porting an
+emulator config, copy the formula (`gestaltID − 6`), not the constant.
+
 ### 2026-05-08 — `hls -l` columns are `rsrc data`, not `data rsrc` (rsrc fork was fine all along)
 **Context:** Working hypothesis after rounds 1+2 was that `hcopy -m` was
 silently dropping the resource fork. The CI log line
