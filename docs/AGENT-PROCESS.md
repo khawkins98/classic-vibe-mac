@@ -93,9 +93,10 @@ Hard-won rules for parallel agents in the same session.
 
 - **File ownership boundaries.** Two agents must never write to
   the same file in the same session. Partition by directory or by
-  file glob. The Phase 1 editor agent owns `src/web/src/playground/`
-  and `src/web/public/sample-projects/`; the spike agent owns
-  `spike/wasm-rez/`; this doc agent owns `docs/`. No overlap.
+  file glob. The Phase 1 editor agent owned `src/web/src/playground/`
+  and `src/web/public/sample-projects/`; the WASM-Rez spike agent
+  owned `spike/wasm-rez/` (now `tools/wasm-rez/` post-merge); the
+  docs agent owns `docs/`. No overlap.
 - **Feature branches, not main.** Each parallel agent works on
   its own branch (`feat/playground-phase1`, `spike/wasm-rez`,
   `docs/playground-design`). Never directly on `main`. The
