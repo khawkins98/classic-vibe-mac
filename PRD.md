@@ -277,9 +277,10 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 | HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners). |
 | BasiliskII WASM file size (1.7MB at the pinned Infinite Mac commit; smaller than original PRD assumed) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |
 | GitHub Pages can't set COOP/COEP for SharedArrayBuffer | Ship `coi-serviceworker` polyfill (MIT, ~3KB) registered from `index.html`. Fallback host is Cloudflare Pages or Netlify if the SW shim breaks. |
-| Startup Items auto-launch reliability | We now bake the app into the boot disk's blessed System Folder directly, so this is a structural fix rather than a runtime workaround. To verify once the worker glue lands: boot in BasiliskII, watch for Minesweeper to open without manual click. |
-| ROM licensing | We don't bundle ROMs — the BasiliskII WASM core embeds the open-source CharIIe ROM substitute (or equivalent) the Infinite Mac build expects. Self-hosting the boot disk doesn't change this. |
+| Startup Items auto-launch reliability (verified 2026-05-08) | App is baked into the boot disk's blessed `:System Folder:Startup Items:` at build time. Verified locally: System 7.5.5 boots, Finder runs Startup Items, Minesweeper window paints with its 10×10 grid (`public/screenshot-debug-rom.png`). |
+| ROM is `Quadra-650.rom` (~1MB, vendored from Infinite Mac at the pinned commit) | Infinite Mac's only 68040-class ROM at `30112da0db`. Fetched + SHA-pinned by `scripts/fetch-emulator.sh`. Not bundled in our git tree. License posture inherited from Infinite Mac's distribution. |
 | BasiliskII core is GPL-2.0 (not Apache-2.0 as originally stated) | NOTICE file pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
+| **`modelid` pref must be `gestaltID − 6`, not the gestalt itself** (resolved 2026-05-08) | A wrong modelid (`36` instead of `30` for Quadra 650) made Gestalt report machine type 42, which isn't a real Mac — System 7.5.5 skipped Toolbox patches keyed off Gestalt and Retro68's runtime hit an unpatched A-line trap (`unimplemented trap` bomb). Cost ~3 rounds of bisection chasing wrong hypotheses (C code, resource fork, Type/Creator) before reading `mihaip/macemu/BasiliskII/src/prefs_items.cpp` revealed the −6 offset. Fixed in `src/web/src/emulator-worker.ts` `BASE_PREFS`. Lesson: when porting an emulator config, copy the formula, not the constant. |
 
 ---
 
@@ -299,32 +300,86 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 ## Milestones
 
-1. **Hello World** — Retro68 compiles a minimal Mac app; disk image mounts in Infinite Mac manually
-2. **Auto-launch** — app boots automatically via Startup Items in BasiliskII WASM
-3. **Minesweeper** — full game implemented and playable
-4. **GitHub Actions pipeline** — full build-to-disk-image workflow in CI
-5. **GitHub Pages deploy** — one-click deployment from fork, accessible via browser
-6. **Template polish** — README, fork instructions, replace-app guide
+POC scope is essentially complete. Status as of 2026-05-08:
+
+1. ✅ **Hello World** — Retro68 compiles, .bin lands in HFS image (CI).
+2. ✅ **Auto-launch** — Minesweeper auto-launches from `:System Folder:
+   Startup Items:` on the pre-baked boot disk; verified locally.
+3. 🟡 **Minesweeper** — full game logic + Toolbox UI implemented; 9/9
+   host-compiled C unit tests passing. Renders in System 7 with the
+   10×10 grid visible. Interaction (clicking cells) blocked by mouse
+   input wiring — see "open work" below.
+4. ✅ **GitHub Actions pipeline** — Retro68 build, hfsutils HFS pack,
+   bootable System 7.5.5 disk download + chunked manifest, web build,
+   Pages deploy. End-to-end green.
+5. ✅ **GitHub Pages deploy** — live at
+   https://khawkins98.github.io/classic-vibe-mac/. First fork's deploy
+   is one Pages enable + one push.
+6. ✅ **Template polish** — README, CONTRIBUTING (Conventional Commits +
+   squash policy), LEARNINGS, LICENSE, NOTICE, PR template, Dependabot,
+   `.claude/agents/` profiles, three-layer test scaffold.
+
+### Open work
+
+- **Mouse input** doesn't reach the canvas in the deployed page. Pointer
+  events in `src/web/src/emulator-input.ts` aren't being translated to
+  the SAB input ring — under investigation on `fix/mouse-input`.
+- **Period chrome polish:** Chicago/Geneva web font vendoring, real
+  rainbow Apple in the menu bar, optional startup chime.
+- **Stretch:** Mac OS 9 / PPC via SheepShaver (requires non-redistributable
+  ROM — out of POC scope).
 
 ---
 
-## Repo Structure (proposed)
+## Repo Structure (as shipped)
 
 ```
 classic-vibe-mac/
+├── .claude/agents/           ← Mac-specific subagent profiles (5)
 ├── .github/
-│   └── workflows/
-│       └── build.yml
+│   ├── workflows/
+│   │   ├── build.yml         ← Retro68 → disks → web → Pages deploy
+│   │   └── test.yml          ← unit + e2e + vision tests
+│   ├── dependabot.yml
+│   └── pull_request_template.md
 ├── src/
-│   ├── app/                  ← Mac C source
+│   ├── app/                  ← Mac C source (Retro68 + Toolbox)
 │   │   ├── CMakeLists.txt
-│   │   └── minesweeper.c
-│   └── web/                  ← stripped Infinite Mac frontend
+│   │   ├── minesweeper.c     ← Toolbox UI shell
+│   │   ├── minesweeper.r     ← Rez resource file
+│   │   ├── game_logic.c      ← pure-C engine (host-testable)
+│   │   └── game_logic.h
+│   └── web/                  ← Vite + TypeScript landing page
 │       ├── index.html
-│       ├── emulator-config.ts
-│       └── ...
+│       ├── package.json
+│       ├── vite.config.ts
+│       ├── public/
+│       │   ├── coi-serviceworker.min.js  ← SAB on GH Pages
+│       │   └── emulator/                 ← BasiliskII WASM (gitignored)
+│       └── src/
+│           ├── main.ts                   ← System 7 chrome
+│           ├── style.css
+│           ├── emulator-config.ts        ← typed config
+│           ├── emulator-loader.ts        ← boot lifecycle
+│           ├── emulator-worker.ts        ← ported worker glue
+│           ├── emulator-worker-types.ts
+│           └── emulator-input.ts
+├── tests/
+│   ├── unit/                 ← host-cc C tests for game_logic
+│   ├── e2e/                  ← Playwright vs Vite dev server
+│   └── visual/               ← Claude Haiku vision assertions
 ├── scripts/
-│   └── build-disk-image.sh   ← creates HFS image from compiled binary
-├── public/                   ← static assets
-└── README.md
+│   ├── fetch-emulator.sh     ← download BasiliskII core + ROM (pinned)
+│   ├── build-disk-image.sh   ← simple app.dsk packer
+│   ├── build-boot-disk.sh    ← bootable System 7.5.5 + chunked manifest
+│   ├── write-chunked-manifest.py
+│   └── capture-deployed-screenshot.mjs
+├── public/                   ← landing-page screenshots, etc.
+├── package.json              ← npm workspaces (root + src/web)
+├── PRD.md
+├── README.md
+├── CONTRIBUTING.md
+├── LEARNINGS.md              ← growing log of non-obvious findings
+├── LICENSE                   ← MIT
+└── NOTICE                    ← upstream attribution stack
 ```
