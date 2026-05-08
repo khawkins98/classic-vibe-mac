@@ -357,6 +357,10 @@ failure). See [`tests/README.md`](../tests/README.md) for the cost notes.
 
 ## Common failure modes mapped to fixes
 
+> **Quick reference:** see [`docs/TROUBLESHOOTING.md`](./TROUBLESHOOTING.md)
+> for the searchable symptom → cause → fix table. Detailed walkthroughs
+> are below and duplicated there.
+
 ### "Page shows the chrome but no canvas / console errors about SharedArrayBuffer"
 
 You're not in a cross-origin-isolated context. Two cases:
