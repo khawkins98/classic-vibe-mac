@@ -15,9 +15,10 @@ This project closes both gaps in the same browser tab:
    running, so visitors can use one before deciding to build one.
 2. A source-code editor sits below the Mac with the same C and Rez
    files that produced the apps running above it. Edits persist
-   locally; an in-browser Rez compiler (currently in build-out) will
-   close the loop so a string change in the editor reboots the Mac
-   with that change applied — no fork, no push, no toolchain.
+   locally; an in-browser Rez compiler (WASM-Rez, shipped) plus an
+   in-browser HFS template-splicer close the loop so a string change
+   in the editor reboots the Mac with that change applied in ~820ms
+   warm — no fork, no push, no toolchain.
 
 The original framing — "a GitHub template you fork to ship your
 own classic Mac app on GitHub Pages" — still holds and is covered
@@ -40,11 +41,11 @@ A Vite + TypeScript page that:
   sources that built the apps. Edits persist in IndexedDB
   (`bundleVersion`-keyed invalidation), download as a zip via
   JSZip, reset to defaults per file.
-- (In build-out) compiles the resource fork in-browser via
-  WASM-Rez, splices it onto a precompiled code fork, hot-loads
-  the result onto a synthetic in-memory disk, and re-spawns the
-  worker so the Mac boots with the edited app — all without a
-  network round-trip past the initial page load.
+- Compiles the resource fork in-browser via WASM-Rez, splices it
+  onto a precompiled code fork, hot-loads the result onto a
+  synthetic in-memory disk, and re-spawns the worker so the Mac
+  boots with the edited app — all without a network round-trip
+  past the initial page load. Live in production at ~820ms warm.
 
 The hard architectural constraint, restated every design review:
 **everything runs as JavaScript in the visitor's browser. No
@@ -110,7 +111,7 @@ panel for free.
 │       ▼                                                 │
 │  CodeMirror editor  ─▶  IndexedDB persistence           │
 │       │                                                 │
-│       ▼  (build-out, Phase 2/3)                         │
+│       ▼  (Phase 2/3, shipped)                           │
 │  WASM-Rez  ─▶  resource patcher  ─▶  InMemoryDisk       │
 │       └──────▶  worker.dispose() + boot(new disk)       │
 └─────────────────────────────────────────────────────────┘
@@ -224,24 +225,23 @@ Top-level scripts: `npm test`, `npm run test:unit`,
 
 ### 5. Playground (`src/web/src/playground/`)
 
-The headline feature, in build-out per Epic
+The headline feature, Epic
 [#21](https://github.com/khawkins98/classic-vibe-mac/issues/21).
-Phase 1 (shipped, PR #32 on `main`) is CodeMirror 6 with the C
-language pack, single-file editor, IndexedDB persistence with
-`bundleVersion` invalidation + in-memory fallback when IDB is
-unavailable, sample projects copied from `src/app/<name>/` at
-Vite build time, reset-to-default, download-as-zip via JSZip, a
-strict CSP, an "Open on desktop" message on mobile. Phase 2 (in
-build-out, [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30))
-is Rez-in-WASM — the spike on `spike/wasm-rez` (PR #34, do-not-merge)
-produced bytes SHA-256-identical to native Retro68 Rez at 103KB
-gzipped, and build-out wires that into the editor with a precompiled
-code fork and editor-marker errors. Phase 3 (gated on Phase 2,
-[#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
-+ [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28)
-+ [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31))
-is hot-load via a template-splice HFS patcher (~500 lines TS), an
-`InMemoryDisk` class, and worker re-spawn.
+All three phases shipped on `main` as of 2026-05-08. Phase 1 (PR
+#32) is CodeMirror 6 with the C language pack, single-file editor,
+IndexedDB persistence with `bundleVersion` invalidation + in-memory
+fallback when IDB is unavailable, sample projects copied from
+`src/app/<name>/` at Vite build time, reset-to-default,
+download-as-zip via JSZip, a strict CSP, an "Open on desktop"
+message on mobile. Phase 2 is Rez-in-WASM — the research spike
+under `spike/wasm-rez` (PR #34, do-not-merge) produced bytes
+SHA-256-identical to native Retro68 Rez at 103KB gzipped; the
+shipped build wires that into the editor with a precompiled code
+fork and editor-marker errors. Source vendored under
+`tools/wasm-rez/`; runtime artefacts under `src/web/public/wasm-rez/`.
+Phase 3 is hot-load via a template-splice HFS patcher, an
+`InMemoryDisk` class, and worker re-spawn — Build & Run round-trips
+~820ms warm in production.
 
 Full design rationale, the option-2F architecture-review summary,
 and the gotchas the spike will hit are in
@@ -297,13 +297,15 @@ POC scope is complete as of 2026-05-08.
 8. ✅ **Playground Phase 1** — editor + IDB persistence +
    sample-project seeding + download-as-zip on `main` (PR #32).
 
-### Live milestones — in flight
+### Live milestones — ✅ shipped
 
-- 🚧 **Playground Phase 2** — WASM-Rez integration. Spike landed
-  (PR #34, do-not-merge research artifact); build-out tracker is
-  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
-- ⏳ **Playground Phase 3** — hot-load via template-splice +
-  `InMemoryDisk` + worker re-spawn. Gated on Phase 2.
+- ✅ **Playground Phase 2** — WASM-Rez integration shipped on `main`.
+  Source under `tools/wasm-rez/`, artefacts under
+  `src/web/public/wasm-rez/`. Build button preprocesses, compiles,
+  splices, downloads.
+- ✅ **Playground Phase 3** — hot-load via template-splice +
+  `InMemoryDisk` + worker re-spawn shipped on `main`. Build & Run
+  round-trips ~820ms warm in production.
 
 ### Non-Goals
 
@@ -336,7 +338,7 @@ POC scope is complete as of 2026-05-08.
 | `Quadra-650.rom` (~1MB, vendored from Infinite Mac) | Infinite Mac's only 68040-class ROM at the pinned commit. Fetched + SHA-pinned by `scripts/fetch-emulator.sh`. License posture inherited. |
 | BasiliskII core is GPL-2.0 (not Apache-2.0) | NOTICE pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
 | **`modelid` pref must be `gestaltID − 6`, not the gestalt itself** (resolved 2026-05-08) | A wrong `modelid 36` made Gestalt report machine type 42, not a real Mac — System 7.5.5 skipped Toolbox patches and Retro68's runtime hit an unpatched A-line trap (unimplemented-trap bomb). Fixed in `BASE_PREFS`. Lesson: when porting an emulator config, copy the formula, not the constant. |
-| **Playground Phase 2 Boost.Wave port** | Boost.Wave is Rez's preprocessor dependency: 2.3MB / 446 files, no public WASM port. Spike on `spike/wasm-rez` resolved this in our favor; build-out has a fallback fork point at week 2 for `mcpp` or hand-rolled subset if Boost.Wave regresses. |
+| **Playground Phase 2 preprocessor** (resolved 2026-05-08) | Rez's bundled preprocessor (Boost.Wave) was 2.3MB / 446 files with no public WASM port. Sidestepped by writing a small TypeScript-side preprocessor (`src/web/src/playground/preprocessor.ts`) that handles `#include`, `#define`, `#if` against the IDB-backed virtual FS — Rez `.r` files don't use the gnarly preprocessor features. WASM-Rez source lives under `tools/wasm-rez/`. |
 | **Playground Phase 2 cold-start latency** | First Rez compile after page load: ~1.5s (WASM instantiation + RIncludes parse). Warm: <500ms. UX copy must say "first compile takes a moment…" — silently slow looks broken. |
 | **Phase 3 HFS encoder scope** | Don't write a real HFS encoder. Ship one empty-volume `.dsk` blob as a CI artifact (built once by `hfformat`), in-browser patch catalog leaf + bitmap + MDB to add one file. ~500 lines TS, not 12-18 days of HFS encoder. |
 
@@ -364,27 +366,10 @@ In rough priority order. The playground is the priority; everything
 else slots in behind it. The user has explicitly committed to that
 sequencing.
 
-### Playground build-out
+### Playground polish
 
-- **Phase 2 — WASM-Rez full integration** —
-  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
-  Wire the spiked WASM-Rez into the editor, splice the resource
-  fork onto a precompiled code fork, surface Rez errors as editor
-  markers. 2.5-3 weeks honest estimate.
-- **Phase 3 — hot-load** —
-  [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
-  (HFS template-splice path),
-  [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28)
-  (`InMemoryDisk`),
-  [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31)
-  (lock Type/Creator editing),
-  [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29)
-  (weather-poller teardown on worker re-spawn). ~5-7 days, gated
-  on Phase 2.
-
-### Playground v1.2 polish
-
-Deferred behind Phase 2/3 but not dropped:
+The build-out (Phases 2 + 3) shipped on `main`. Remaining items
+are polish + deferred follow-ups:
 
 - [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22)
   — file tree + tabs + dirty-state in editor.

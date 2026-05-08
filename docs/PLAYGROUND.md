@@ -193,16 +193,22 @@ hot-load reviewer.
     (currently leaks a 15-min interval per worker re-spawn)
 ```
 
-Status (2026-05-08): not started. Tracked at
-[#27](https://github.com/khawkins98/classic-vibe-mac/issues/27),
-[#28](https://github.com/khawkins98/classic-vibe-mac/issues/28),
-[#29](https://github.com/khawkins98/classic-vibe-mac/issues/29),
-[#31](https://github.com/khawkins98/classic-vibe-mac/issues/31).
+Status (2026-05-08): ✅ shipped on main. Build & Run round-trips
+~820ms warm in production. Followups still tracked under
+[#29](https://github.com/khawkins98/classic-vibe-mac/issues/29)
+(weather poller teardown on re-spawn) and
+[#31](https://github.com/khawkins98/classic-vibe-mac/issues/31)
+(lock Type/Creator editing); the core path landed via
+[#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
++ [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28).
 
 ### Total realistic estimate
 
-**~7-12 weeks** of focused work, depending on the Boost.Wave outcome
-on the spike. User has approved this scope.
+Originally scoped at ~7-12 weeks of focused work depending on the
+Boost.Wave outcome. Actual landed: all three phases shipped on
+`main` over a single intensive sprint by sidestepping Boost.Wave
+entirely (TypeScript-side preprocessor against the IDB virtual FS;
+see [`src/web/src/playground/preprocessor.ts`](../src/web/src/playground/preprocessor.ts)).
 
 ## Open child issues
 
