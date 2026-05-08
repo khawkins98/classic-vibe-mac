@@ -37,28 +37,79 @@ boot is real, the auto-launch is real — the app is what needs fixing.
 
 ## How to use it
 
-A live demo lives at the GitHub Pages URL once the first CI run finishes
-and Pages is enabled. To run locally:
+A live demo lives at https://khawkins98.github.io/classic-vibe-mac/.
+
+To run locally, you need three pieces in `src/web/public/`:
+
+1. The BasiliskII WASM core + ROM (fetched from Infinite Mac).
+2. The bootable System 7.5.5 disk with your compiled app pre-installed
+   in `System Folder/Startup Items`.
+3. A small secondary `app.dsk` (currently unused at runtime, but the
+   loader HEAD-checks for it).
+
+The compiled Mac binary itself comes from CI — building Retro68 locally
+takes about an hour, so the easiest path is to download the latest CI
+artifact instead.
 
 ```sh
+# One-time setup
+brew install hfsutils                    # for HFS disk packing (macOS)
 git clone https://github.com/your-fork/classic-vibe-mac.git
 cd classic-vibe-mac
 npm install
-npm run fetch:emulator   # downloads BasiliskII WASM + Quadra ROM
-bash scripts/build-boot-disk.sh   # builds the bootable System 7.5.5 disk
+npm run fetch:emulator                   # BasiliskII.wasm + Quadra-650.rom
+
+# Pull the latest compiled Minesweeper binary from CI
+gh run download \
+  $(gh run list --branch main --workflow Build --limit 1 --json databaseId -q '.[0].databaseId') \
+  -D /tmp/cvm-artifact
+
+# Build the boot disk + secondary disk and put them where Vite serves them
+bash scripts/build-boot-disk.sh \
+  /tmp/cvm-artifact/Minesweeper-*/dist/Minesweeper.bin \
+  src/web/public/system755-vibe.dsk
+cp /tmp/cvm-artifact/Minesweeper-*/dist/app.dsk src/web/public/app.dsk
+
+# Serve
 npm run dev
 ```
 
-Open `http://localhost:5173`. The page boots BasiliskII in a Web Worker,
-mounts the boot disk, and the Finder auto-launches Minesweeper from
-`System Folder/Startup Items`.
+Open `http://localhost:5173/`. The Vite dev server already sets the
+COOP/COEP headers BasiliskII needs for `SharedArrayBuffer`, so cross-
+origin isolation works without the service-worker reload dance you'll
+see on the production GitHub Pages deploy.
+
+If you skip the `gh run download` + `build-boot-disk.sh` steps the page
+still loads — the loader falls into a stub state that renders the
+chrome but skips emulation. Useful for iterating on the page itself.
+
+### Building the Mac binary locally
+
+If you want to compile the Mac binary yourself (rather than pulling
+from CI), you'll need Retro68. The fastest way is the same Docker
+image CI uses:
+
+```sh
+docker run --rm -v $PWD:/work -w /work ghcr.io/autc04/retro68:latest \
+  bash -c "cmake -S src/app -B build \
+    -DCMAKE_TOOLCHAIN_FILE=/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake \
+    && cmake --build build --parallel"
+```
+
+That writes `build/Minesweeper.bin` (and `build/Minesweeper.dsk`,
+`build/Minesweeper.APPL`) — feed `Minesweeper.bin` into
+`scripts/build-boot-disk.sh` the same way the CI flow above does.
 
 ## Requirements
 
 - A current desktop browser (Chrome, Firefox, Safari).
-- For local development: Node 20+ and npm.
-- No local emulator, no system disk, no ROM hunting. The build container
-  brings the toolchain; the OS disk is fetched from Infinite Mac.
+- For local development: Node 20+, npm, and `hfsutils` (`brew install
+  hfsutils` on macOS, `apt-get install hfsutils` on Debian/Ubuntu).
+- For local Mac binary builds: Docker (to run the Retro68 image) — or
+  just pull the latest CI artifact, which is faster.
+- The OS disk is downloaded once from archive.org during the boot-disk
+  build; ROM and BasiliskII core come from Infinite Mac. None are
+  bundled in this repository.
 
 ## How to make your own app
 
