@@ -83,126 +83,155 @@ root.innerHTML = /* html */ `
     <span class="desktop-icon__label">Read Me</span>
   </div>
 
-  <section class="window window--wide" aria-labelledby="title-emu">
-    <header class="window__titlebar">
-      <span class="window__close" aria-hidden="true"></span>
-      <h2 class="window__title" id="title-emu">Macintosh</h2>
-    </header>
-    <div class="window__body window__body--platinum">
-      <div class="inset" id="emulator">
-        <div id="emulator-canvas-mount" class="emulator-mount"></div>
-      </div>
-      <!--
-        Settings caption sits BELOW the inset (still inside the Macintosh
-        window's body, so it reads as part of the same chrome). A period-
-        styled checkbox lets the visitor opt out of pause-when-hidden.
-        The "💤" indicator on the right replaces the static label when
-        the emulator is currently paused. See settings.ts + emulator-loader.
-      -->
-      <div class="emulator-caption" role="group" aria-label="Emulator preferences">
-        <label class="cvm-check">
-          <input type="checkbox" id="cvm-pause-when-hidden" />
-          <span class="cvm-check__box" aria-hidden="true"></span>
-          <span class="cvm-check__label">Pause emulator when tab is hidden</span>
-        </label>
-        <label class="cvm-check">
-          <input type="checkbox" id="cvm-show-editor" />
-          <span class="cvm-check__box" aria-hidden="true"></span>
-          <span class="cvm-check__label">Show editor</span>
-        </label>
-        <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
-      </div>
-    </div>
-  </section>
+  <!-- Two-pane split layout (issue #45).
+       At ≥1200px: left pane = Mac + supporting windows, right pane = editor.
+       Below 1200px: all panes are transparent wrappers; windows stack normally. -->
+  <div class="cvm-split-layout" id="cvm-split-layout" data-editor-visible="true">
 
-  <section class="window window--wide window--playground" id="cvm-playground" aria-labelledby="title-playground">
-  </section>
+    <!-- Left pane: Macintosh window + Read Me + Emulator Config -->
+    <div class="cvm-split-pane cvm-split-pane--left">
 
-  <section class="window" aria-labelledby="title-readme">
-    <header class="window__titlebar">
-      <span class="window__close" aria-hidden="true"></span>
-      <h2 class="window__title" id="title-readme">Read Me &mdash; SimpleText</h2>
-    </header>
-    <div class="window__body">
-      <h1>classic-vibe-mac</h1>
-      <p>
-        A GitHub template for building a classic Macintosh app in C and
-        serving it, running, in a browser. Push your source. The template
-        cross-compiles it for the 68k Mac, packs the binary into an HFS
-        disk image, and boots it inside System&nbsp;7.5.5 on a
-        WebAssembly Basilisk&nbsp;II.
-      </p>
-      <p>
-        It is, more or less, a 1993 Macintosh that lives at a URL.
-      </p>
+      <section class="window window--wide" aria-labelledby="title-emu">
+        <header class="window__titlebar">
+          <span class="window__close" aria-hidden="true"></span>
+          <h2 class="window__title" id="title-emu">Macintosh</h2>
+        </header>
+        <div class="window__body window__body--platinum">
+          <div class="inset" id="emulator">
+            <div id="emulator-canvas-mount" class="emulator-mount"></div>
+          </div>
+          <!--
+            Settings caption sits BELOW the inset (still inside the Macintosh
+            window's body, so it reads as part of the same chrome). A period-
+            styled checkbox lets the visitor opt out of pause-when-hidden.
+            The "💤" indicator on the right replaces the static label when
+            the emulator is currently paused. See settings.ts + emulator-loader.
+          -->
+          <div class="emulator-caption" role="group" aria-label="Emulator preferences">
+            <label class="cvm-check">
+              <input type="checkbox" id="cvm-pause-when-hidden" />
+              <span class="cvm-check__box" aria-hidden="true"></span>
+              <span class="cvm-check__label">Pause emulator when tab is hidden</span>
+            </label>
+            <label class="cvm-check">
+              <input type="checkbox" id="cvm-show-editor" />
+              <span class="cvm-check__box" aria-hidden="true"></span>
+              <span class="cvm-check__label">Show editor</span>
+            </label>
+            <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
+          </div>
+        </div>
+      </section>
 
-      <h2>What it does</h2>
-      <ul>
-        <li>Cross-compiles C to a 68k Mac binary using
-          <a href="https://github.com/autc04/Retro68">Retro68</a>, in
-          GitHub Actions.</li>
-        <li>Packs the binary into a bootable HFS System&nbsp;7.5.5 disk
-          with <code>hfsutils</code>; the Finder auto-launches it
-          on boot.</li>
-        <li>Hosts a Vite + TypeScript page that mounts Basilisk&nbsp;II
-          (GPL-2.0, vendored from
-          <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>'s
-          Apache-2.0 build) and boots System&nbsp;7.5.5.</li>
-        <li>Ships two demo apps side-by-side:
-          <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/reader">Reader</a>
-          (a tiny HTML viewer that reads from <code>:Shared:</code> on
-          the boot disk) and
-          <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/macweather">MacWeather</a>
-          (live forecast data via a JS poller, rendered with 1-bit
-          QuickDraw glyphs).</li>
-        <li>Three-layer testing: host C unit tests, Playwright end-to-end,
-          and AI vision assertions on canvas screenshots.</li>
-      </ul>
+      <section class="window" aria-labelledby="title-readme">
+        <header class="window__titlebar">
+          <span class="window__close" aria-hidden="true"></span>
+          <h2 class="window__title" id="title-readme">Read Me &mdash; SimpleText</h2>
+        </header>
+        <div class="window__body">
+          <h1>classic-vibe-mac</h1>
+          <p>
+            A GitHub template for building a classic Macintosh app in C and
+            serving it, running, in a browser. Push your source. The template
+            cross-compiles it for the 68k Mac, packs the binary into an HFS
+            disk image, and boots it inside System&nbsp;7.5.5 on a
+            WebAssembly Basilisk&nbsp;II.
+          </p>
+          <p>
+            It is, more or less, a 1993 Macintosh that lives at a URL.
+          </p>
 
-      <h2>Make your own</h2>
-      <p>
-        Fork the repo (or click <em>Use this template</em>), drop your C
-        source into <code>src/app/</code>, and push. CI handles the rest.
-      </p>
-      <pre>git clone https://github.com/your-fork/classic-vibe-mac.git
+          <h2>What it does</h2>
+          <ul>
+            <li>Cross-compiles C to a 68k Mac binary using
+              <a href="https://github.com/autc04/Retro68">Retro68</a>, in
+              GitHub Actions.</li>
+            <li>Packs the binary into a bootable HFS System&nbsp;7.5.5 disk
+              with <code>hfsutils</code>; the Finder auto-launches it
+              on boot.</li>
+            <li>Hosts a Vite + TypeScript page that mounts Basilisk&nbsp;II
+              (GPL-2.0, vendored from
+              <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>'s
+              Apache-2.0 build) and boots System&nbsp;7.5.5.</li>
+            <li>Ships two demo apps side-by-side:
+              <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/reader">Reader</a>
+              (a tiny HTML viewer that reads from <code>:Shared:</code> on
+              the boot disk) and
+              <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/macweather">MacWeather</a>
+              (live forecast data via a JS poller, rendered with 1-bit
+              QuickDraw glyphs).</li>
+            <li>Three-layer testing: host C unit tests, Playwright end-to-end,
+              and AI vision assertions on canvas screenshots.</li>
+          </ul>
+
+          <h2>Make your own</h2>
+          <p>
+            Fork the repo (or click <em>Use this template</em>), drop your C
+            source into <code>src/app/</code>, and push. CI handles the rest.
+          </p>
+          <pre>git clone https://github.com/your-fork/classic-vibe-mac.git
 cd classic-vibe-mac
 npm install
 npm run dev</pre>
 
-      <h2>How this works</h2>
-      <p>
-        Curious about the stack? See
-        <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md">HOW-IT-WORKS.md</a>
-        &mdash; a guided tour of how the page above goes from "static
-        files on GitHub Pages" to "1993 Macintosh running your edited
-        app", plus what you can build with this stack and where it
-        stops compared to other paths into classic Mac development.
-      </p>
+          <h2>How this works</h2>
+          <p>
+            Curious about the stack? See
+            <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md">HOW-IT-WORKS.md</a>
+            &mdash; a guided tour of how the page above goes from "static
+            files on GitHub Pages" to "1993 Macintosh running your edited
+            app", plus what you can build with this stack and where it
+            stops compared to other paths into classic Mac development.
+          </p>
 
-      <h2>Status</h2>
-      <p>
-        The pipeline runs end-to-end. Two apps ship on the boot disk
-        and the Finder auto-launches them. Reader renders HTML; MacWeather
-        renders the live forecast. See
-        <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/PRD.md">PRD.md</a>
-        for what's still on the list.
-      </p>
-    </div>
-  </section>
+          <h2>Status</h2>
+          <p>
+            The pipeline runs end-to-end. Two apps ship on the boot disk
+            and the Finder auto-launches them. Reader renders HTML; MacWeather
+            renders the live forecast. See
+            <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/PRD.md">PRD.md</a>
+            for what's still on the list.
+          </p>
+        </div>
+      </section>
 
-  <section class="window window--narrow" aria-labelledby="title-config">
-    <header class="window__titlebar">
-      <span class="window__close" aria-hidden="true"></span>
-      <h2 class="window__title" id="title-config">Emulator Config</h2>
-    </header>
-    <div class="window__body">
-      <p>
-        For the curious. This is what the BasiliskII loader will be handed
-        once it is wired up.
-      </p>
-      <pre id="config"></pre>
-    </div>
-  </section>
+      <section class="window window--narrow" aria-labelledby="title-config">
+        <header class="window__titlebar">
+          <span class="window__close" aria-hidden="true"></span>
+          <h2 class="window__title" id="title-config">Emulator Config</h2>
+        </header>
+        <div class="window__body">
+          <p>
+            For the curious. This is what the BasiliskII loader will be handed
+            once it is wired up.
+          </p>
+          <pre id="config"></pre>
+        </div>
+      </section>
+
+    </div><!-- /.cvm-split-pane--left -->
+
+    <!-- Drag divider — keyboard-accessible via role=separator + arrow keys -->
+    <div
+      class="cvm-split-divider"
+      id="cvm-split-divider"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize Mac and editor panes"
+      aria-valuemin="30"
+      aria-valuemax="80"
+      aria-valuenow="65"
+      tabindex="0"
+      title="Drag to resize panes"
+    ></div>
+
+    <!-- Right pane: playground editor -->
+    <div class="cvm-split-pane cvm-split-pane--right">
+      <section class="window window--wide window--playground" id="cvm-playground" aria-labelledby="title-playground">
+      </section>
+    </div><!-- /.cvm-split-pane--right -->
+
+  </div><!-- /.cvm-split-layout -->
 `;
 
 const configEl = document.getElementById("config");
@@ -260,6 +289,91 @@ if (emulatorMount) {
   emulatorHandle = startEmulator(emulatorConfig, emulatorMount);
 }
 
+// ── Two-pane split layout (issue #45) ──────────────────────────────────────
+//
+// At ≥1200px the page switches from a vertical stack to a side-by-side IDE
+// layout: Mac + supporting windows on the left, editor on the right, with a
+// draggable divider. Below 1200px the split panes are transparent wrappers
+// and the existing stacked layout is unchanged.
+
+const splitLayoutEl = document.getElementById(
+  "cvm-split-layout",
+) as HTMLDivElement | null;
+const splitDividerEl = document.getElementById(
+  "cvm-split-divider",
+) as HTMLDivElement | null;
+
+const SPLIT_PCT_KEY = "cvm.splitPct";
+const SPLIT_DEFAULT = 65;
+const SPLIT_MIN = 30;
+const SPLIT_MAX = 80;
+
+let splitPct = SPLIT_DEFAULT;
+try {
+  const stored = localStorage.getItem(SPLIT_PCT_KEY);
+  if (stored) {
+    const v = Number(stored);
+    if (Number.isFinite(v) && v >= SPLIT_MIN && v <= SPLIT_MAX) splitPct = v;
+  }
+} catch { /* ignore */ }
+
+function clampSplit(pct: number): number {
+  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pct));
+}
+
+function applySplitPct(pct: number, persist = false): void {
+  splitPct = clampSplit(pct);
+  if (splitLayoutEl) {
+    splitLayoutEl.style.setProperty("--split-pct", `${splitPct}%`);
+  }
+  if (splitDividerEl) {
+    splitDividerEl.setAttribute("aria-valuenow", String(Math.round(splitPct)));
+  }
+  if (persist) {
+    try { localStorage.setItem(SPLIT_PCT_KEY, String(splitPct)); } catch { /* ignore */ }
+  }
+}
+applySplitPct(splitPct);
+
+if (splitDividerEl && splitLayoutEl) {
+  let dragging = false;
+
+  splitDividerEl.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    document.body.classList.add("cvm-resizing");
+    splitDividerEl.setPointerCapture(e.pointerId);
+  });
+
+  splitDividerEl.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const rect = splitLayoutEl.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    applySplitPct(pct);
+  });
+
+  const stopDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("cvm-resizing");
+    applySplitPct(splitPct, /* persist */ true);
+  };
+  splitDividerEl.addEventListener("pointerup", stopDrag);
+  splitDividerEl.addEventListener("pointercancel", stopDrag);
+
+  // Keyboard resize: arrows ±2%, Shift+arrows ±10%, Home/End = clamps, Enter = reset.
+  splitDividerEl.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 10 : 2;
+    if (e.key === "ArrowLeft") applySplitPct(splitPct - step, true);
+    else if (e.key === "ArrowRight") applySplitPct(splitPct + step, true);
+    else if (e.key === "Home") applySplitPct(SPLIT_MIN, true);
+    else if (e.key === "End") applySplitPct(SPLIT_MAX, true);
+    else if (e.key === "Enter") applySplitPct(SPLIT_DEFAULT, true);
+    else return;
+    e.preventDefault();
+  });
+}
+
 // ── Playground (Phase 1: read-only-leaning viewer + IDB-backed editor) ──
 //
 // Mounted under the Macintosh window. Vite's import.meta.env.BASE_URL is
@@ -274,10 +388,13 @@ const showEditorCheckbox = document.getElementById(
 
 function applyEditorVisibility(visible: boolean) {
   if (!playgroundEl) return;
-  // We hide via an attribute so CSS can also collapse the bottom margin.
-  // The mobile breakpoint already hides it via @media; this attribute
-  // takes precedence for the user toggle.
+  // Hide the section (mobile + stacked layout: collapses it entirely).
   playgroundEl.toggleAttribute("hidden", !visible);
+  // At desktop, also signal the split container so CSS can collapse/expand
+  // the right pane and divider without touching the left pane's flex basis.
+  if (splitLayoutEl) {
+    splitLayoutEl.dataset.editorVisible = visible ? "true" : "false";
+  }
 }
 
 if (showEditorCheckbox) {
