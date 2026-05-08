@@ -1,8 +1,24 @@
 /*
  * weather_parse.c — minimal hand-rolled JSON parser for open-meteo responses.
  *
- * We don't implement a general JSON parser. We implement enough of one to
- * pluck the specific fields MacWeather queries:
+ * Scope choice up front: this is NOT a generic JSON parser. We don't
+ * walk the JSON tree, build an AST, or normalise types. We just scan
+ * for the literal byte sequences `"key":` we know we want, and read the
+ * value that follows as either a number, a string, or a small array.
+ * That's enough for open-meteo's response shape and a fraction of the
+ * code (and binary footprint) of cJSON or jsmn — both of which we
+ * tried briefly and abandoned for binary-size reasons (Retro68 link is
+ * sensitive on a 1 MB heap budget).
+ *
+ * If you point this at a different JSON API, this code won't help —
+ * but it also won't crash. Missing keys default to zero, the
+ * `WeatherData.ok` flag stays 0, and the UI shows "Waiting...".
+ *
+ * Pure C, no Toolbox dependencies. Compiles under Retro68 (m68k) for
+ * the Mac and the host toolchain for unit tests
+ * (tests/unit/test_weather_parse.c).
+ *
+ * We pluck the specific fields MacWeather queries:
  *
  *   current.time                    "2026-05-08T14:00"  → hour, minute
  *   current.temperature_2m          53.4                → temp_f (rounded)
@@ -76,6 +92,12 @@ static long find_value_after_key(const char *hay, size_t start, size_t end,
 
 /* ------------------------------------------------------------ rounding */
 
+/* Round a JSON-style number to the nearest short, using only integer
+ * arithmetic. We deliberately avoid pulling in libm / sscanf("%f") —
+ * Retro68 can do floating-point but it bloats the binary, and we only
+ * need integer accuracy to display "53°F". Strategy: parse the whole
+ * part as a long, then peek at the first digit after the decimal point;
+ * 5..9 rounds up, 0..4 truncates. Negatives flip at the end. */
 short weather_round_str(const char *s, size_t n)
 {
     /* skip leading whitespace */
@@ -152,9 +174,19 @@ static int read_string(const char *hay, size_t i, size_t end,
 
 /* ------------------------------------------------------------ ISO date → DOW */
 
-/* Zeller's congruence for the Gregorian calendar.
+/* Zeller's congruence: a closed-form formula that gives the day-of-week
+ * for any Gregorian date, no calendar table required. Discovered by
+ * Christian Zeller in 1882, it's the standard "I have a date, give me a
+ * weekday" trick when you can't or don't want to ship a calendar
+ * library. The formula treats January and February as months 13 and 14
+ * of the previous year (which is why we shift `m += 12; y -= 1` for
+ * those two), then combines the day, the month-shift constant
+ * `(13*(m+1))/5`, and the century / year-of-century terms with
+ * mod-7 arithmetic. The output ordering is Zeller's own (0=Sat) — we
+ * map it to a string table at the call site.
+ *
  * y, m, d are unsigned ints (m is 1..12, d is 1..31). Returns 0..6 where
- * 0=Sat, 1=Sun, 2=Mon, ..., 6=Fri. (This is Zeller's natural ordering.) */
+ * 0=Sat, 1=Sun, 2=Mon, ..., 6=Fri. */
 static int zeller(int y, int m, int d)
 {
     if (m < 3) { m += 12; y -= 1; }
@@ -290,7 +322,14 @@ static int find_object_range(const char *hay, size_t buf_start, size_t buf_end,
 
 /* ------------------------------------------------------------ wind direction */
 
-/* Map 0..360° degree heading to a 0..15 octant index (16-wind compass). */
+/* Map 0..360° degree heading to a 0..15 octant index for the 16-point
+ * compass (N, NNE, NE, ENE, ..., NNW). open-meteo gives us the wind
+ * direction as a degree value (0 = north, 90 = east, etc.); we want a
+ * cardinal-letter label. Each compass slot is 22.5° wide centred on
+ * its label: N covers (-11.25°, +11.25°), NNE covers (11.25°, 33.75°),
+ * and so on. Integer-only nearest-rounding: shift the input by half a
+ * slot (11.25° → +112 in tenths-of-degrees) and divide by the slot
+ * width (22.5° → 225 in tenths). */
 static unsigned char deg_to_octant(short deg)
 {
     /* Normalize to [0, 360). */
