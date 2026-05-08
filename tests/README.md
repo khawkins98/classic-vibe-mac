@@ -49,8 +49,12 @@ make -C tests/unit clean     # clean up binaries
 ```
 
 Today the unit suite covers `html_parse.c` (the pure-C HTML tokenizer
-+ layout used by the Reader app). `reader.c` itself is the Toolbox
-shell and is NOT host-compilable.
++ layout used by Reader) and `weather_parse.c` (the open-meteo JSON
+parser used by MacWeather). The Toolbox-shell sources `reader.c` /
+`macweather.c` are NOT host-compilable. There's also a Node-side
+unit test for the playground's TypeScript preprocessor at
+`tests/unit/preprocessor.test.mjs` (`npm run test:unit:js`); the
+`test:unit` script runs both the C tests and the JS test.
 
 **Requires:** a host C compiler (`cc` / `gcc` / `clang`). Standard on macOS
 and Ubuntu CI runners. No Retro68 needed.
