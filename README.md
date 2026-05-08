@@ -34,10 +34,22 @@ bundled pages.
   Playwright end-to-end tests against the dev server, and AI vision
   assertions on canvas screenshots (because pixel-diffing an emulated CRT
   is a losing game).
-- Comes with **Reader** — a small classic-Mac HTML viewer in C — as the
-  demo app. It reads HTML from `:Shared:` on the boot disk, supports a
-  reasonable subset (headings, paragraphs, lists, bold/italic, monospace
-  blocks, links, common entities), and shows what the template can build.
+- Comes with two demo apps that ship side-by-side on the boot disk:
+  - **Reader** — a classic-Mac HTML viewer in C. Reads HTML from
+    `:Shared:` on the boot disk, supports a reasonable subset (headings,
+    paragraphs, lists, bold/italic, monospace blocks, links, common
+    entities), and shows what the template can build.
+  - **MacWeather** — a tiny live-data app. The host page polls
+    `api.open-meteo.com` and writes the response into the Mac's
+    extfs-mounted `:Unix:` volume; MacWeather watches the file, parses
+    the JSON in pure C, and draws the current conditions plus a 3-day
+    forecast with pixel-art QuickDraw glyphs.
+
+The two apps demonstrate the multi-app pattern — `src/app/` is a
+top-level CMake aggregator that builds every subdirectory under it,
+and the boot-disk script installs each `.bin` into both
+`:System Folder:Startup Items:` (auto-launch) and `:Applications:`
+(re-launch from the desktop).
 
 ## How to use it
 
@@ -63,20 +75,21 @@ cd classic-vibe-mac
 npm install
 npm run fetch:emulator                   # BasiliskII.wasm + Quadra-650.rom
 
-# Pull the latest compiled Reader binary from CI
+# Pull the latest compiled binaries from CI
 gh run download \
   "$(gh run list --branch main --workflow Build --limit 1 --json databaseId -q '.[0].databaseId')" \
   -D /tmp/cvm-artifact
 
 # Resolve the artifact path (its name carries the commit SHA)
-ART="$(echo /tmp/cvm-artifact/Reader-*)"
+ART="$(echo /tmp/cvm-artifact/classic-vibe-mac-*)"
 
 # Build the bootable System 7.5.5 disk (writes the disk + chunked manifest
 # + chunks dir alongside, all under src/web/public/ where Vite serves them).
-# This also bakes the HTML pages from src/web/public/shared/ into the boot
-# disk's :Shared: folder so Reader has content to display.
+# Both apps go in: Startup Items (auto-launch) + :Applications: (re-launch
+# from desktop). The shared-dir flag also bakes the HTML pages from
+# src/web/public/shared/ into the boot disk's :Shared: folder.
 bash scripts/build-boot-disk.sh \
-  "$ART/build/Reader.bin" \
+  "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin" \
   src/web/public/system755-vibe.dsk
 
 # Copy the secondary app.dsk too (the loader HEAD-checks for it)
@@ -112,9 +125,11 @@ docker run --rm -v $PWD:/work -w /work ghcr.io/autc04/retro68:latest \
     && cmake --build build --parallel"
 ```
 
-That writes `build/Reader.bin` (and `build/Reader.dsk`,
-`build/Reader.APPL`) — feed `Reader.bin` into
-`scripts/build-boot-disk.sh` the same way the CI flow above does.
+That writes one subdirectory per app under `build/` —
+`build/reader/Reader.{bin,dsk,APPL}` and
+`build/macweather/MacWeather.{bin,dsk,APPL}`. Feed the `.bin` paths
+(comma-separated, in any order) into `scripts/build-boot-disk.sh` the
+same way the CI flow above does.
 
 ## Requirements
 
