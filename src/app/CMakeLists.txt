@@ -21,7 +21,16 @@
 cmake_minimum_required(VERSION 3.15)
 project(Reader C)
 
+# CREATOR "CVMR" stamps the MacBinary header (and therefore the .dsk and the
+# baked boot-disk app) with our 4-char creator code. The Rez signature
+# resource alone is NOT sufficient — Retro68's add_application defaults the
+# .bin's Type/Creator to APPL/???? unless we override it here. With CVMR set
+# both in the signature resource AND on the binary header, the Finder binds
+# the app to its BNDL on first scan, and any TEXT/CVMR-tagged file
+# double-click routes to Reader. See add_application.cmake (-t/-c flags
+# passed to Rez when the wrapper builds the .bin).
 add_application(Reader
+    CREATOR CVMR
     reader.c
     html_parse.c
     reader.r

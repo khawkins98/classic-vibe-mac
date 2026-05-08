@@ -18,10 +18,31 @@
 #include "Windows.r"
 #include "Dialogs.r"
 #include "MacTypes.r"
-/* Controls.r is not part of Retro68's RIncludes — the multiversal
- * Rez headers don't define a CNTL resource type at all. The scroll bar
- * is created at runtime via NewControl() in reader.c instead, so we
- * don't need a CNTL resource here. */
+/* Controls.r and Finder.r are not part of Retro68's RIncludes — the
+ * multiversal Rez headers focus on programmatic interfaces and don't
+ * ship resource-type definitions for CNTL, BNDL, FREF, or ICN#. The
+ * scroll bar is built at runtime via NewControl(); the Finder-binding
+ * resources below are emitted as raw `data` blobs in the on-disk wire
+ * format the Resource Manager expects. This is the same byte layout
+ * MPW Rez produces from the Apple-shipped Types.r macros — we just
+ * write it longhand. See the comment on each resource for the layout. */
+
+/*
+ * Creator code: 'CVMR' — "Classic Vibe Mac Reader". Uppercase to stay clear
+ * of Apple's reserved lowercase/digit-only space; not registered with Apple's
+ * historical creator-code DB but unlikely to collide with any classic-era
+ * shipped app. Once chosen, we live with it forever — the creator code is
+ * the Finder's way of binding HTML documents on the boot disk back to
+ * Reader, so changing it would orphan every doc on existing disks.
+ *
+ * Standard Finder-binding ritual:
+ *   - signature resource (type='CVMR', ID=0)  → registers the app's creator
+ *   - BNDL 128                                → binds signature + FREFs + ICN#
+ *   - FREF 128 ('APPL', local 0)              → the app itself
+ *   - FREF 129 ('TEXT', local 1)              → HTML files (we mark them TEXT)
+ *   - ICN# 128, 129                           → app + document icons
+ *   - STR  0                                  → friendly app name in dialogs
+ */
 
 /* ------------------------------------------------------------------ Menus */
 
@@ -169,6 +190,142 @@ resource 'ALRT' (130) {
         OK, visible, silent;
     },
     alertPositionMainScreen
+};
+
+/* ----------------------------------------------- Finder-binding bundle */
+
+/*
+ * Application signature. The Finder treats a resource of type equal to the
+ * creator code as the app's "owner" stamp. Inside Macintosh: More Macintosh
+ * Toolbox p. 7-58 calls for a single zero-byte resource; conventionally
+ * this slot holds the version string, but a `$"00"` byte is also accepted.
+ * We use the Pascal-style version string so it shows up in Get Info dialogs
+ * that read 'CVMR' 0 as a Pascal string. Resource ID is 0.
+ */
+data 'CVMR' (0, "Owner signature") {
+    /* Pascal string "Reader 0.1" — len byte then chars. */
+    $"0A" "Reader 0.1"
+};
+
+/*
+ * Bundle (BNDL). Wire layout per Inside Macintosh: More Macintosh Toolbox
+ * p. 7-58 (and matched by the bytes MPW Rez emits from the Types.r BNDL
+ * macro):
+ *
+ *     [4]  signature creator         ('CVMR')
+ *     [2]  signature resource ID     (0x0000)
+ *     [2]  number of resource types - 1  (we have 2 → 0x0001)
+ *     for each type:
+ *         [4]  resource type           ('ICN#' or 'FREF')
+ *         [2]  number of IDs - 1       (we have 2 → 0x0001)
+ *         for each ID:
+ *             [2]  local ID             (bundle-relative; matches FREF.localID)
+ *             [2]  actual resource ID   (the real ICN#/FREF resID on disk)
+ *
+ * Local IDs 0 and 1 here are bundle-relative tokens — they tie the FREF
+ * entries to the matching ICN# entries. They have nothing to do with the
+ * resource IDs (128, 129) we use on disk.
+ */
+data 'BNDL' (128, "Reader binding") {
+    $"43564D52"          /* signature: 'CVMR' */
+    $"0000"              /* signature resource ID = 0 */
+    $"0001"              /* type count - 1 (= 2 types) */
+
+    $"49434E23"          /* type 'ICN#' */
+    $"0001"              /* mapping count - 1 (= 2 mappings) */
+    $"0000" $"0080"      /* local 0 → ICN# 128 (app icon) */
+    $"0001" $"0081"      /* local 1 → ICN# 129 (document icon) */
+
+    $"46524546"          /* type 'FREF' */
+    $"0001"              /* mapping count - 1 (= 2 mappings) */
+    $"0000" $"0080"      /* local 0 → FREF 128 (the app) */
+    $"0001" $"0081"      /* local 1 → FREF 129 (HTML docs) */
+};
+
+/*
+ * FREF (file reference). Wire layout:
+ *     [4]  file type
+ *     [2]  local icon ID (matches a BNDL ICN# mapping)
+ *     [1+] Pascal-string filename (empty here — used only for stationery)
+ */
+
+/* FREF 128 — Reader itself: type 'APPL', local icon 0. */
+data 'FREF' (128, "Reader app") {
+    $"4150504C"          /* 'APPL' */
+    $"0000"              /* local icon ID = 0 */
+    $"00"                /* empty filename */
+};
+
+/* FREF 129 — HTML documents we own: type 'TEXT', local icon 1. We tag the
+ * .html files TEXT/CVMR via hattrib in scripts/build-boot-disk.sh. Using
+ * TEXT (rather than 'HTML') keeps the docs readable by SimpleText if the
+ * user hauls one onto a different app — but Finder double-click routes to
+ * us because we're the registered creator for that type/creator pair. */
+data 'FREF' (129, "Reader HTML doc") {
+    $"54455854"          /* 'TEXT' */
+    $"0001"              /* local icon ID = 1 */
+    $"00"                /* empty filename */
+};
+
+/*
+ * ICN# (icon list). 32x32 1-bit icon followed by 32x32 1-bit mask, 128
+ * bytes each = 256 bytes total. Each row is 4 bytes (32 pixels), bit 7 of
+ * byte 0 = leftmost pixel, 1 = black. Goal here is just to give the Finder
+ * something distinct to draw — placeholders, not Susan Kare territory.
+ *
+ * 128: a stylised "R" inside a rounded outline (app icon).
+ * 129: a page-with-corner-fold (document icon).
+ */
+
+data 'ICN#' (128, "Reader app icon") {
+    /* icon — 32 rows of 4 bytes */
+    $"00000000" $"3FFFFFFC" $"40000002" $"40000002"
+    $"4007F002" $"4007F002" $"40060C02" $"40060C02"
+    $"40060C02" $"40060C02" $"40060C02" $"40060C02"
+    $"4007F002" $"4007F002" $"40063002" $"40061802"
+    $"40060C02" $"40060602" $"40060302" $"40000002"
+    $"40000002" $"40000002" $"40000002" $"40000002"
+    $"40000002" $"40000002" $"40000002" $"40000002"
+    $"40000002" $"40000002" $"3FFFFFFC" $"00000000"
+    /* mask — solid 30x30 square covering the icon area */
+    $"00000000" $"3FFFFFFC" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE" $"7FFFFFFE"
+    $"7FFFFFFE" $"7FFFFFFE" $"3FFFFFFC" $"00000000"
+};
+
+data 'ICN#' (129, "Reader HTML doc icon") {
+    /* icon — page with folded top-right corner */
+    $"00000000" $"1FFE0000" $"10030000" $"10050000"
+    $"10090000" $"10110000" $"10210000" $"10410000"
+    $"10810000" $"11FF8000" $"10000000" $"10000000"
+    $"10000000" $"10000000" $"10000000" $"10000000"
+    $"10000000" $"10000000" $"10000000" $"10000000"
+    $"10000000" $"10000000" $"10000000" $"10000000"
+    $"10000000" $"10000000" $"10000000" $"10000000"
+    $"10000000" $"10000000" $"1FFFC000" $"00000000"
+    /* mask — filled page silhouette (taller and wider than the outline) */
+    $"00000000" $"1FFE0000" $"1FFF0000" $"1FFF8000"
+    $"1FFFC000" $"1FFFE000" $"1FFFF000" $"1FFFF800"
+    $"1FFFFC00" $"1FFFFE00" $"1FFFFE00" $"1FFFFE00"
+    $"1FFFFE00" $"1FFFFE00" $"1FFFFE00" $"1FFFFE00"
+    $"1FFFFE00" $"1FFFFE00" $"1FFFFE00" $"1FFFFE00"
+    $"1FFFFE00" $"1FFFFE00" $"1FFFFE00" $"1FFFFE00"
+    $"1FFFFE00" $"1FFFFE00" $"1FFFFE00" $"1FFFFE00"
+    $"1FFFFE00" $"1FFFFE00" $"1FFFFE00" $"00000000"
+};
+
+/*
+ * Friendly app name — STR 0 (the trailing space is the actual 4-char
+ * resource type "STR "; not a typo). Some Finder dialogs read this in
+ * preference to the filename. Wire format: Pascal string.
+ */
+data 'STR ' (0, "Application name") {
+    $"06" "Reader"
 };
 
 /* --------------------------------------------------------------- Version */
