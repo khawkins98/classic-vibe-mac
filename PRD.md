@@ -1,60 +1,66 @@
-# PRD: classic-vibe-mac (Proof of Concept)
+# PRD: classic-vibe-mac
+
+_Last updated: 2026-05-08._
 
 ## Problem Statement
 
-There's no easy, modern way to build and share a classic Mac OS app that runs in the
-browser without setting up emulators locally or dealing with ROM licensing. This project
-creates a GitHub template that lets a developer write a classic Mac app in C, push to
-GitHub, and have it automatically compiled and served running inside Mac OS — fully in
-the browser via GitHub Pages — with no local emulator setup required.
+There's no easy, modern way to **try** a classic Mac OS app — let alone
+build one — without setting up emulators locally or wrangling ROM
+licensing. Want to see what writing for System 7.5.5 feels like in
+2026? You either commit to a multi-hour Retro68 install, or you don't.
+
+This project closes both gaps in the same browser tab:
+
+1. A 1993 Macintosh boots at a URL with two real demo apps already
+   running, so visitors can use one before deciding to build one.
+2. A source-code editor sits below the Mac with the same C and Rez
+   files that produced the apps running above it. Edits persist
+   locally; an in-browser Rez compiler (currently in build-out) will
+   close the loop so a string change in the editor reboots the Mac
+   with that change applied — no fork, no push, no toolchain.
+
+The original framing — "a GitHub template you fork to ship your
+own classic Mac app on GitHub Pages" — still holds and is covered
+by the same repo. The playground is the headline; the template is
+the deploy target the playground happens to ride.
 
 ## Proposed Approach
 
-Fork and strip down the **Infinite Mac** open-source codebase (SheepShaver/BasiliskII
-compiled to WebAssembly). Use **Retro68** in a GitHub Actions workflow to cross-compile
-a Mac app from C source. Pack the compiled binary into a small custom HFS disk image.
-At boot, that disk image mounts in the emulated Mac and the app auto-launches via the
-System Folder's Startup Items. Everything is served as static files on GitHub Pages.
+Ship two things that share one deploy:
 
----
+### The playground (headline)
 
-## Goals (POC Scope)
+A Vite + TypeScript page that:
 
-- **Build pipeline**: push C source → GitHub Actions compiles with Retro68 → produces
-  Mac binary → packed into an HFS disk image
-- **Execution layer**: stripped Infinite Mac (Basilisk II, 68k, System 7.5.5)
-  served as static files on GitHub Pages. We **self-host** a single
-  bootable System 7.5.5 hard-disk image — `system755-vibe.dsk` — alongside
-  the rest of the site. Infinite Mac doesn't expose a public single-file
-  boot disk URL (their worker fetches a build-generated chunked manifest
-  from a private Cloudflare R2 bucket), so we sidestep that altogether by
-  baking our own. Apple released System 7.5.3 to its own support site in
-  2001 with a free-redistribution license; the 7.5.5 updater inherits the
-  same posture (see NOTICE).
-- **Auto-launch**: app opens automatically on boot. System 7's Finder
-  scans `<boot volume>/System Folder/Startup Items/` on the *blessed*
-  System Folder of the boot volume only (LEARNINGS.md). Resolution:
-  `scripts/build-boot-disk.sh` mounts our self-hosted System 7.5.5 image
-  with hfsutils and copies the compiled Minesweeper into
-  `:System Folder:Startup Items:` directly. The image already has its
-  System Folder blessed (it was prepared by community emulator users),
-  so no `hattrib -b` dance is needed. Once the BasiliskII WASM core
-  boots from this disk, Finder will auto-launch the app.
-- **Demo app**: a Minesweeper clone (validates the full pipeline end-to-end)
-- **Template repo**: structured so anyone can fork, replace the app source, and get
-  their own GitHub Pages deployment
-- **Automated testing**: three-layer strategy — host-compiled C unit tests for
-  game logic, Playwright e2e against the Vite dev server, and AI vision
-  assertions for screenshots of the emulated canvas (pixel-diff is too brittle
-  against an emulated CRT)
+- Boots **Basilisk II** (compiled to WebAssembly by the Infinite
+  Mac project) against a self-hosted, chunked **System 7.5.5** boot
+  disk. Both demo apps auto-launch from `:System Folder:Startup
+  Items:`.
+- Mounts a CodeMirror 6 editor seeded with the same C and Rez
+  sources that built the apps. Edits persist in IndexedDB
+  (`bundleVersion`-keyed invalidation), download as a zip via
+  JSZip, reset to defaults per file.
+- (In build-out) compiles the resource fork in-browser via
+  WASM-Rez, splices it onto a precompiled code fork, hot-loads
+  the result onto a synthetic in-memory disk, and re-spawns the
+  worker so the Mac boots with the edited app — all without a
+  network round-trip past the initial page load.
 
-## Non-Goals (POC)
+The hard architectural constraint, restated every design review:
+**everything runs as JavaScript in the visitor's browser. No
+backend, no relay, no auth, no compile service, no database.** The
+playground is shaped around that. See
+[`docs/ARCHITECTURE.md` § What we deliberately avoid](./docs/ARCHITECTURE.md#what-we-deliberately-avoid)
+and [Closed-Epic graveyard](#closed-epic-graveyard) below.
 
-- Mac OS 9 / PPC (System 7.5.5 + 68k is the POC target; OS 9 is a stretch goal)
-- Networking inside the emulated Mac
-- Multi-app or app switcher support
-- Custom ROM distribution (we use Infinite Mac's CDN-hosted system disk)
-- A polished UI wrapper around the emulator
+### The template (riding along)
+
+The same repo is structured so anyone can fork, replace `src/app/`
+with their own C source, push, and get their own GitHub Pages
+deployment. **Retro68** in a GitHub Actions workflow cross-compiles
+the C; an HFS disk image is packed; the resulting site is the
+playground but with the fork's apps. The fork inherits the editor
+panel for free.
 
 ---
 
@@ -62,37 +68,58 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  GitHub Repo (template)                                 │
+│  GitHub Repo (template + playground source)             │
 │                                                         │
-│  src/app/           ← C source for Mac app              │
-│  src/web/           ← stripped Infinite Mac frontend    │
-│  .github/workflows/ ← CI/CD pipeline                   │
+│  src/app/<name>/    ← C + Rez per app (Retro68 input)   │
+│  src/web/           ← Vite host + emulator + editor     │
+│  scripts/           ← boot-disk packing, manifest,      │
+│                       chunking, screenshot capture      │
+│  .github/workflows/ ← CI/CD pipeline                    │
 └───────────────┬─────────────────────────────────────────┘
                 │ git push
                 ▼
 ┌─────────────────────────────────────────────────────────┐
 │  GitHub Actions                                         │
 │                                                         │
-│  1. Build Retro68 (or pull cached Docker image)         │
-│  2. Compile app → MyApp (68k Mac binary)                │
-│  3. Create HFS disk image → app.dsk                     │
-│     └─ place binary in Startup Items                    │
-│  4. Build web frontend (Vite)                           │
-│     └─ embed app.dsk path in config                     │
-│  5. Deploy via actions/deploy-pages (Pages env)         │
+│  1. Retro68 container compiles each app in src/app/     │
+│  2. scripts/build-boot-disk.sh:                         │
+│       - downloads System 7.5.5 (cached, SHA-pinned)     │
+│       - hcopy each .bin into Startup Items + Apps       │
+│       - hcopy src/web/public/shared/*.html into :Shared:│
+│  3. write-chunked-manifest.py: 256KiB chunks +          │
+│       JSON manifest matching EmulatorChunkedFileSpec    │
+│  4. Vite build (sample-projects copied from src/app/    │
+│       at this step, frozen for the editor)              │
+│  5. actions/deploy-pages (gated on main + non-PR)       │
 └───────────────┬─────────────────────────────────────────┘
                 │ static files
                 ▼
 ┌─────────────────────────────────────────────────────────┐
-│  GitHub Pages (browser)                                 │
+│  GitHub Pages (browser tab)                             │
 │                                                         │
-│  BasiliskII.wasm  ← emulator core                       │
-│  app.dsk          ← our custom app disk (small, ~1MB)   │
-│  ── fetches base OS disk from Infinite Mac CDN ──       │
-│                                                         │
-│  Boot → mount app.dsk → Startup Items → app launches   │
+│  index.html  ─▶  coi-serviceworker (1st-nav reload)     │
+│       │                                                 │
+│       ▼                                                 │
+│  TS host  ─▶  Web Worker  ─▶  BasiliskII.wasm           │
+│       │                              │                  │
+│       │                              ▼                  │
+│       │                    chunked HFS boot disk        │
+│       │                    (Reader + MacWeather in      │
+│       │                     Startup Items + Apps)       │
+│       │                                                 │
+│       ▼                                                 │
+│  CodeMirror editor  ─▶  IndexedDB persistence           │
+│       │                                                 │
+│       ▼  (build-out, Phase 2/3)                         │
+│  WASM-Rez  ─▶  resource patcher  ─▶  InMemoryDisk       │
+│       └──────▶  worker.dispose() + boot(new disk)       │
 └─────────────────────────────────────────────────────────┘
 ```
+
+The byte-by-byte version of this is in
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). Boot pipeline,
+SAB layout, the four-state input lock, the chunked disk reader, the
+two-way `:Shared:` data flow, and the multi-app model are all there.
 
 ---
 
@@ -101,214 +128,196 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 ### 1. Mac Apps (`src/app/`)
 
 Multiple apps coexist under `src/app/<name>/`. The top-level
-`CMakeLists.txt` is a tiny aggregator (`add_subdirectory(reader)`,
-`add_subdirectory(macweather)`); each app has its own creator code, its
-own `add_application()` call, its own resource fork, and its own
-subdirectory of pure-C engine modules. Outputs land in `build/<app>/`.
+`CMakeLists.txt` is a tiny aggregator
+(`add_subdirectory(reader)`, `add_subdirectory(macweather)`); each
+app has its own creator code, `add_application()` call, and
+resource fork. Outputs land in `build/<app>/`. The boot-disk script
+installs every `.bin` into both `:System Folder:Startup Items:`
+(auto-launch) and `:Applications:` (re-launch from the desktop).
 
-Adding an app: drop a directory under `src/app/`, append one
-`add_subdirectory()` line, push. The boot-disk script installs every
-`.bin` it's given into both `:System Folder:Startup Items:`
-(auto-launch on boot) and `:Applications:` (re-launch from the desktop).
+Each app splits deliberately into a **Toolbox shell** (`<app>.c`)
+that owns the platform — event loop, drawing, menus — and a
+**pure-C engine** (`html_parse.{c,h}`, `weather_parse.{c,h}`) with
+no Toolbox includes. The engine compiles with both Retro68 and the
+host `gcc`, so `tests/unit/` runs in milliseconds without booting
+an emulator.
 
-#### Reader (`src/app/reader/`)
-- Written in C using Mac Toolbox APIs (QuickDraw, Window Manager, Menu
-  Manager, Event Manager, Dialog Manager, Resource Manager).
-- Reads HTML files from the boot disk's `:Shared:` folder and renders
-  a sensible subset to the screen: paragraphs and line breaks (with
-  word-wrap), `h1`-`h3` headings, bold + italic, ordered/unordered
-  lists, `<a href="other.md">` links between bundled files, monospace
-  `<pre>` blocks, common entities (`&amp;` `&lt;` `&gt;` etc.).
-  Out of scope: images, tables, CSS, forms, JavaScript, real network
-  fetching.
-- Standard Mac UI: document window with vertical scroll bar, Apple /
-  File / Edit / View menus, About box, ⌘O (Open from `:Shared:`),
-  ⌘R (Reload), ⌘Q (Quit), back-navigation via Backspace.
-- Creator code `CVMR`. Source split:
-  - `html_parse.{c,h}` — pure-C tokenizer + layout. No Toolbox
-    includes. Compiled by both Retro68 (linked into the app) and the
-    host C compiler (driven by `tests/unit/test_html_parse.c`).
-  - `reader.c` — Toolbox UI shell. Owns the event loop, draws the
-    rendered layout with QuickDraw, handles scroll bar + link clicks,
-    reads files from `:Shared:` via `HOpen` / `FSRead`.
-  - `reader.r` — Rez resources: `WIND` (document window), `MBAR` +
-    `MENU` (Apple/File/Edit/View), `ALRT`+`DITL` (About), `STR#`,
-    `vers`, `SIZE`.
+- **Reader** (`CVMR`) — HTML viewer in C reading from `:Shared:` on
+  the boot disk. Supports headings, paragraphs, lists, bold/italic,
+  monospace blocks, links between bundled files, common entities.
+  Out of scope: images, tables, CSS, forms, JavaScript.
+- **MacWeather** (`CVMW`) — live-data demo reading
+  `:Unix:weather.json` (BasiliskII's extfs surfaces
+  Emscripten's `/Shared/` as the Mac volume `Unix:`), parsing the
+  open-meteo shape with a hand-rolled JSON parser, drawing current
+  conditions + a 3-day forecast in pixel-art QuickDraw glyphs.
 
-#### MacWeather (`src/app/macweather/`)
-- Live-data demo. Reads `:Unix:weather.json` (the Emscripten
-  `/Shared/` tree, mounted by BasiliskII's extfs as the Mac volume
-  `Unix:` — see `LEARNINGS.md`), parses the open-meteo response shape
-  with a hand-rolled JSON parser, and draws the current conditions
-  plus a 3-day forecast with pixel-art QuickDraw glyphs.
-- The JS host (`src/web/src/weather-poller.ts`) polls
-  `api.open-meteo.com` every 15 minutes and writes the JSON file. The
-  Mac side watches modtime on a 30-tick null-event loop and redraws on
-  change. Cmd-R force-refreshes.
-- Creator code `CVMW`. Source split:
-  - `weather_parse.{c,h}` — pure-C JSON parser scoped to open-meteo's
-    response shape. Host-tested via `tests/unit/test_weather_parse.c`.
-    No JSON library dependency.
-  - `weather_glyphs.{c,h}` — 1-bit pixel-art QuickDraw routines mapped
-    by WMO weather code (sun, partly-cloudy, rain, snow, fog, thunder).
-  - `macweather.c` — Toolbox UI shell.
-  - `macweather.r` — Rez resources (window, menus, About, BNDL/FREF/
-    ICN# Finder binding, SIZE).
-
-Designed to run on System 7.5.5. Per-app architectural details and
-the add-your-own-app guide live in `src/app/README.md`.
-
-#### Previous demo: Minesweeper
-
-Originally Minesweeper validated the pipeline (9×9 grid, 10 mines,
-first-click safety, flood-fill, win/loss detection). It was retired
-once the pipeline was end-to-end working — Reader is a more on-brand
-demonstration of what the template can build (a Mac-native consumer of
-content the host page produces). Forks can resurrect the Minesweeper
-sources from git history if they want it as a starting point.
+Per-app architectural details and the add-your-own-app guide live
+in [`src/app/README.md`](./src/app/README.md).
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
-- Uses **`ghcr.io/autc04/retro68:latest`** as the GitHub Actions job container
-  — Retro68 has not published a release tarball since 2019, and the rolling
-  Docker image is the maintained distribution channel (see LEARNINGS.md).
-- Steps:
-  1. `apt-get install -y hfsutils` into the container (Debian-based, runs as
-     root in GH Actions). Note: `hfsutils` is HFS, NOT `hfsprogs` (HFS+).
-  2. Compile C → Mac binary using CMake + Retro68 toolchain
-     (`/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake`
-     inside the container)
-  3. `scripts/build-disk-image.sh` packs the compiled `.bin` (MacBinary,
-     both forks intact) into a small secondary `dist/app.dsk` (HFS, 1.4 MB)
-     with the app placed under `:Startup Items:`. This image is kept for
-     forks that may want to mount it as a secondary volume; it is NOT the
-     boot disk.
-  4. `scripts/build-boot-disk.sh` downloads (with SHA-256 verification +
-     local cache) a pre-installed bootable System 7.5.5 hard-disk image
-     from the Internet Archive, mounts it via hfsutils, and copies our
-     compiled Minesweeper into `:System Folder:Startup Items:` on the
-     **blessed** System Folder. The output is `dist/system755-vibe.dsk`
-     (~24 MB). The script is idempotent and the upstream image is cached
-     across CI runs via `actions/cache@v4`.
-  5. `scripts/write-chunked-manifest.py` (invoked with the `--chunk` flag
-     to `build-boot-disk.sh`) re-emits the modified disk as a chunked
-     manifest + chunk files in the format BasiliskII WASM consumes
-     (256 KiB chunks, blake2b-16 with salt `b"raw"`, JSON manifest matching
-     `EmulatorChunkedFileSpec`). Algorithm ported from
-     `mihaip/infinite-mac@30112da0db` :: `scripts/import-disks.py`.
-     Both `.dsk` and `.dsk.json` + chunks ride into the Pages
-     deployment; the loader (Component 3) consumes the chunked
-     manifest at runtime.
-- Artifact validation: `.bin`, `.dsk`, our custom `dist/app.dsk`, and
-  the boot disk are sanity-checked with `test -s`; the boot disk
-  source is hash-pinned (see Risks). Retro68's `.APPL` artifact is
-  sometimes 0 bytes and is excluded from release uploads.
+
+- Uses `ghcr.io/autc04/retro68:latest` as the GitHub Actions job
+  container (Retro68 has not published a release tarball since
+  2019; the rolling Docker image is the maintained channel).
+- `apt-get install -y hfsutils` into the container.
+  (`hfsutils` is HFS, NOT `hfsprogs` which is HFS+.)
+- CMake + Retro68 toolchain compiles each app.
+- `scripts/build-disk-image.sh` packs each compiled `.bin` into a
+  small secondary `dist/app.dsk` (~1.4 MB) for forks that want a
+  secondary mount.
+- `scripts/build-boot-disk.sh` downloads (SHA-256 pinned, locally
+  cached) a pre-installed bootable System 7.5.5 image, mounts it
+  via hfsutils, copies each compiled `.bin` into
+  `:System Folder:Startup Items:` and `:Applications:`, bakes
+  `src/web/public/shared/*.html` into `:Shared:`. Output:
+  `dist/system755-vibe.dsk` (~24 MB), idempotent.
+- `scripts/write-chunked-manifest.py` re-emits as 256 KiB chunks +
+  JSON manifest matching `EmulatorChunkedFileSpec` (algorithm
+  ported from `mihaip/infinite-mac@30112da0db`).
+
+Full pipeline diagram + worker-glue details in
+[`docs/ARCHITECTURE.md` § The CI pipeline](./docs/ARCHITECTURE.md#the-ci-pipeline).
 
 ### 3. Web Execution Layer (`src/web/`)
-- **Vite + TypeScript** (vanilla TS, no framework). Page chrome is a
-  hand-rolled System 7 desktop (menu bar + windowed Read Me + a
-  "Macintosh" window where the emulator mounts), styled to period in
-  `src/web/src/style.css`.
-- Uses pre-built `BasiliskII.js` + `BasiliskII.wasm` from Infinite Mac
-  plus the `Quadra-650.rom`. The cores live committed at
-  `src/emulator/worker/emscripten/` on `main` — there's no GitHub
-  Release or documented CDN. We pin a specific Infinite Mac commit SHA
-  and download via `raw.githubusercontent.com` at build time in
-  `scripts/fetch-emulator.sh`, with size + SHA-256 verification per
-  file. Outputs land in `src/web/public/emulator/` (gitignored). License
-  posture: Infinite Mac glue is Apache-2.0 but the compiled BasiliskII
-  core itself is **GPL-2.0** from `mihaip/macemu` — the script vendors
-  both LICENSE files alongside a NOTICE that pins the upstream commit
-  (see LEARNINGS.md 2026-05-08). Run from the repo root:
-  `npm run fetch:emulator`.
-- Boot lifecycle is owned by `src/web/src/emulator-loader.ts` plus
-  the new `src/web/src/emulator-worker.ts` (Web Worker, `type:'module'`):
-  1. Loader renders a period-styled progress bar inside
-     `#emulator-canvas-mount` (the mount lives inside the marketer's
-     `.inset` window).
-  2. Loader gates on `crossOriginIsolated` — SAB is required for the
-     fast path; if the browser isn't isolated, drops cleanly to STUB
-     with a sharper message ("reload to let coi-serviceworker take
-     effect").
-  3. Loader HEAD-checks the chunked manifest `${bootDiskUrl}.json`. If
-     missing, drops to STUB pointing at `scripts/build-boot-disk.sh`.
-  4. Loader spawns the worker, hands it the manifest + URLs +
-     screen/RAM config.
-  5. Worker allocates SharedArrayBuffers (video framebuffer + videoMode
-     metadata + Int32 input ring whose offsets match Infinite Mac's
-     `InputBufferAddresses` so the WASM ABI lines up), reads chunked
-     disk via synchronous XHR (the BasiliskII core calls `disk.read()`
-     synchronously from inside Wasm), renders the BasiliskIIPrefs.txt
-     template + appended config + ROM + disks into the Emscripten FS,
-     and `import()`s `/emulator/BasiliskII.js` (ES module factory).
-  6. Worker exposes `globalThis.workerApi` shaped to match upstream
-     `EmulatorWorkerApi` exactly — the WASM was compiled against that
-     shape and calls into it from Wasm-land for video blits, disk
-     reads, idle waits, input polling.
-  7. Worker posts video frames into the SAB; loader rAF-loops a
-     BGRA→RGBA copy + `putImageData` onto the canvas.
-- The port skips audio/clipboard/files/ethernet/CD-ROM/persistent disk
-  savers/speed governor — see the long header on `emulator-worker.ts`
-  for what was lifted from where in upstream.
-- Configured via `src/web/src/emulator-config.ts` (typed):
-  - `coreUrl` / `wasmUrl` — Vite-base-relative paths to the vendored
-    core.
-  - `bootDiskUrl` — `${BASE_URL}system755-vibe.dsk`. Loader resolves
-    `${bootDiskUrl}.json` for the manifest and
-    `${bootDiskUrl-without-.dsk}-chunks/` for chunk fetches.
-  - `appDiskUrl` — `${BASE_URL}app.dsk`, dropped next to `index.html`
-    by CI. Currently NOT mounted by the worker (the boot disk now bakes
-    the app into Startup Items, so app.dsk is redundant for boot —
-    kept around for forks that may want it as a secondary mount).
-  - `screen` — emulator native resolution (defaults to 640×480).
-- **SharedArrayBuffer / cross-origin isolation:** the Vite dev server
-  sets `Cross-Origin-Opener-Policy: same-origin` and
-  `Cross-Origin-Embedder-Policy: require-corp` itself. GitHub Pages
-  cannot set custom response headers; we ship the ~3KB MIT-licensed
-  `coi-serviceworker` shim, vendored at
-  `src/web/public/coi-serviceworker.min.js` and loaded as a non-module
-  `<script>` at the top of `<head>` (must run before the app script).
-  The shim registers a SW, the page reloads once, and the second
-  navigation is cross-origin isolated. Fallback if the shim breaks:
-  Cloudflare Pages or Netlify (both let you set response headers).
-- Strips out Infinite Mac's library browser, multi-OS selector, settings
-  panes, IndexedDB persistence, audio worklet, ethernet, file uploads,
-  clipboard bridge — our loader is single-purpose.
-- Dev server: `npm run dev` from the repo root (npm workspaces).
+
+Vite + TypeScript (vanilla, no framework). Page chrome is a
+hand-rolled System 7 desktop styled to period in
+`src/web/src/style.css`. Uses pre-built `BasiliskII.js` +
+`BasiliskII.wasm` from Infinite Mac plus `Quadra-650.rom`, all
+SHA-pinned by `scripts/fetch-emulator.sh`. The compiled BasiliskII
+core is GPL-2.0; the Infinite Mac glue is Apache-2.0; both
+LICENSE files vendor alongside a NOTICE pinning the upstream
+commit.
+
+Boot lifecycle is owned by `src/web/src/emulator-loader.ts` plus
+`src/web/src/emulator-worker.ts` (Web Worker, `type:'module'`).
+The worker exposes `globalThis.workerApi` matching upstream
+`EmulatorWorkerApi` byte-for-byte (that interface is the WASM
+ABI), allocates three SharedArrayBuffers (video framebuffer,
+videoMode metadata, Int32 input ring whose offsets match
+`InputBufferAddresses`), reads chunked disk via synchronous XHR,
+renders BasiliskIIPrefs.txt (including the load-bearing
+`modelid 30` — `gestaltID − 6` for Quadra 650; see Risks), and
+`import()`s `/emulator/BasiliskII.js`. Audio / clipboard / files /
+ethernet / CD-ROM / persistent disk savers / speed governor are
+deliberately stubbed.
+
+GitHub Pages can't set COOP/COEP, so we ship the ~3KB MIT
+`coi-serviceworker` shim as a non-module `<script>` at the top of
+`<head>`. First navigation reloads once; second is cross-origin
+isolated. Vite dev sets the headers itself.
+
+Byte-by-byte version in
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 ### 4. Testing (`tests/`)
-- Three layers:
-  1. **Unit (`tests/unit/`)** — host-compiled C tests for game logic. Anything
-     in `src/app/` that doesn't call MacToolbox APIs is testable here against
-     the host `gcc`. Fast and cheap.
-  2. **E2E (`tests/e2e/`)** — Playwright against the local Vite dev server.
-     Drives the page, sends events into the canvas, captures screenshots.
-  3. **Vision (`tests/visual/`)** — AI vision assertions on canvas
-     screenshots via the Claude API. Replaces brittle pixel-diff with
-     semantic checks ("expect a window titled Minesweeper", "expect a 9×9
-     grid"). Gated behind `ANTHROPIC_API_KEY`.
-- Top-level npm scripts: `npm test`, `npm run test:unit`, `npm run test:e2e`,
-  `npm run test:visual`.
 
-### 4. GitHub Pages Deployment
-- Vite builds static output to `src/web/dist/` with `VITE_BASE=/<repo-name>/`
-  so asset URLs resolve under the project Pages subpath.
-- The CI-built `app.dsk` is copied into `src/web/dist/app.dsk` after Vite
-  runs, so it sits next to `index.html` and is served from the same base URL
-  as the rest of the site.
-- Deploy is via the official GitHub-hosted actions
-  (`actions/upload-pages-artifact` + `actions/deploy-pages`), NOT the older
-  `gh-pages`-branch / `peaceiris/actions-gh-pages` pattern. The Pages
-  environment is gated to `main` + non-PR; PRs run the build for CI signal
-  but never publish to production.
-- **Cross-origin isolation caveat:** GitHub Pages does NOT serve `COOP`/`COEP`
-  response headers, and BasiliskII WASM requires a cross-origin-isolated
-  context for `SharedArrayBuffer`. The web layer is expected to ship a
-  service-worker shim (e.g. `coi-serviceworker`, or the equivalent Vite
-  plugin) that intercepts navigations and installs the headers client-side.
-  If we ever hit a hard wall on this, fallback hosts that DO let us set
-  response headers are Cloudflare Pages (`_headers` file) or
-  Netlify (`netlify.toml`). Owner of the fix is the web/emulator agent;
-  the build pipeline only flags it at the deploy boundary.
+Three layers. **Unit** (`tests/unit/`) — host-compiled C tests for
+pure-C engines (`html_parse`, `weather_parse`); fast, cheap.
+**E2E** (`tests/e2e/`) — Playwright against the Vite dev server.
+**Vision** (`tests/visual/`) — AI vision assertions on canvas
+screenshots via the Claude API; replaces brittle pixel-diff with
+semantic checks. Gated behind `ANTHROPIC_API_KEY`.
+Top-level scripts: `npm test`, `npm run test:unit`,
+`npm run test:e2e`, `npm run test:visual`.
+
+### 5. Playground (`src/web/src/playground/`)
+
+The headline feature, in build-out per Epic
+[#21](https://github.com/khawkins98/classic-vibe-mac/issues/21).
+Phase 1 (shipped, PR #32 on `main`) is CodeMirror 6 with the C
+language pack, single-file editor, IndexedDB persistence with
+`bundleVersion` invalidation + in-memory fallback when IDB is
+unavailable, sample projects copied from `src/app/<name>/` at
+Vite build time, reset-to-default, download-as-zip via JSZip, a
+strict CSP, an "Open on desktop" message on mobile. Phase 2 (in
+build-out, [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30))
+is Rez-in-WASM — the spike on `spike/wasm-rez` (PR #34, do-not-merge)
+produced bytes SHA-256-identical to native Retro68 Rez at 103KB
+gzipped, and build-out wires that into the editor with a precompiled
+code fork and editor-marker errors. Phase 3 (gated on Phase 2,
+[#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
++ [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28)
++ [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31))
+is hot-load via a template-splice HFS patcher (~500 lines TS), an
+`InMemoryDisk` class, and worker re-spawn.
+
+Full design rationale, the option-2F architecture-review summary,
+and the gotchas the spike will hit are in
+[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md). Don't duplicate that
+content here.
+
+### 6. GitHub Pages Deployment
+
+- Vite builds static output to `src/web/dist/` with
+  `VITE_BASE=/<repo-name>/` so asset URLs resolve under the
+  project Pages subpath.
+- The CI-built `app.dsk` is copied into `src/web/dist/app.dsk`
+  after Vite runs.
+- Deploy via official GitHub-hosted actions
+  (`actions/upload-pages-artifact` + `actions/deploy-pages`). The
+  Pages environment is gated to `main` + non-PR; PRs run the
+  build for CI signal but never publish.
+- **Cross-origin isolation caveat:** GitHub Pages does NOT serve
+  COOP/COEP response headers. The web layer ships the
+  `coi-serviceworker` shim that intercepts navigations and
+  installs the headers client-side. Fallback hosts that DO let us
+  set response headers: Cloudflare Pages (`_headers`) or Netlify
+  (`netlify.toml`).
+
+---
+
+## Goals
+
+### POC milestones — ✅ Done
+
+POC scope is complete as of 2026-05-08.
+
+1. ✅ **Hello World** — Retro68 compiles, .bin lands in HFS image (CI).
+2. ✅ **Auto-launch** — App auto-launches from
+   `:System Folder:Startup Items:` on the pre-baked boot disk.
+3. ✅ **Demo app** — *Minesweeper* shipped first to validate the
+   pipeline, replaced by *Reader* once everything was working
+   end-to-end. *MacWeather* added alongside Reader as a
+   live-data multi-app proof.
+4. ✅ **GitHub Actions pipeline** — Retro68 build, hfsutils HFS
+   pack, bootable System 7.5.5 disk download + chunked manifest,
+   HTML content baked into `:Shared:`, web build, Pages deploy.
+5. ✅ **GitHub Pages deploy** — live at
+   <https://khawkins98.github.io/classic-vibe-mac/>.
+6. ✅ **Template polish** — README, CONTRIBUTING (Conventional
+   Commits + squash policy), LEARNINGS, LICENSE, NOTICE, PR
+   template, Dependabot, `src/app/README.md`,
+   `docs/DEVELOPMENT.md`, `docs/ARCHITECTURE.md`,
+   `docs/PLAYGROUND.md`, `docs/AGENT-PROCESS.md`, three-layer
+   test scaffold.
+7. ✅ **Mouse + keyboard input** — input layer ported to
+   participate in BasiliskII's four-state cyclical SAB lock.
+8. ✅ **Playground Phase 1** — editor + IDB persistence +
+   sample-project seeding + download-as-zip on `main` (PR #32).
+
+### Live milestones — in flight
+
+- 🚧 **Playground Phase 2** — WASM-Rez integration. Spike landed
+  (PR #34, do-not-merge research artifact); build-out tracker is
+  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
+- ⏳ **Playground Phase 3** — hot-load via template-splice +
+  `InMemoryDisk` + worker re-spawn. Gated on Phase 2.
+
+### Non-Goals
+
+- Mac OS 9 / PPC (System 7.5.5 + 68k is the target; OS 9 is a
+  stretch goal).
+- Networking inside the emulated Mac. Closed via Epic #12 review;
+  see [Closed-Epic graveyard](#closed-epic-graveyard).
+- Server-side compilation or any auth flow that needs a backend.
+  Closed via Epic #19 review; see graveyard.
+- Cloud sync of editor state. The user's red line: no shared
+  store, no relay.
+- Full GCC port to WASM. ~4-9 engineer-months of work, deferred
+  indefinitely. Resource-fork edits via WASM-Rez cover ~70% of
+  the playground promise at ~5% of the cost.
 
 ---
 
@@ -316,81 +325,131 @@ sources from git history if they want it as a starting point.
 
 | Risk | Mitigation |
 |------|-----------|
-| **BasiliskII WASM init contract** (resolved 2026-05-08) | Ported the minimum-viable subset of `mihaip/infinite-mac@30112da0db`'s worker glue into `src/web/src/emulator-worker.ts` (~480 lines): chunked disk reader, disks API, EmulatorWorkerApi shim, prefs renderer, ROM/prefs FS staging, SAB-based video/input. Verified end-to-end with a real boot attempt — BasiliskII v1.1 prints "Reading ROM file...", paints a frame, and renders the classic "no bootable disk" screen with the floppy-question-mark cursor (see public/screenshot-booted.png). Audio/clipboard/files/ethernet/CD-ROM/IndexedDB persistence are stubbed. |
-| **System 7.5.5 redistribution** (we host it ourselves, no longer a CORS issue) | Apple posted complete System 7.5.3 install media to its support site in 2001 with a license permitting free redistribution; the 7.5.5 updater (https://support.apple.com/kb/dl1099) inherits that posture and major archives (Internet Archive, Macintosh Garden, Macintosh Repository) distribute these binaries openly on this basis. NOTICE attributes Apple and explicitly disclaims affiliation; takedown protocol documented. |
-| **`build-boot-disk.sh` SHA-256 pin** (locked 2026-05-08) | Pinned to `9126e47cda69…` after the first successful CI run. A hostile CDN substitution now fails CI loudly. Re-pin only if archive.org rebuilds the upstream image. |
+| **BasiliskII WASM init contract** (resolved 2026-05-08) | Ported the minimum-viable subset of `mihaip/infinite-mac@30112da0db`'s worker glue into `src/web/src/emulator-worker.ts` (~480 lines): chunked disk reader, disks API, EmulatorWorkerApi shim, prefs renderer, ROM/prefs FS staging, SAB-based video/input. Verified end-to-end with a real boot. |
+| **System 7.5.5 redistribution** | Apple posted complete System 7.5.3 install media to its support site in 2001 with a license permitting free redistribution; the 7.5.5 updater inherits that posture. NOTICE attributes Apple and explicitly disclaims affiliation. |
+| **`build-boot-disk.sh` SHA-256 pin** (locked 2026-05-08) | Pinned to `9126e47cda69…`. A hostile CDN substitution now fails CI loudly. Re-pin only if archive.org rebuilds the upstream image. |
 | Retro68 Docker image size slows CI | Cache Docker layer in GH Actions; image is ~2GB but caches well. |
-| HFS disk image creation on Linux | Use `hfsutils` package (available in Ubuntu runners). |
-| BasiliskII WASM file size (1.7MB at the pinned Infinite Mac commit; smaller than original PRD assumed) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |
-| GitHub Pages can't set COOP/COEP for SharedArrayBuffer | Ship `coi-serviceworker` polyfill (MIT, ~3KB) registered from `index.html`. Fallback host is Cloudflare Pages or Netlify if the SW shim breaks. |
-| Startup Items auto-launch reliability (verified 2026-05-08) | App is baked into the boot disk's blessed `:System Folder:Startup Items:` at build time. Verified locally: System 7.5.5 boots, Finder runs Startup Items, Minesweeper window paints with its 10×10 grid (`public/screenshot-debug-rom.png`). |
-| ROM is `Quadra-650.rom` (~1MB, vendored from Infinite Mac at the pinned commit) | Infinite Mac's only 68040-class ROM at `30112da0db`. Fetched + SHA-pinned by `scripts/fetch-emulator.sh`. Not bundled in our git tree. License posture inherited from Infinite Mac's distribution. |
-| BasiliskII core is GPL-2.0 (not Apache-2.0 as originally stated) | NOTICE file pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
-| **`modelid` pref must be `gestaltID − 6`, not the gestalt itself** (resolved 2026-05-08) | A wrong modelid (`36` instead of `30` for Quadra 650) made Gestalt report machine type 42, which isn't a real Mac — System 7.5.5 skipped Toolbox patches keyed off Gestalt and Retro68's runtime hit an unpatched A-line trap (`unimplemented trap` bomb). Cost ~3 rounds of bisection chasing wrong hypotheses (C code, resource fork, Type/Creator) before reading `mihaip/macemu/BasiliskII/src/prefs_items.cpp` revealed the −6 offset. Fixed in `src/web/src/emulator-worker.ts` `BASE_PREFS`. Lesson: when porting an emulator config, copy the formula, not the constant. |
+| HFS disk image creation on Linux | `hfsutils` package (Ubuntu runners, Debian-based Retro68 container). |
+| BasiliskII WASM file size (1.7MB) | Vite serves with Brotli. Hash-verified at build time by `fetch-emulator.sh`. |
+| GitHub Pages can't set COOP/COEP for SAB | Ship `coi-serviceworker` polyfill (MIT, ~3KB) registered from `index.html`. Fallback host: Cloudflare Pages or Netlify. |
+| Startup Items auto-launch reliability (verified 2026-05-08) | Apps are baked into the boot disk's blessed `:System Folder:Startup Items:` at build time. Verified live in production. |
+| `Quadra-650.rom` (~1MB, vendored from Infinite Mac) | Infinite Mac's only 68040-class ROM at the pinned commit. Fetched + SHA-pinned by `scripts/fetch-emulator.sh`. License posture inherited. |
+| BasiliskII core is GPL-2.0 (not Apache-2.0) | NOTICE pins upstream commit + macemu source repo to satisfy "offer source" obligation. Forks that recompile must vendor macemu source themselves. |
+| **`modelid` pref must be `gestaltID − 6`, not the gestalt itself** (resolved 2026-05-08) | A wrong `modelid 36` made Gestalt report machine type 42, not a real Mac — System 7.5.5 skipped Toolbox patches and Retro68's runtime hit an unpatched A-line trap (unimplemented-trap bomb). Fixed in `BASE_PREFS`. Lesson: when porting an emulator config, copy the formula, not the constant. |
+| **Playground Phase 2 Boost.Wave port** | Boost.Wave is Rez's preprocessor dependency: 2.3MB / 446 files, no public WASM port. Spike on `spike/wasm-rez` resolved this in our favor; build-out has a fallback fork point at week 2 for `mcpp` or hand-rolled subset if Boost.Wave regresses. |
+| **Playground Phase 2 cold-start latency** | First Rez compile after page load: ~1.5s (WASM instantiation + RIncludes parse). Warm: <500ms. UX copy must say "first compile takes a moment…" — silently slow looks broken. |
+| **Phase 3 HFS encoder scope** | Don't write a real HFS encoder. Ship one empty-volume `.dsk` blob as a CI artifact (built once by `hfformat`), in-browser patch catalog leaf + bitmap + MDB to add one file. ~500 lines TS, not 12-18 days of HFS encoder. |
 
 ---
 
 ## OS Target Decision
 
-**POC: System 7.5.5 + 68k (Basilisk II)**
-- Retro68 is most mature for 68k
-- Basilisk II is lighter/faster to boot than SheepShaver
-- System 7.5.5 is freely redistributable (Apple released it)
+**Today: System 7.5.5 + 68k (Basilisk II)**
+
+- Retro68 is most mature for 68k.
+- Basilisk II is lighter/faster to boot than SheepShaver.
+- System 7.5.5 is freely redistributable.
 
 **Stretch goal: Mac OS 9 + PPC (SheepShaver)**
-- Retro68 does have a PPC target
-- SheepShaver WASM is available in Infinite Mac
-- Requires a Mac OS 9 ROM (not freely redistributable — complicates distribution)
+
+- Retro68 has a PPC target.
+- SheepShaver WASM is available in Infinite Mac.
+- Requires a Mac OS 9 ROM (not freely redistributable).
 
 ---
 
-## Milestones
+## Open work
 
-POC scope is complete. Status as of 2026-05-08:
+In rough priority order. The playground is the priority; everything
+else slots in behind it. The user has explicitly committed to that
+sequencing.
 
-1. ✅ **Hello World** — Retro68 compiles, .bin lands in HFS image (CI).
-2. ✅ **Auto-launch** — App auto-launches from `:System Folder:Startup
-   Items:` on the pre-baked boot disk. Verified live in production.
-3. ✅ **Demo app** — *Minesweeper* shipped first to validate the
-   pipeline, then replaced by *Reader* (a small classic-Mac HTML
-   viewer in C, see `src/app/README.md`) once everything was working
-   end-to-end. Both are/were built with the same Toolbox-shell +
-   pure-C-engine split. Reader currently demonstrates the full demo
-   loop: System 7 boots, Reader auto-launches, reads
-   `:Shared:index.html` from the boot disk, renders the page, and
-   navigates between bundled HTML files via clicks. 11/11 host
-   unit tests passing.
-4. ✅ **GitHub Actions pipeline** — Retro68 build, hfsutils HFS pack,
-   bootable System 7.5.5 disk download + chunked manifest, HTML
-   content baked into `:Shared:`, web build, Pages deploy. End-to-end
-   green.
-5. ✅ **GitHub Pages deploy** — live at
-   https://khawkins98.github.io/classic-vibe-mac/. First fork's deploy
-   is one Pages enable + one push.
-6. ✅ **Template polish** — README, CONTRIBUTING (Conventional Commits +
-   squash policy), LEARNINGS, LICENSE, NOTICE, PR template, Dependabot,
-   `src/app/README.md` (per-app docs), `docs/DEVELOPMENT.md` (iteration
-   loops), three-layer test scaffold.
-7. ✅ **Mouse + keyboard input** (resolved 2026-05-08) — input layer
-   ported to participate in BasiliskII's four-state cyclical SAB lock
-   (mirrors `mihaip/infinite-mac@30112da0db`'s
-   `SharedMemoryEmulatorInput`). Cursor tracks, clicks register, menus
-   pull down. Verified locally and live.
+### Playground build-out
 
-### Open work
+- **Phase 2 — WASM-Rez full integration** —
+  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
+  Wire the spiked WASM-Rez into the editor, splice the resource
+  fork onto a precompiled code fork, surface Rez errors as editor
+  markers. 2.5-3 weeks honest estimate.
+- **Phase 3 — hot-load** —
+  [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
+  (HFS template-splice path),
+  [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28)
+  (`InMemoryDisk`),
+  [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31)
+  (lock Type/Creator editing),
+  [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29)
+  (weather-poller teardown on worker re-spawn). ~5-7 days, gated
+  on Phase 2.
 
-- **Markdown viewer + basic editor** as a second demo app —
-  [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9). Reuses
-  the `:Shared:` pattern, adds TextEdit for editing, demonstrates
-  two-way file flow.
-- **Period chrome polish:** Chicago/Geneva web font vendoring, real
+### Playground v1.2 polish
+
+Deferred behind Phase 2/3 but not dropped:
+
+- [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22)
+  — file tree + tabs + dirty-state in editor.
+- [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23)
+  — Rez (.r) syntax highlighting.
+- [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24)
+  — 3-way diff migration UI for upstream sample changes.
+- [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25)
+  — side-by-side editor + emulator at viewport ≥1200px.
+- [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26)
+  — "Hello, Mac!" minimal starter sample
+  (gated on end-to-end re-verify post-`modelid` fix).
+
+### Pre-playground roadmap (sequenced behind, not dropped)
+
+- [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9)
+  — Markdown viewer + basic editor as a third demo app. Reuses
+  Reader's `:Shared:` pattern, adds TextEdit for editing,
+  demonstrates two-way file flow.
+- [#14](https://github.com/khawkins98/classic-vibe-mac/issues/14)
+  — Reader URL bar; bounded, host-fetched, CORS-permissive
+  sources only.
+- [#15](https://github.com/khawkins98/classic-vibe-mac/issues/15)
+  — Mac-to-Mac AppleTalk verbatim from Infinite Mac's existing
+  relay (peer-to-peer between visitors, no internet bridge).
+- [#17](https://github.com/khawkins98/classic-vibe-mac/issues/17)
+  — Pixel Pad: tiny QuickDraw drawing app, exports to host page
+  via the same extfs bridge MacWeather uses in reverse.
+
+### Hygiene
+
+- **Period chrome polish:** Chicago/Geneva web font vendoring,
   rainbow Apple in the menu bar, optional startup chime.
-- **Full `.claude/agents/` history rewrite:** files were untracked
-  going forward, but old commits still contain them. Run
-  `git filter-repo --path .claude --invert-paths` once the open
-  Dependabot PRs are resolved.
-- **Stretch:** Mac OS 9 / PPC via SheepShaver (requires
-  non-redistributable ROM — out of POC scope).
+- **Stretch:** Mac OS 9 / PPC via SheepShaver.
+
+---
+
+## Closed-Epic graveyard
+
+Two Epics that died honestly. Pointer rather than duplication —
+the full reasoning is in
+[`docs/PLAYGROUND.md` § Closed-Epic graveyard](./docs/PLAYGROUND.md#closed-epic-graveyard).
+
+- **[Epic #12](https://github.com/khawkins98/classic-vibe-mac/issues/12)
+  — Real Mac TCP/IP via WebSocket relay (closed).** Architecture
+  wrong by an OSI layer (BasiliskII's `ether js` mode emits raw
+  L2 frames, a real bridge needs a SLIRP-class userspace TCP
+  stack); Cloudflare ToS §2.2.1(j) forbids VPN-like services;
+  iCab 2.x is actively-licensed shareware. Replaced with #14
+  (Reader URL bar) + #15 (peer-to-peer AppleTalk).
+- **[Epic #19](https://github.com/khawkins98/classic-vibe-mac/issues/19)
+  — Full in-browser IDE with C compilation (closed).** Phase 2C
+  needed GitHub OAuth `repo` scope (full read/write on every
+  repo, only achievable via a token-exchange relay = backend);
+  Phase 3 silently assumed an in-browser HFS writer that doesn't
+  exist anywhere in the stack; Option 2A (full Retro68 → WASM)
+  is 4-9 engineer-months. Replaced with #21 (this Epic),
+  resource-fork-only via WASM-Rez — covers ~70% of the emotional
+  promise with ~5% of 2A's effort.
+
+The lesson, to save the next person re-deriving it: **a full
+in-browser IDE for classic Mac C is genuinely 4-9 engineer-months
+of work**, dominated by porting GCC + the linker to WASM, *not*
+by the editor or the UI. If you want to revisit it, frame it as a
+research spike with a ruthless time-box — not as a feature Epic.
 
 ---
 
@@ -398,13 +457,7 @@ POC scope is complete. Status as of 2026-05-08:
 
 ```
 classic-vibe-mac/
-├── .claude/agents/           ← Mac-specific subagent profiles (5)
-├── .github/
-│   ├── workflows/
-│   │   ├── build.yml         ← Retro68 → disks → web → Pages deploy
-│   │   └── test.yml          ← unit + e2e + vision tests
-│   ├── dependabot.yml
-│   └── pull_request_template.md
+├── .github/workflows/        ← build.yml (Retro68→disks→Pages), test.yml
 ├── docs/
 │   ├── DEVELOPMENT.md        ← day-to-day iteration loops
 │   ├── ARCHITECTURE.md       ← system architecture as built
@@ -412,50 +465,33 @@ classic-vibe-mac/
 │   └── AGENT-PROCESS.md      ← five-reviewer pass + dispatch hygiene
 ├── src/
 │   ├── app/                  ← Mac C source (Retro68 + Toolbox)
-│   │   ├── CMakeLists.txt    ← aggregator: add_subdirectory(reader); add_subdirectory(macweather)
+│   │   ├── CMakeLists.txt    ← aggregator
 │   │   ├── README.md
-│   │   ├── reader/           ← Reader app (CVMR): HTML viewer
-│   │   │   ├── reader.c           Toolbox UI shell
-│   │   │   ├── reader.r           Rez resources
-│   │   │   ├── html_parse.{c,h}   pure-C tokenizer + layout (host-testable)
-│   │   │   └── CMakeLists.txt
-│   │   └── macweather/       ← MacWeather app (CVMW): live-data demo
-│   │       ├── macweather.c
-│   │       ├── macweather.r
-│   │       ├── weather_parse.{c,h}
-│   │       ├── weather_glyphs.{c,h}
-│   │       └── CMakeLists.txt
-│   └── web/                  ← Vite + TypeScript landing page
-│       ├── index.html
-│       ├── package.json
-│       ├── vite.config.ts
+│   │   ├── reader/           ← Reader (CVMR): HTML viewer
+│   │   └── macweather/       ← MacWeather (CVMW): live-data demo
+│   └── web/                  ← Vite + TypeScript page + editor
 │       ├── public/
 │       │   ├── coi-serviceworker.min.js  ← SAB on GH Pages
-│       │   └── emulator/                 ← BasiliskII WASM (gitignored)
+│       │   ├── emulator/                 ← BasiliskII WASM (gitignored)
+│       │   ├── shared/                   ← HTML baked into :Shared:
+│       │   └── sample-projects/          ← editor seed (build-time)
 │       └── src/
-│           ├── main.ts                   ← System 7 chrome
-│           ├── style.css
-│           ├── emulator-config.ts        ← typed config
-│           ├── emulator-loader.ts        ← boot lifecycle
-│           ├── emulator-worker.ts        ← ported worker glue
-│           ├── emulator-worker-types.ts
-│           └── emulator-input.ts
-├── tests/
-│   ├── unit/                 ← host-cc C tests for pure-C engines (html_parse, weather_parse)
-│   ├── e2e/                  ← Playwright vs Vite dev server
-│   └── visual/               ← Claude Haiku vision assertions
+│           ├── main.ts, style.css        ← System 7 chrome
+│           ├── emulator-{config,loader,worker,input}.ts
+│           ├── weather-poller.ts         ← open-meteo → Mac
+│           └── playground/
+│               ├── editor.ts             ← CodeMirror 6 host
+│               ├── persistence.ts        ← IDB + bundleVersion
+│               └── types.ts
+├── tests/                    ← unit (host-cc) / e2e (Playwright) / visual (Claude)
 ├── scripts/
-│   ├── fetch-emulator.sh     ← download BasiliskII core + ROM (pinned)
-│   ├── build-disk-image.sh   ← simple app.dsk packer
-│   ├── build-boot-disk.sh    ← bootable System 7.5.5 + chunked manifest
+│   ├── fetch-emulator.sh     ← BasiliskII core + ROM (pinned)
+│   ├── build-disk-image.sh   ← app.dsk packer
+│   ├── build-boot-disk.sh    ← System 7.5.5 + chunks
 │   ├── write-chunked-manifest.py
 │   └── capture-deployed-screenshot.mjs
-├── public/                   ← landing-page screenshots, etc.
+├── public/                   ← landing-page screenshots
 ├── package.json              ← npm workspaces (root + src/web)
-├── PRD.md
-├── README.md
-├── CONTRIBUTING.md
-├── LEARNINGS.md              ← growing log of non-obvious findings
-├── LICENSE                   ← MIT
-└── NOTICE                    ← upstream attribution stack
+├── PRD.md                    ← this file
+├── README.md, CONTRIBUTING.md, LEARNINGS.md, LICENSE, NOTICE
 ```
