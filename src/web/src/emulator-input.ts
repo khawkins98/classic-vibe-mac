@@ -178,6 +178,20 @@ function scheduleDrain(): void {
   }, 0);
 }
 
+/**
+ * Signal BasiliskII that the Web Audio context is running.
+ * Called by emulator-loader.ts when the AudioContext enters "running" state.
+ * This causes BasiliskII to start emitting audio frames via enqueueAudio().
+ *
+ * Written with Atomics.store (outside the event lock cycle) because it is a
+ * one-time setup flag, not a per-frame event. The emulator core reads it once
+ * during audio subsystem start-up; no cyclical-lock dance is needed.
+ */
+export function signalAudioContextRunning(): void {
+  if (!inputView) return;
+  Atomics.store(inputView, InputBufferAddresses.audioContextRunningFlagAddr, 1);
+}
+
 function enqueue(ev: InputEvent): void {
   queue.push(ev);
   tryDrainQueue();
