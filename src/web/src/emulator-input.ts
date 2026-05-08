@@ -250,7 +250,27 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
     }
   };
 
+  // Skip the global keyboard forward when the user is typing into a
+  // page-side input (the playground editor, a future search box, etc.).
+  // Otherwise every keystroke gets eaten by the Mac and the editor feels
+  // dead — Cmd-C / Cmd-V / typing all silently miss. We check the
+  // currently-focused element rather than e.target because key events
+  // sometimes bubble from window directly.
+  const isEditableTarget = (): boolean => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body) return false;
+    if (el.isContentEditable) return true;
+    const tag = el.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    // CodeMirror 6 puts cursor in `.cm-content` (a contenteditable div).
+    // The check above already catches it, but keep the explicit class
+    // check as a safety net for any custom editor surface.
+    if (el.closest(".cm-editor, .cm-content")) return true;
+    return false;
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
+    if (isEditableTarget()) return;
     const adb = JS_CODE_TO_ADB[e.code];
     if (adb === undefined) return;
     e.preventDefault();
@@ -258,6 +278,7 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
+    if (isEditableTarget()) return;
     const adb = JS_CODE_TO_ADB[e.code];
     if (adb === undefined) return;
     e.preventDefault();
@@ -271,8 +292,11 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointerup", onPointerUp);
   canvas.addEventListener("pointercancel", onPointerUp);
-  // Keys go on window, not the canvas — System 7 expects keystrokes whether
-  // or not the canvas has focus, and tabIndex-focus is fragile.
+  // Keys go on window so the Mac receives them whether or not the canvas
+  // has explicit focus (tabIndex focus is fragile across browsers). The
+  // isEditableTarget() guard at the top of each handler then skips
+  // forwarding when focus is in a page-side input — without it, typing
+  // into the playground editor would be silently eaten by the Mac.
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
   canvas.addEventListener("contextmenu", onContextMenu);
