@@ -15,19 +15,30 @@
       story unambiguous, `object-src 'none'` to disable plugins, and
       `base-uri 'none'` to lock the document base URL.
 
-      Two carve-outs:
+      Three carve-outs:
         - `worker-src 'self' blob:` — Emscripten/BasiliskII can construct
           worker URLs from Blob objects in some code paths.
         - `connect-src 'self' https:` — MacWeather hits api.open-meteo.com
           from the page-side fetch. Without this carve-out the live
           forecast wouldn't load. https-only.
+        - `script-src 'self' 'wasm-unsafe-eval'` — Phase 2 of the
+          playground (Issue #21) ships the WASM-Rez resource compiler
+          which Emscripten loads via `WebAssembly.instantiate()`. Under
+          a strict `script-src 'self'` (no `unsafe-eval`) the browser
+          aborts WASM compilation. The CSP3 `'wasm-unsafe-eval'`
+          token specifically permits WebAssembly compilation while still
+          blocking `eval()` proper — that's what we want. Browser
+          support: Chrome 102+, Firefox 116+, Safari 16+. Older browsers
+          treat the unknown source as ignored and reject WASM with the
+          same error; users on those browsers don't get the Build
+          button. Acceptable tradeoff for staying off `unsafe-eval`.
 
-      If a future change needs `unsafe-eval`, document the reason in
-      LEARNINGS.md before relaxing.
+      If a future change needs full `unsafe-eval`, document the reason
+      in LEARNINGS.md before relaxing.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none';"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none';"
     />
     <title>classic-vibe-mac</title>
     <meta
