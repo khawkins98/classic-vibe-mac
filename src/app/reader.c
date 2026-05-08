@@ -226,9 +226,11 @@ static void ApplyDrawOpFont(const DrawOp *op)
 static void DrawCBytes(short x, short y, const char *bytes, short len)
 {
     /* DrawText takes a non-Pascal byte buffer + offset + length. Perfect
-     * for layout strings that aren't NUL-rooted. */
+     * for layout strings that aren't NUL-rooted. Cast strips the const
+     * qualifier — DrawText's prototype takes Ptr (non-const) but it
+     * doesn't mutate the buffer in practice. */
     MoveTo(x, y);
-    DrawText(bytes, 0, len);
+    DrawText((Ptr)bytes, 0, len);
 }
 
 static void DrawBullet(short x, short y, unsigned char size)

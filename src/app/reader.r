@@ -17,8 +17,11 @@
 #include "Menus.r"
 #include "Windows.r"
 #include "Dialogs.r"
-#include "Controls.r"
 #include "MacTypes.r"
+/* Controls.r is not part of Retro68's RIncludes — the multiversal
+ * Rez headers don't define a CNTL resource type at all. The scroll bar
+ * is created at runtime via NewControl() in reader.c instead, so we
+ * don't need a CNTL resource here. */
 
 /* ------------------------------------------------------------------ Menus */
 
@@ -85,18 +88,6 @@ resource 'WIND' (128) {
     0,
     "Reader",
     noAutoCenter
-};
-
-/* ----------------------------------------------------------- Scroll bar */
-
-/* Placeholder — the actual bounds are set at runtime by ConfigureScrollBar
- * based on the window's current size. We still define a CNTL so resources
- * are loadable if a future NewControl uses GetNewControl instead. */
-resource 'CNTL' (128) {
-    { 0, 0, 100, 16 },
-    0, visible, 0, 0,
-    scrollBarProc, 0,
-    ""
 };
 
 /* ----------------------------------------------------------- Strings */
