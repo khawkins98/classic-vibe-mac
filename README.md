@@ -13,27 +13,31 @@ It is, more or less, a 1993 Macintosh that lives at a URL.
 
 ## What it looks like
 
-![Live deployed page: System 7 desktop chrome around the BasiliskII emulator window. System 7 has booted, Minesweeper has auto-launched from Startup Items, and a classic Mac bomb dialog is open showing 'unimplemented trap' — a runtime bug in the demo app, not the pipeline.](public/screenshot-deployed.png)
+![Live deployed page: System 7 desktop chrome around the BasiliskII emulator window. System 7.5.5 has booted, Reader (the demo HTML viewer app) auto-launched from Startup Items, and is showing "Welcome to Reader" with browseable links to other HTML pages. Read Me window underneath describes the project; Emulator Config window at the bottom shows the live JSON config.](public/screenshot-deployed.png)
 
-The screenshot above is the deployed page right now: the full pipeline
-runs, BasiliskII boots, the Finder auto-launches our Minesweeper from
-`System Folder/Startup Items`, and we hit a Toolbox trap the ROM
-doesn't implement (a runtime bug to debug). The chrome is real, the
-boot is real, the auto-launch is real — the app is what needs fixing.
+The screenshot above is the deployed page right now: System 7.5.5 boots
+in the browser, the Finder runs through Startup Items, and our Reader
+demo app launches and renders `:Shared:index.html` from the boot disk.
+Click the links inside Reader and they actually navigate to the other
+bundled pages.
 
 ## What it does
 
 - Cross-compiles C source to a 68k Mac binary using **Retro68**, in GitHub
   Actions, in a clean container.
-- Packs the binary into a small HFS disk image with `hfsutils`.
-- Hosts a Vite + TypeScript page that will mount **Basilisk II** (compiled to
-  WebAssembly by the Infinite Mac project) and boot System 7.5.5.
+- Packs the binary into a bootable HFS System 7.5.5 disk image with
+  `hfsutils`, with the app pre-installed in `System Folder/Startup Items/`
+  so the Finder auto-launches it on boot.
+- Hosts a Vite + TypeScript page that mounts **Basilisk II** (compiled to
+  WebAssembly by the Infinite Mac project) and boots System 7.5.5.
 - Ships a three-layer test setup: host C unit tests for game logic,
   Playwright end-to-end tests against the dev server, and AI vision
   assertions on canvas screenshots (because pixel-diffing an emulated CRT
   is a losing game).
-- Comes with a Minesweeper clone in progress as the demo app and proof
-  that the pipeline works end to end.
+- Comes with **Reader** — a small classic-Mac HTML viewer in C — as the
+  demo app. It reads HTML from `:Shared:` on the boot disk, supports a
+  reasonable subset (headings, paragraphs, lists, bold/italic, monospace
+  blocks, links, common entities), and shows what the template can build.
 
 ## How to use it
 
@@ -59,18 +63,20 @@ cd classic-vibe-mac
 npm install
 npm run fetch:emulator                   # BasiliskII.wasm + Quadra-650.rom
 
-# Pull the latest compiled Minesweeper binary from CI
+# Pull the latest compiled Reader binary from CI
 gh run download \
   "$(gh run list --branch main --workflow Build --limit 1 --json databaseId -q '.[0].databaseId')" \
   -D /tmp/cvm-artifact
 
 # Resolve the artifact path (its name carries the commit SHA)
-ART="$(echo /tmp/cvm-artifact/Minesweeper-*)"
+ART="$(echo /tmp/cvm-artifact/Reader-*)"
 
 # Build the bootable System 7.5.5 disk (writes the disk + chunked manifest
-# + chunks dir alongside, all under src/web/public/ where Vite serves them)
+# + chunks dir alongside, all under src/web/public/ where Vite serves them).
+# This also bakes the HTML pages from src/web/public/shared/ into the boot
+# disk's :Shared: folder so Reader has content to display.
 bash scripts/build-boot-disk.sh \
-  "$ART/build/Minesweeper.bin" \
+  "$ART/build/Reader.bin" \
   src/web/public/system755-vibe.dsk
 
 # Copy the secondary app.dsk too (the loader HEAD-checks for it)
@@ -106,8 +112,8 @@ docker run --rm -v $PWD:/work -w /work ghcr.io/autc04/retro68:latest \
     && cmake --build build --parallel"
 ```
 
-That writes `build/Minesweeper.bin` (and `build/Minesweeper.dsk`,
-`build/Minesweeper.APPL`) — feed `Minesweeper.bin` into
+That writes `build/Reader.bin` (and `build/Reader.dsk`,
+`build/Reader.APPL`) — feed `Reader.bin` into
 `scripts/build-boot-disk.sh` the same way the CI flow above does.
 
 ## Requirements
@@ -143,11 +149,11 @@ log of things we learned the hard way, see [LEARNINGS.md](./LEARNINGS.md).
 
 ## Coming soon
 
-- Debug the "unimplemented trap" bomb the demo app hits right after
-  the Finder launches it. The pipeline is wired; the bug is in the C
-  code or the SIZE/MBAR/WIND resources. Likely candidates: a Toolbox
-  call the Quadra-650 ROM doesn't implement, a missing `MoreMasters`,
-  or a resource ID collision.
+- A Markdown viewer + basic editor as a second demo app — see
+  [issue #9](https://github.com/khawkins98/classic-vibe-mac/issues/9).
+  Reuses the `:Shared:` boot-disk pattern Reader uses, adds TextEdit
+  for editing, demonstrates a two-way file flow between the page and
+  the Mac.
 - Polish on the period chrome — Chicago/Geneva web fonts, a real
   rainbow Apple in the menu bar, the startup chime.
 - Stretch: Mac OS 9 / PPC support via SheepShaver and Retro68's PPC
