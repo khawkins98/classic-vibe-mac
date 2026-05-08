@@ -1,0 +1,39 @@
+name: lint-markdown
+
+# Runs on every push and PR to catch broken links and markdown issues
+# before they accumulate. Checks all *.md files in the repo.
+#
+# Uses lychee for link checking (fast, Rust-based, supports anchors).
+# Skips external URLs that are commonly rate-limited by CI IPs.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  links:
+    name: check markdown links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check links with lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # Check all markdown files. Exclude node_modules and spike
+          # (vendored vendor tree with intentional broken/relative paths).
+          args: >
+            --verbose
+            --no-progress
+            --exclude-path node_modules
+            --exclude-path spike
+            --exclude-path src/web/dist
+            --exclude 'https://github.com/khawkins98/classic-vibe-mac/issues'
+            --exclude 'https://github.com/khawkins98/classic-vibe-mac/pull'
+            --exclude 'https://github.com/khawkins98/classic-vibe-mac/commit'
+            --exclude 'https://github.com/khawkins98/classic-vibe-mac/compare'
+            --exclude 'https://api.open-meteo.com'
+            --exclude 'mailto:'
+            "**/*.md"
+          fail: true

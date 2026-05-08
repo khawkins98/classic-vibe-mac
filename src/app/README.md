@@ -63,6 +63,16 @@ The JS host (`src/web/src/weather-poller.ts`) polls
 change. Cmd-R force-refreshes. No JSON library; the parser is bounded
 to open-meteo's specific shape and lives in `weather_parse.c`.
 
+### Hello Mac (`hello-mac/`)
+
+The simplest possible Toolbox application: a single window, "Hello,
+World!" drawn in the center via QuickDraw, a Quit command in the Apple
+menu, and nothing else. ~200 lines of C total.
+
+Start here if you're new to classic Mac Toolbox programming. It's also
+the default sample the in-browser playground opens when a user first
+visits.
+
 ## Architectural pattern: Toolbox shell + pure-C engine
 
 Every app is split deliberately:
