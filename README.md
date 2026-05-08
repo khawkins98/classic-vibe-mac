@@ -13,13 +13,15 @@ It is, more or less, a 1993 Macintosh that lives at a URL.
 
 ## What it looks like
 
-![Live deployed page: System 7 desktop chrome around the BasiliskII emulator window. System 7.5.5 has booted, Reader (the demo HTML viewer app) auto-launched from Startup Items, and is showing "Welcome to Reader" with browseable links to other HTML pages. Read Me window underneath describes the project; Emulator Config window at the bottom shows the live JSON config.](public/screenshot-deployed.png)
+![Live deployed page: System 7 desktop with two demo apps running side-by-side. Reader is open behind, showing the :Shared: folder of bundled HTML files plus weather.json. MacWeather is in front, rendering 62°F partly cloudy with a Sat/Sun/Mon forecast in 1-bit pixel-art QuickDraw glyphs. Read Me window below describes the project.](public/screenshot-deployed.png)
 
-The screenshot above is the deployed page right now: System 7.5.5 boots
-in the browser, the Finder runs through Startup Items, and our Reader
-demo app launches and renders `:Shared:index.html` from the boot disk.
-Click the links inside Reader and they actually navigate to the other
-bundled pages.
+The screenshot above is the deployed page right now: System 7.5.5
+boots in the browser, the Finder runs Startup Items, and both demo
+apps auto-launch — **Reader** rendering HTML from the boot disk's
+`:Shared:` folder, and **MacWeather** rendering live forecast data
+that the host page is fetching from `open-meteo.org` and dropping
+into the Mac at `/Shared/weather.json`. Two-way data flow between
+the JS host and the emulated Mac, in 1-bit Geneva 12.
 
 ## What it does
 
