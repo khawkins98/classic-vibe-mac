@@ -15,6 +15,14 @@
  * copy in IndexedDB the first time the user opens the project so edits
  * survive reloads. On `bundleVersion` change we wipe those copies (silent;
  * the deferred 3-way diff lives on the Phase 2 list).
+ *
+ * `rezFile` names the `.r` file that's the resource-fork compile entry
+ * point for this project (Phase 2). `precompiledName` is the static
+ * asset under public/precompiled/ that holds the data-fork-only
+ * MacBinary we splice the freshly-compiled rsrc fork onto. `outputName`
+ * is the filename for the user's download. `appType`/`appCreator` are
+ * Type/Creator codes — not used at compile time (the precompile already
+ * has them) but documented here for traceability.
  */
 export interface SampleProject {
   /** Stable id used as the IDB key prefix and in the URL/dropdown. */
@@ -23,6 +31,16 @@ export interface SampleProject {
   label: string;
   /** Filenames to expose in the file dropdown, ORDERED by intended reveal. */
   files: string[];
+  /** Phase 2: the .r file the playground compiles. Must be present in `files`. */
+  rezFile: string;
+  /** Phase 2: name under public/precompiled/ (without leading slash). */
+  precompiledName: string;
+  /** Phase 2: filename used for the Build button's download. */
+  outputName: string;
+  /** Doc-only: Mac OS HFS Type code. */
+  appType: string;
+  /** Doc-only: Mac OS HFS Creator code. */
+  appCreator: string;
 }
 
 /**
@@ -36,6 +54,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     id: "reader",
     label: "Reader",
     files: ["reader.c", "reader.r", "html_parse.c", "html_parse.h"],
+    rezFile: "reader.r",
+    precompiledName: "reader.code.bin",
+    outputName: "Reader.bin",
+    appType: "APPL",
+    appCreator: "CVMR",
   },
   {
     id: "macweather",
@@ -47,6 +70,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
       "weather_parse.h",
       "weather_glyphs.c",
     ],
+    rezFile: "macweather.r",
+    precompiledName: "macweather.code.bin",
+    outputName: "MacWeather.bin",
+    appType: "APPL",
+    appCreator: "CVMW",
   },
 ];
 
