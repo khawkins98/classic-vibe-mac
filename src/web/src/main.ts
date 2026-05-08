@@ -12,6 +12,11 @@
  */
 import { emulatorConfig } from "./emulator-config";
 import { startEmulator } from "./emulator-loader";
+import {
+  isPauseWhenHiddenEnabled,
+  setPauseWhenHidden,
+  onPauseWhenHiddenChange,
+} from "./settings";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -82,6 +87,21 @@ root.innerHTML = /* html */ `
     <div class="window__body window__body--platinum">
       <div class="inset" id="emulator">
         <div id="emulator-canvas-mount" class="emulator-mount"></div>
+      </div>
+      <!--
+        Settings caption sits BELOW the inset (still inside the Macintosh
+        window's body, so it reads as part of the same chrome). A period-
+        styled checkbox lets the visitor opt out of pause-when-hidden.
+        The "💤" indicator on the right replaces the static label when
+        the emulator is currently paused. See settings.ts + emulator-loader.
+      -->
+      <div class="emulator-caption" role="group" aria-label="Emulator preferences">
+        <label class="cvm-check">
+          <input type="checkbox" id="cvm-pause-when-hidden" />
+          <span class="cvm-check__box" aria-hidden="true"></span>
+          <span class="cvm-check__label">Pause emulator when tab is hidden</span>
+        </label>
+        <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
       </div>
     </div>
   </section>
@@ -167,6 +187,44 @@ const configEl = document.getElementById("config");
 if (configEl) {
   configEl.textContent = JSON.stringify(emulatorConfig, null, 2);
 }
+
+// ── Settings checkbox wiring (sleep when hidden) ──
+//
+// The checkbox lives in the caption row under the Mac window. We keep
+// the DOM in sync with the persisted value (cvm.pauseWhenHidden) on:
+//   - initial load
+//   - cross-tab storage events (handled inside settings.ts → onPauseWhenHiddenChange)
+// Toggling fires the setter which both persists and notifies listeners,
+// so the loader's visibility controller observes the change immediately.
+const pauseCheckbox = document.getElementById(
+  "cvm-pause-when-hidden",
+) as HTMLInputElement | null;
+const pauseStatus = document.getElementById("cvm-pause-status");
+if (pauseCheckbox) {
+  pauseCheckbox.checked = isPauseWhenHiddenEnabled();
+  pauseCheckbox.addEventListener("change", () => {
+    setPauseWhenHidden(pauseCheckbox.checked);
+  });
+  // Mirror back in case another tab toggled it.
+  onPauseWhenHiddenChange(() => {
+    const v = isPauseWhenHiddenEnabled();
+    if (pauseCheckbox.checked !== v) pauseCheckbox.checked = v;
+  });
+}
+
+// "💤 Paused" indicator. The loader fires `cvm:paused-change` on body
+// whenever the actual pause state flips. We update both the caption text
+// AND set a body class for CSS-driven canvas tinting (handled in style.css).
+function renderPauseStatus(paused: boolean) {
+  if (!pauseStatus) return;
+  pauseStatus.textContent = paused ? "\u{1F4A4} Paused" : "";
+  pauseStatus.classList.toggle("emulator-caption__status--paused", paused);
+}
+renderPauseStatus(false);
+window.addEventListener("cvm:paused-change", (ev) => {
+  const paused = !!(ev as CustomEvent<{ paused: boolean }>).detail?.paused;
+  renderPauseStatus(paused);
+});
 
 // Hand the emulator slot to the loader. It owns rendering inside this
 // element from this point on (progress UI, then canvas). If anything goes
