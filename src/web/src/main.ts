@@ -169,6 +169,16 @@ cd classic-vibe-mac
 npm install
 npm run dev</pre>
 
+      <h2>How this works</h2>
+      <p>
+        Curious about the stack? See
+        <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md">HOW-IT-WORKS.md</a>
+        &mdash; a guided tour of how the page above goes from "static
+        files on GitHub Pages" to "1993 Macintosh running your edited
+        app", plus what you can build with this stack and where it
+        stops compared to other paths into classic Mac development.
+      </p>
+
       <h2>Status</h2>
       <p>
         The pipeline runs end-to-end. Two apps ship on the boot disk
