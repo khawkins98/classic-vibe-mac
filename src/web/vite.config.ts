@@ -1,4 +1,7 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
+import { createHash } from "node:crypto";
+import { readFileSync, mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
 
 // GitHub Pages serves the site under /<repo-name>/ when using a project page
 // (e.g. https://<user>.github.io/classic-vibe-mac/). Override at build time
@@ -9,11 +12,158 @@ import { defineConfig } from "vite";
 // configuration. For local `npm run dev` we always want "/".
 const base = process.env.VITE_BASE ?? "/";
 
+// ────────────────────────────────────────────────────────────────────────
+// Playground Phase 1: sample-project seeding
+//
+// We expose a small set of source files from `src/app/<project>/` to the
+// browser at `/sample-projects/<project>/<filename>`. Two reasons to do
+// this in a Vite plugin instead of just symlinking into `public/`:
+//
+//   1. The canonical source lives in `src/app/`. Copying keeps that
+//      single source of truth — editing reader.c there is the only edit
+//      anyone has to do; the playground picks it up on next build.
+//   2. We compute a hash of the bundled file contents at build/dev start
+//      and inject it as the global constant `__CVM_BUNDLE_VERSION__`.
+//      The persistence layer compares that constant to the version it
+//      seeded last; on mismatch it wipes the user's IDB-stored copies so
+//      the freshly bundled source loads. (3-way diff is deferred — see
+//      the editor reviewer's notes on Issue #21.)
+//
+// In dev, the plugin writes to `public/sample-projects/` once at
+// `configResolved` so the dev server's static middleware serves them.
+// ────────────────────────────────────────────────────────────────────────
+
+interface SeedSpec {
+  project: string;
+  filename: string;
+  /** Absolute path to the source file under src/app. */
+  sourcePath: string;
+}
+
+const REPO_ROOT = resolve(__dirname, "..", "..");
+const PUBLIC_DIR = resolve(__dirname, "public");
+
+const SEED_FILES: SeedSpec[] = [
+  ...["reader.c", "reader.r", "html_parse.c", "html_parse.h"].map((f) => ({
+    project: "reader",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "reader", f),
+  })),
+  ...[
+    "macweather.c",
+    "macweather.r",
+    "weather_parse.c",
+    "weather_parse.h",
+    "weather_glyphs.c",
+  ].map((f) => ({
+    project: "macweather",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "macweather", f),
+  })),
+];
+
+function readSeedContents(): { contents: Map<string, string>; hash: string } {
+  const contents = new Map<string, string>();
+  const hasher = createHash("sha256");
+  for (const spec of SEED_FILES) {
+    let body = "";
+    if (existsSync(spec.sourcePath)) {
+      body = readFileSync(spec.sourcePath, "utf8");
+    }
+    contents.set(`${spec.project}/${spec.filename}`, body);
+    hasher.update(`${spec.project}/${spec.filename}\n`);
+    hasher.update(body);
+    hasher.update("\n--\n");
+  }
+  return { contents, hash: hasher.digest("hex").slice(0, 16) };
+}
+
+function writeSeedToPublic(contents: Map<string, string>): void {
+  for (const [key, body] of contents) {
+    const out = join(PUBLIC_DIR, "sample-projects", key);
+    mkdirSync(dirname(out), { recursive: true });
+    // Write only if changed to keep Vite's fs watcher quiet.
+    let needsWrite = true;
+    try {
+      const existing = readFileSync(out, "utf8");
+      if (existing === body) needsWrite = false;
+    } catch {
+      // file doesn't exist
+    }
+    if (needsWrite) writeFileSync(out, body, "utf8");
+  }
+}
+
+function playgroundSeedPlugin(): Plugin {
+  let bundleHash = "dev";
+  return {
+    name: "cvm-playground-seed",
+    enforce: "pre",
+    config() {
+      const { contents, hash } = readSeedContents();
+      bundleHash = hash;
+      writeSeedToPublic(contents);
+      return {
+        define: {
+          __CVM_BUNDLE_VERSION__: JSON.stringify(hash),
+        },
+      };
+    },
+    configureServer(server) {
+      // Re-seed if the source files change. The dev server's HMR will
+      // notice the public-dir change and full-reload the page.
+      const watcher = server.watcher;
+      for (const spec of SEED_FILES) {
+        if (existsSync(spec.sourcePath)) {
+          try {
+            watcher.add(spec.sourcePath);
+          } catch {
+            // best-effort
+          }
+        }
+      }
+      const onChange = (path: string) => {
+        if (SEED_FILES.some((s) => s.sourcePath === path)) {
+          const { contents, hash } = readSeedContents();
+          bundleHash = hash;
+          writeSeedToPublic(contents);
+          server.ws.send({ type: "full-reload" });
+        }
+      };
+      watcher.on("change", onChange);
+      watcher.on("add", onChange);
+    },
+    // Surface the hash in build logs so it's visible to humans.
+    closeBundle() {
+      // eslint-disable-next-line no-console
+      console.log(`[cvm-playground] bundleVersion=${bundleHash}`);
+    },
+  };
+}
+
 export default defineConfig({
   base,
+  plugins: [playgroundSeedPlugin()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // Split heavyweight third-party deps into their own chunks so the
+        // page-shell remains small and the editor + zip code can be cached
+        // independently of the chrome.
+        manualChunks: {
+          "cvm-codemirror": [
+            "@codemirror/state",
+            "@codemirror/view",
+            "@codemirror/commands",
+            "@codemirror/language",
+            "@codemirror/lang-cpp",
+          ],
+          "cvm-jszip": ["jszip"],
+        },
+      },
+    },
     // TODO (build pipeline): after `vite build`, the CI workflow should copy
     // the freshly-built `app.dsk` (produced by scripts/build-disk-image.sh)
     // into `src/web/dist/` so it sits next to index.html and gets served by
@@ -60,3 +210,7 @@ export default defineConfig({
     },
   },
 });
+
+// statSync is referenced indirectly by callers via `existsSync`/`readFileSync`;
+// we keep it imported only when needed. Suppress unused-import if so.
+void statSync;

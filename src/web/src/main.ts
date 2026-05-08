@@ -16,7 +16,11 @@ import {
   isPauseWhenHiddenEnabled,
   setPauseWhenHidden,
   onPauseWhenHiddenChange,
+  isShowEditorEnabled,
+  setShowEditor,
+  onShowEditorChange,
 } from "./settings";
+import { mountPlayground } from "./playground/editor";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -101,9 +105,17 @@ root.innerHTML = /* html */ `
           <span class="cvm-check__box" aria-hidden="true"></span>
           <span class="cvm-check__label">Pause emulator when tab is hidden</span>
         </label>
+        <label class="cvm-check">
+          <input type="checkbox" id="cvm-show-editor" />
+          <span class="cvm-check__box" aria-hidden="true"></span>
+          <span class="cvm-check__label">Show editor</span>
+        </label>
         <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
       </div>
     </div>
+  </section>
+
+  <section class="window window--wide window--playground" id="cvm-playground" aria-labelledby="title-playground">
   </section>
 
   <section class="window" aria-labelledby="title-readme">
@@ -233,4 +245,42 @@ window.addEventListener("cvm:paused-change", (ev) => {
 const emulatorMount = document.getElementById("emulator-canvas-mount");
 if (emulatorMount) {
   startEmulator(emulatorConfig, emulatorMount);
+}
+
+// ── Playground (Phase 1: read-only-leaning viewer + IDB-backed editor) ──
+//
+// Mounted under the Macintosh window. Vite's import.meta.env.BASE_URL is
+// the configured base path (e.g. `/` in dev, `/classic-vibe-mac/` on
+// Pages); the playground prepends it to fetch bundled sample files from
+// `/sample-projects/<project>/<filename>`. The mount is async because
+// initPersistence() opens IndexedDB.
+const playgroundEl = document.getElementById("cvm-playground");
+const showEditorCheckbox = document.getElementById(
+  "cvm-show-editor",
+) as HTMLInputElement | null;
+
+function applyEditorVisibility(visible: boolean) {
+  if (!playgroundEl) return;
+  // We hide via an attribute so CSS can also collapse the bottom margin.
+  // The mobile breakpoint already hides it via @media; this attribute
+  // takes precedence for the user toggle.
+  playgroundEl.toggleAttribute("hidden", !visible);
+}
+
+if (showEditorCheckbox) {
+  showEditorCheckbox.checked = isShowEditorEnabled();
+  showEditorCheckbox.addEventListener("change", () => {
+    setShowEditor(showEditorCheckbox.checked);
+    applyEditorVisibility(showEditorCheckbox.checked);
+  });
+  onShowEditorChange(() => {
+    const v = isShowEditorEnabled();
+    if (showEditorCheckbox.checked !== v) showEditorCheckbox.checked = v;
+    applyEditorVisibility(v);
+  });
+}
+
+if (playgroundEl) {
+  applyEditorVisibility(isShowEditorEnabled());
+  void mountPlayground(playgroundEl, import.meta.env.BASE_URL);
 }

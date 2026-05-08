@@ -42,3 +42,9 @@ tests/unit/*.dSYM/
 .claude/
 .gstack/
 
+# Playground sample-project seeds — copied at build time from src/app/
+# by the cvm-playground-seed Vite plugin. The canonical source lives in
+# src/app/<project>/, so committing these would create a second source of
+# truth that's easy to forget to refresh.
+src/web/public/sample-projects/
+
