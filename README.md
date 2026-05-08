@@ -89,6 +89,10 @@ If you skip the `gh run download` + `build-boot-disk.sh` steps the page
 still loads — the loader falls into a stub state that renders the
 chrome but skips emulation. Useful for iterating on the page itself.
 
+For the day-to-day iteration loops (fast unit-test cycle, slow
+cross-compile cycle, CI ship cycle) and a recipe book of common tasks
+and failure modes, see [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md).
+
 ### Building the Mac binary locally
 
 If you want to compile the Mac binary yourself (rather than pulling
