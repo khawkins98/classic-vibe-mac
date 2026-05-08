@@ -181,7 +181,13 @@ export type EmulatorWorkerMessage =
    * /Shared/__url-request.txt, or null if the file is not yet present.
    * Format (ASCII): "<requestId>\n<url>\n"
    */
-  | { type: "url_request_data"; bytes: Uint8Array | null };
+  | { type: "url_request_data"; bytes: Uint8Array | null }
+  /**
+   * Response to a `poll_drawing` message. Contains the raw 512 bytes of
+   * /Shared/__drawing.bin (64×64 1-bit bitmap, MSB-first, 0=white 1=black),
+   * or null if the file is absent or not exactly 512 bytes.
+   */
+  | { type: "drawing_data"; bytes: Uint8Array | null };
 
 /**
  * Messages from the main thread to the worker that are NOT the start message.
@@ -199,4 +205,9 @@ export type EmulatorWorkerRuntimeMessage =
    * `path` must match /Shared/__url-result-<id>.html (validated in worker).
    * `bytes` is the MacRoman-encoded HTML body to write.
    */
-  | { type: "url_result_write"; path: string; bytes: Uint8Array };
+  | { type: "url_result_write"; path: string; bytes: Uint8Array }
+  /**
+   * Ask the worker to read /Shared/__drawing.bin and reply with
+   * `drawing_data`. Sent every 2 s by DrawingWatcher on the main thread.
+   */
+  | { type: "poll_drawing" };

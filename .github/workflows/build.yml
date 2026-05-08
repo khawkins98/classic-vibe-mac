@@ -68,12 +68,15 @@ jobs:
           ls -la build/reader/
           ls -la build/macweather/
           ls -la build/hello-mac/
+          ls -la build/pixelpad/
           test -s build/reader/Reader.bin
           test -s build/reader/Reader.dsk
           test -s build/macweather/MacWeather.bin
           test -s build/macweather/MacWeather.dsk
           test -s build/hello-mac/HelloMac.bin
           test -s build/hello-mac/HelloMac.dsk
+          test -s build/pixelpad/PixelPad.bin
+          test -s build/pixelpad/PixelPad.dsk
 
       # Pack the compiled Reader MacBinary into our own HFS disk image.
       # Feeds the .bin (MacBinary, both forks intact) — NOT the .APPL
@@ -126,11 +129,11 @@ jobs:
         # desktop) and the LAST one in the list also into Startup Items
         # (auto-launch on boot — also ends up the front-most app).
         # Order matters: MacWeather is last so it's the front-most app
-        # after boot, with Reader and HelloMac still available via
+        # after boot, with Reader, HelloMac and PixelPad available via
         # :Applications:.
         run: |
           ./scripts/build-boot-disk.sh \
-            build/reader/Reader.bin,build/hello-mac/HelloMac.bin,build/macweather/MacWeather.bin \
+            build/reader/Reader.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/macweather/MacWeather.bin \
             dist/system755-vibe.dsk || {
             status=$?
             echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
