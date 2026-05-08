@@ -6,31 +6,181 @@
  * Int32 ring; offsets are defined upstream at
  *   src/emulator/common/common.ts → InputBufferAddresses.
  *
- * `wireInput(canvas)` attaches DOM listeners to a canvas element. They
- * dispatch through a small `InputBufferAdapter` set by emulator-loader.ts
- * once the worker hands back the shared buffers. Until the adapter is set,
- * events are dropped silently — safe to call wireInput before the worker
- * boots.
+ * The main thread and emulator worker coordinate via a cyclical lock at
+ * inputBuffer[globalLockAddr]. The cycle is:
+ *   READY_FOR_UI_THREAD (0) → UI_THREAD_LOCK (1) → READY_FOR_EMUL_THREAD (2)
+ *   → EMUL_THREAD_LOCK (3) → READY_FOR_UI_THREAD (0) → …
+ * The main thread (us) acquires from state 0, writes events, releases to
+ * state 2 with Atomics.notify (wakes the worker which is Atomics.wait-ing).
+ * The worker acquires from state 2, reads events, releases to state 0.
+ *
+ * If we ever skip our half of the cycle (which the previous version did —
+ * writing values without participating in the lock at all), the worker's
+ * compareExchange from state 2 never succeeds, and no input is delivered.
+ * That manifested as the emulator showing the host cursor over the canvas
+ * but never tracking it inside the framebuffer, never reacting to clicks.
+ *
+ * Reference: mihaip/infinite-mac@30112da0db
+ *   src/emulator/ui/input.ts → SharedMemoryEmulatorInput
+ *   src/emulator/common/common.ts → updateInputBufferWithEvents,
+ *   InputBufferAddresses, LockStates
  *
  * Keyboard mapping is a subset of upstream
- *   mihaip/infinite-mac@30112da0db src/emulator/common/key-codes.ts
- * (JS_CODE_TO_ADB_KEYCODE) — we keep just the standard US-keyboard set
- * needed for Minesweeper (letters/digits, arrows, modifiers, return,
- * space, escape, delete).
+ *   src/emulator/common/key-codes.ts (JS_CODE_TO_ADB_KEYCODE) — we keep just
+ * the standard US-keyboard set needed for Minesweeper (letters/digits,
+ * arrows, modifiers, return, space, escape, delete).
  */
 
-export interface InputBufferAdapter {
-  pushMouseMove(x: number, y: number): void;
-  /** button: 0=left, 1=middle, 2=right. */
-  pushMouseButton(button: number, down: boolean): void;
-  /** macKeyCode is an ADB scancode (NOT browser keyCode). */
-  pushKey(macKeyCode: number, down: boolean, modifiers: number): void;
+import {
+  InputBufferAddresses,
+  LockStates,
+} from "./emulator-worker-types";
+
+// ── Event queue ────────────────────────────────────────────────────────
+// Mirrors the EmulatorInputEvent shape from upstream common.ts. We only
+// model the events we actually generate from the browser side.
+
+type InputEvent =
+  | { type: "mousemove"; x: number; y: number }
+  | { type: "mousedown"; button: number }
+  | { type: "mouseup"; button: number }
+  | { type: "keydown"; keyCode: number; modifiers: number }
+  | { type: "keyup"; keyCode: number; modifiers: number };
+
+let inputView: Int32Array | null = null;
+const queue: InputEvent[] = [];
+let drainScheduled = false;
+
+/**
+ * Hand off the SharedArrayBuffer-backed input buffer once the worker has
+ * posted handles back. The view spans the full input region; we only touch
+ * the indices in InputBufferAddresses.
+ */
+export function setInputBuffer(buffer: SharedArrayBuffer | null): void {
+  inputView = buffer ? new Int32Array(buffer) : null;
+  if (inputView) tryDrainQueue();
 }
 
-let adapter: InputBufferAdapter | null = null;
+// ── Lock helpers (mirror of upstream ui/input.ts) ──────────────────────
 
-export function setBufferAdapter(a: InputBufferAdapter | null): void {
-  adapter = a;
+function tryAcquireLock(view: Int32Array): boolean {
+  const res = Atomics.compareExchange(
+    view,
+    InputBufferAddresses.globalLockAddr,
+    LockStates.READY_FOR_UI_THREAD,
+    LockStates.UI_THREAD_LOCK,
+  );
+  return res === LockStates.READY_FOR_UI_THREAD;
+}
+
+function releaseLock(view: Int32Array): void {
+  Atomics.store(
+    view,
+    InputBufferAddresses.globalLockAddr,
+    LockStates.READY_FOR_EMUL_THREAD,
+  );
+  // Wake the worker if it's parked in idleWait().
+  Atomics.notify(view, InputBufferAddresses.globalLockAddr);
+}
+
+/**
+ * Drain queued events into the SAB. If the worker currently holds the lock
+ * (state != READY_FOR_UI_THREAD), reschedule to next macrotask. Mirrors
+ * upstream `#tryToSendInput`.
+ */
+function tryDrainQueue(): void {
+  if (!inputView || queue.length === 0) return;
+  if (!tryAcquireLock(inputView)) {
+    scheduleDrain();
+    return;
+  }
+  // Coalesce: only the latest mousemove matters within one cycle. Upstream
+  // common.ts updateInputBufferWithEvents does the same. Buttons collapse
+  // to "last state per button"; one key event per cycle (extras requeued).
+  let hasMousePosition = false;
+  let mouseX = 0;
+  let mouseY = 0;
+  let mouseButtonState = -1;
+  let mouseButton2State = -1;
+  let hasKeyEvent = false;
+  let keyCode = 0;
+  let keyState = 0;
+  let keyModifiers = 0;
+  const remaining: InputEvent[] = [];
+
+  for (const ev of queue) {
+    switch (ev.type) {
+      case "mousemove":
+        // Take the *latest* mousemove (overwrite previous) so the cursor
+        // doesn't lag behind the user. Different from upstream which keeps
+        // the first; for our high-frequency pointermove stream the latest
+        // is what matters.
+        hasMousePosition = true;
+        mouseX = ev.x;
+        mouseY = ev.y;
+        break;
+      case "mousedown":
+      case "mouseup":
+        if (ev.button === 2) {
+          mouseButton2State = ev.type === "mousedown" ? 1 : 0;
+        } else {
+          mouseButtonState = ev.type === "mousedown" ? 1 : 0;
+        }
+        break;
+      case "keydown":
+      case "keyup":
+        if (hasKeyEvent) {
+          remaining.push(ev);
+          break;
+        }
+        hasKeyEvent = true;
+        keyCode = ev.keyCode;
+        keyState = ev.type === "keydown" ? 1 : 0;
+        keyModifiers = ev.modifiers;
+        break;
+    }
+  }
+
+  if (hasMousePosition) {
+    inputView[InputBufferAddresses.mousePositionFlagAddr] = 1;
+    inputView[InputBufferAddresses.mousePositionXAddr] = mouseX;
+    inputView[InputBufferAddresses.mousePositionYAddr] = mouseY;
+  }
+  // Upstream writes -1 for "no change this cycle"; the worker's resetInput
+  // sets these back to 0 after the emul thread reads them, but the C side
+  // distinguishes -1 (no change) from 0 (released) for button transitions.
+  inputView[InputBufferAddresses.mouseButtonStateAddr] = mouseButtonState;
+  inputView[InputBufferAddresses.mouseButton2StateAddr] = mouseButton2State;
+  if (hasKeyEvent) {
+    inputView[InputBufferAddresses.keyEventFlagAddr] = 1;
+    inputView[InputBufferAddresses.keyCodeAddr] = keyCode;
+    inputView[InputBufferAddresses.keyStateAddr] = keyState;
+    inputView[InputBufferAddresses.keyModifiersAddr] = keyModifiers;
+  }
+
+  releaseLock(inputView);
+
+  queue.length = 0;
+  if (remaining.length) {
+    queue.push(...remaining);
+    scheduleDrain();
+  }
+}
+
+function scheduleDrain(): void {
+  if (drainScheduled) return;
+  drainScheduled = true;
+  // setTimeout(0) yields to the worker so it can flip the lock back. Same
+  // as upstream `#tryToSendInputLater`.
+  setTimeout(() => {
+    drainScheduled = false;
+    tryDrainQueue();
+  }, 0);
+}
+
+function enqueue(ev: InputEvent): void {
+  queue.push(ev);
+  tryDrainQueue();
 }
 
 // ── KeyboardEvent.code → ADB scancode (subset of upstream key-codes.ts) ──
@@ -58,39 +208,60 @@ const JS_CODE_TO_ADB: Readonly<Record<string, number>> = {
 };
 
 export function wireInput(canvas: HTMLCanvasElement): () => void {
+  // We always recompute getBoundingClientRect() per-event. The window may
+  // have moved/resized between worker init and the first user event; a rect
+  // cached at handoff time would be stale. Cheap (no layout flush triggered
+  // by reads-only-after-write patterns elsewhere on the page).
   const onPointerMove = (e: PointerEvent) => {
-    if (!adapter) return;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    // CSS pixels → emulator framebuffer pixels. Without scaling, a click on
+    // the right edge of a 1280-CSS-px canvas would land at x=1280 in the
+    // 640-px emulator framebuffer (off-screen).
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = Math.max(0, Math.min(canvas.width, (e.clientX - rect.left) * scaleX));
-    const y = Math.max(0, Math.min(canvas.height, (e.clientY - rect.top) * scaleY));
-    adapter.pushMouseMove(Math.floor(x), Math.floor(y));
+    const x = clamp(0, canvas.width - 1, (e.clientX - rect.left) * scaleX);
+    const y = clamp(0, canvas.height - 1, (e.clientY - rect.top) * scaleY);
+    enqueue({ type: "mousemove", x: Math.floor(x), y: Math.floor(y) });
   };
 
   const onPointerDown = (e: PointerEvent) => {
     canvas.focus();
-    adapter?.pushMouseButton(e.button, true);
+    // Capture the pointer so drag-out-of-canvas still delivers pointerup
+    // (e.g. menu drags that wander off the emulator viewport).
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* setPointerCapture can throw if the pointer is already lost */
+    }
+    // Send a fresh mousemove first so the press lands at exactly the
+    // current cursor position (avoids "ghost" clicks at a stale location
+    // when the user clicks before moving).
+    onPointerMove(e);
+    enqueue({ type: "mousedown", button: e.button });
   };
 
   const onPointerUp = (e: PointerEvent) => {
-    adapter?.pushMouseButton(e.button, false);
+    enqueue({ type: "mouseup", button: e.button });
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* may already be released */
+    }
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (!adapter) return;
     const adb = JS_CODE_TO_ADB[e.code];
     if (adb === undefined) return;
     e.preventDefault();
-    adapter.pushKey(adb, true, modifiersOf(e));
+    enqueue({ type: "keydown", keyCode: adb, modifiers: modifiersOf(e) });
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
-    if (!adapter) return;
     const adb = JS_CODE_TO_ADB[e.code];
     if (adb === undefined) return;
     e.preventDefault();
-    adapter.pushKey(adb, false, modifiersOf(e));
+    enqueue({ type: "keyup", keyCode: adb, modifiers: modifiersOf(e) });
   };
 
   // Suppress the browser context menu so right-click can be option-click.
@@ -99,6 +270,7 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
   canvas.addEventListener("pointermove", onPointerMove);
   canvas.addEventListener("pointerdown", onPointerDown);
   canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
   // Keys go on window, not the canvas — System 7 expects keystrokes whether
   // or not the canvas has focus, and tabIndex-focus is fragile.
   window.addEventListener("keydown", onKeyDown);
@@ -109,10 +281,15 @@ export function wireInput(canvas: HTMLCanvasElement): () => void {
     canvas.removeEventListener("pointermove", onPointerMove);
     canvas.removeEventListener("pointerdown", onPointerDown);
     canvas.removeEventListener("pointerup", onPointerUp);
+    canvas.removeEventListener("pointercancel", onPointerUp);
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
     canvas.removeEventListener("contextmenu", onContextMenu);
   };
+}
+
+function clamp(min: number, max: number, v: number): number {
+  return v < min ? min : v > max ? max : v;
 }
 
 function modifiersOf(e: KeyboardEvent): number {
