@@ -28,6 +28,36 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-09 — Color rendering investigation: `screen win/W/H` is correct and 32bpp
+**Context:** Issue #48 asked us to verify that the BGRA→RGBA blit in `emulator-loader.ts`
+was rendering correct hues. The user noted "colors might be a bit off."
+**Finding:** The `copyAndSwapBgraToRgba()` function is correct — BasiliskII's WASM video
+driver outputs 32bpp BGRA (big-endian Mac ARGB interpreted as little-endian bytes = B,G,R,A).
+The swap `dst[R]=src[2], dst[G]=src[1], dst[B]=src[0]` is correct. The `screen win/W/H`
+pref format (without explicit depth) is also confirmed correct: Infinite Mac uses the
+identical format in their working reference implementation and their driver defaults to
+32bpp. The SAB is sized `W×H×4` matching 32bpp. Any perceived "off" hue is most likely
+gamma perception (Mac CRT ~1.8 vs modern sRGB ~2.2) — not a code bug.
+**Action:** No code change needed. Issue closed as investigated/working-as-intended.
+
+### 2026-05-09 — Copilot CLI v1.0.43 SEA binary: fork→spawn patch required for extensions
+**Context:** The Copilot CLI ships as a Single Executable Application (SEA binary) on
+v1.0.43. The extension SDK (`@github/copilot-sdk/extension`) calls `joinSession()` which
+internally uses `child_process.fork()` to spawn the extension module. Inside a SEA binary,
+`fork()` re-invokes the SEA, not a plain Node.js process — so the extension can never boot.
+**Finding:** The fix is to monkey-patch `child_process.fork` to call `child_process.spawn`
+instead, inside the CLI's `app.js` entry point at
+`~/.copilot/pkg/universal/1.0.43/app.js`. Add this block before the main `require`:
+```js
+const cp = require('child_process');
+const _fork = cp.fork.bind(cp);
+cp.fork = (mod, args, opts) => cp.spawn(process.execPath, [mod, ...(args||[])], {stdio: 'inherit', ...(opts||{})});
+```
+v1.0.44 ships as plain Node.js and does NOT need this patch.
+**Action:** Patch was applied to v1.0.43 app.js. Extensions in `.github/extensions/` will
+activate on the next CLI restart. If upgrading to v1.0.44+, remove the patch from the old
+binary (or just ignore it since the patched binary is not used).
+
 ### 2026-05-08 — Phase-2 precompiled `.code.bin` missing in production
 **Context:** The Build button on the deployed playground was 404'ing on
 `precompiled/<project>.code.bin`, killing the headline Phase-2 feature
