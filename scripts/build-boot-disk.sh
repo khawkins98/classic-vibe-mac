@@ -51,7 +51,7 @@ set -euo pipefail
 # --- Args ---------------------------------------------------------------
 
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <app.bin> <output.dsk> [--chunk <chunks-dir>]" >&2
+  echo "Usage: $0 <app.bin> <output.dsk> [--chunk <chunks-dir>] [--shared-dir <dir>]" >&2
   exit 64
 fi
 
@@ -60,10 +60,15 @@ OUTPUT="$2"
 shift 2
 
 CHUNKS_DIR=""
+SHARED_DIR=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --chunk)
       CHUNKS_DIR="${2:?--chunk requires a directory}"
+      shift 2
+      ;;
+    --shared-dir)
+      SHARED_DIR="${2:?--shared-dir requires a directory}"
       shift 2
       ;;
     *)
@@ -274,6 +279,72 @@ case "${APP_TYPE}" in
   APPL/*) : ;;  # APPL is what we want; creator may be ???? if app didn't register.
   *) echo "FATAL: copied file has type ${APP_TYPE}, expected APPL/<creator>." >&2; exit 1 ;;
 esac
+
+# --- Step 2.5: bake the :Shared: folder into the boot volume ------------
+#
+# Reader (src/app/reader.c) opens HTML by Pascal-string path
+# `:Shared:<name>` via HOpen(vRefNum=0, dirID=0, ...). The leading colon
+# makes that a relative path; classic Mac OS resolves it against the
+# application's working directory (set by Process Manager to the
+# directory containing the app — i.e. :System Folder:Startup Items:
+# in our case) — so the `Shared` folder must sit alongside Reader.
+# We additionally copy the folder to the boot volume root so older
+# launch paths (or a future CWD change) still resolve.
+#
+# Why not BasiliskII's `extfs /Shared/` mount? extfs *does* expose the
+# Emscripten /Shared/ tree as a Mac volume, but the volume name is
+# hard-coded to "Unix" in upstream macemu's STR_EXTFS_VOLUME_NAME
+# (BasiliskII/src/Unix/user_strings_unix.cpp) — the volume mounts as
+# `Unix:`, not `Shared:`. Reader's hard-coded `:Shared:` prefix can never
+# match. Rather than carry a private fork of macemu just to rename the
+# volume, we ship the HTML on the HFS boot disk where Reader already
+# expects it. extfs is still wired in the worker for future
+# Uploads/Downloads use, but Reader no longer depends on it.
+#
+# See LEARNINGS.md (2026-05-08, "extfs volume name is 'Unix' not 'Shared'").
+
+# Default the shared dir to repo's src/web/public/shared if the caller
+# didn't specify and that location exists. Lets local + CI invocations
+# stay short.
+if [[ -z "${SHARED_DIR}" ]]; then
+  CANDIDATE="${REPO_ROOT}/src/web/public/shared"
+  if [[ -d "${CANDIDATE}" ]]; then
+    SHARED_DIR="${CANDIDATE}"
+  fi
+fi
+
+if [[ -n "${SHARED_DIR}" && -d "${SHARED_DIR}" ]]; then
+  HTML_FILES=("${SHARED_DIR}"/*.html)
+  if [[ -e "${HTML_FILES[0]}" ]]; then
+    echo "[boot-disk] baking :Shared: folder from ${SHARED_DIR}"
+
+    # Create the folder at the boot volume root and inside Startup Items.
+    # `hmkdir` errors if the dir already exists — swallow that one case.
+    for parent in ":" ":System Folder:Startup Items:"; do
+      if ! hls -a "${parent}" 2>/dev/null | grep -q "^Shared$"; then
+        hmkdir "${parent}Shared" || true
+      fi
+    done
+
+    # hcopy without -m sends the file as a single data fork. HTML files
+    # have no resource fork by nature, so this is correct: the Mac sees
+    # them with empty .finf metadata and reads them as binary streams,
+    # which matches what Reader's FSRead loop wants.
+    for f in "${HTML_FILES[@]}"; do
+      base="$(basename "${f}")"
+      echo "[boot-disk]   :Shared:${base}  (and :System Folder:Startup Items:Shared:${base})"
+      hcopy "${f}" ":Shared:${base}"
+      hcopy "${f}" ":System Folder:Startup Items:Shared:${base}"
+    done
+
+    echo "[boot-disk] :Shared: contents:"
+    hls -l ":Shared:" || true
+  else
+    echo "[boot-disk] note: no *.html under ${SHARED_DIR}; skipping :Shared: bake"
+  fi
+else
+  echo "[boot-disk] note: --shared-dir not set and no default; skipping :Shared: bake"
+fi
 
 humount "${OUTPUT}" >/dev/null
 trap - EXIT
