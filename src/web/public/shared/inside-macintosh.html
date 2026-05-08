@@ -1,0 +1,36 @@
+<h1>Inside Macintosh</h1>
+
+<p>Reader is a thin C program. Almost everything visible on screen is
+drawn or managed by the classic Mac OS Toolbox. Three managers do most
+of the work.</p>
+
+<h2>QuickDraw</h2>
+
+<p><b>QuickDraw</b> is the 2D drawing engine baked into every classic
+Macintosh. It owns rectangles, regions, the pen, fonts, and pixel
+manipulation. Reader calls <i>TextFont</i>, <i>TextSize</i>, and
+<i>TextFace</i> to switch styles, then <i>MoveTo</i> + <i>DrawText</i>
+to paint each word at its computed position. The bullet glyphs are
+just <i>PaintOval</i> calls into a small rect.</p>
+
+<h2>Window Manager</h2>
+
+<p>The <b>Window Manager</b> handles the document window itself: the
+title bar, the close box, dragging, growing, the front-to-back
+ordering. Reader's window is defined declaratively in a <b>WIND</b>
+resource and instantiated with <i>GetNewWindow</i>. The event loop's
+<i>FindWindow</i> turns a click point into a part code (in title bar?
+in content? in grow box?) so Reader knows whether to scroll, navigate,
+or hand the click back to the system.</p>
+
+<h2>Resource Manager</h2>
+
+<p>The <b>Resource Manager</b> is the original asset pipeline. Menus,
+windows, alerts, strings, and even the application icon all live in
+the resource fork as small typed records (<i>MENU</i>, <i>WIND</i>,
+<i>ALRT</i>, <i>STR#</i>). Reader's UI text and fallback HTML body
+come from a <i>STR#</i> resource at runtime via
+<i>GetIndString</i>, which means localizing the app would be a
+matter of swapping resources, not recompiling.</p>
+
+<p><a href="index.html">Back to the index</a></p>

@@ -297,6 +297,14 @@ async function boot(
     screenWidth: config.screen.width,
     screenHeight: config.screen.height,
     ramSizeMB: 16, // 16MB is plenty for System 7.5.5 + Minesweeper.
+    // Forward shared-folder URLs as absolute strings so the worker (which
+    // runs from a blob: or different base) can fetch them without needing
+    // to know about Vite's `base` setting. Empty list is fine — the worker
+    // will just create an empty `/Shared/` directory.
+    sharedFolderFiles: config.sharedFolder.files.map((f) => ({
+      name: f.name,
+      url: absoluteUrl(f.url),
+    })),
   };
   worker.postMessage(startMsg);
 
