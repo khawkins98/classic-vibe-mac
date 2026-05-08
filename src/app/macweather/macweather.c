@@ -75,45 +75,119 @@ static Boolean       gHaveData    = false;
 
 /* ------------------------------------------------------------ File I/O */
 
-/* Build the Pascal-string ":Unix:weather.json" into out. Done at runtime
- * (rather than as a file-scope literal) because Retro68's GCC won't
- * implicitly cast a "\p..." char-array literal into the unsigned-char
- * Str255 type — see LEARNINGS.md. */
-static void BuildWeatherPath(StringPtr out)
+/* Look up the "Unix" volume's vRefNum by iterating mounted volumes via
+ * PBHGetVInfo with positive ioVolIndex. Returns 0 if not found.
+ *
+ * BasiliskII's extfs in our boot config doesn't always surface the
+ * /Shared/ tree as a mounted Mac volume — when it does we get live
+ * updates from the JS host's weather poll; when it doesn't we fall
+ * back to the boot-disk-baked :Shared:weather.json. */
+static short FindUnixVRefNum(void)
 {
-    static const char k[] = ":Unix:weather.json";
-    int n = (int)(sizeof(k) - 1);   /* exclude trailing NUL */
-    out[0] = (unsigned char)n;
-    for (int i = 0; i < n; i++) out[i + 1] = (unsigned char)k[i];
+    HVolumeParam pb;
+    Str255 vname;
+    short index = 1;
+    while (index <= 32) {
+        pb.ioCompletion = NULL;
+        pb.ioNamePtr = vname;
+        pb.ioVRefNum = 0;
+        pb.ioVolIndex = index;
+        OSErr err = PBHGetVInfoSync((HParmBlkPtr)&pb);
+        if (err != noErr) return 0;
+        if (vname[0] == 4 &&
+            vname[1] == 'U' && vname[2] == 'n' &&
+            vname[3] == 'i' && vname[4] == 'x') {
+            return pb.ioVRefNum;
+        }
+        index++;
+    }
+    return 0;
 }
 
-/* Get modtime of :Unix:weather.json (in Mac seconds-since-1904). Returns 0
- * if the file is unreachable. */
+/* Build a Pascal string from a C string. */
+static void PStrFromC(StringPtr out, const char *c)
+{
+    int n = 0;
+    while (c[n] && n < 255) n++;
+    out[0] = (unsigned char)n;
+    for (int i = 0; i < n; i++) out[i + 1] = (unsigned char)c[i];
+}
+
+/* Get modtime of weather.json. Tries the Unix volume first (live updates
+ * from the JS poll) and falls back to :Shared:weather.json on the boot
+ * volume (baked at build time by scripts/build-boot-disk.sh). */
 static unsigned long GetWeatherFileModTime(void)
 {
+    short unixVRef = FindUnixVRefNum();
     HFileInfo pb;
-    Str255 path;
-    BuildWeatherPath(path);
-    pb.ioNamePtr = path;
+    Str255 name;
+    OSErr err;
+
+    if (unixVRef != 0) {
+        PStrFromC(name, "weather.json");
+        pb.ioNamePtr = name;
+        pb.ioVRefNum = unixVRef;
+        pb.ioFDirIndex = 0;
+        pb.ioDirID = 0;
+        err = PBHGetFInfoSync((HParmBlkPtr)&pb);
+        if (err == noErr) return (unsigned long)pb.ioFlMdDat;
+    }
+
+    /* Fallback: :Shared:weather.json — the boot-disk-baked file. */
+    PStrFromC(name, ":Shared:weather.json");
+    pb.ioNamePtr = name;
     pb.ioVRefNum = 0;
     pb.ioFDirIndex = 0;
     pb.ioDirID = 0;
-    OSErr err = PBHGetFInfoSync((HParmBlkPtr)&pb);
+    err = PBHGetFInfoSync((HParmBlkPtr)&pb);
     if (err != noErr) return 0;
     return (unsigned long)pb.ioFlMdDat;
 }
 
+static OSErr gLastOpenErr = 0;
+static OSErr gLastReadErr = 0;
+static short gLastUnixVRef = 0;
+static char  gReadFromBoot = 0;   /* 1 if last read fell back to :Shared: */
+
+/* Try to read the weather JSON. Tries Unix:weather.json first (live
+ * updates from the JS poller); falls back to :Shared:weather.json baked
+ * onto the boot disk at build time. Returns the byte count or -1. */
 static long ReadWeatherFile(void)
 {
-    Str255 path;
-    BuildWeatherPath(path);
+    short unixVRef = FindUnixVRefNum();
+    gLastUnixVRef = unixVRef;
+    Str255 name;
     short refNum = 0;
-    OSErr err = HOpen(0, 0, path, fsRdPerm, &refNum);
+    OSErr err;
+    long count;
+
+    if (unixVRef != 0) {
+        PStrFromC(name, "weather.json");
+        err = HOpen(unixVRef, 0, name, fsRdPerm, &refNum);
+        gLastOpenErr = err;
+        if (err == noErr) {
+            count = kJsonBufferBytes;
+            err = FSRead(refNum, &count, gJsonBuf);
+            gLastReadErr = err;
+            FSClose(refNum);
+            if (err == noErr || err == eofErr) {
+                gReadFromBoot = 0;
+                return count;
+            }
+        }
+    }
+
+    /* Fallback: the boot-disk-baked sample at :Shared:weather.json. */
+    PStrFromC(name, ":Shared:weather.json");
+    err = HOpen(0, 0, name, fsRdPerm, &refNum);
+    gLastOpenErr = err;
     if (err != noErr) return -1;
-    long count = kJsonBufferBytes;
+    count = kJsonBufferBytes;
     err = FSRead(refNum, &count, gJsonBuf);
+    gLastReadErr = err;
     FSClose(refNum);
     if (err != noErr && err != eofErr) return -1;
+    gReadFromBoot = 1;
     return count;
 }
 
@@ -189,41 +263,37 @@ static void DrawWeather(void)
     Rect cr = gWindow->portRect;
     EraseRect(&cr);
 
-    /* Title strip. */
+    /* No title strip — the WIND title bar already says "MacWeather". */
     TextFont(applFont);
     TextSize(9);
     TextFace(0);
-    MoveTo(cr.left + 8, cr.top + 14);
-    DrawCStr("MacWeather");
 
     if (!gHaveData) {
         TextFont(applFont);
         TextSize(12);
         TextFace(0);
         MoveTo(cr.left + 16, cr.top + 60);
-        DrawCStr("Waiting for weather data");
-        MoveTo(cr.left + 16, cr.top + 80);
-        DrawCStr("from :Unix:weather.json ...");
+        DrawCStr("Waiting for weather data ...");
         TextSize(9);
-        MoveTo(cr.left + 16, cr.top + 110);
-        DrawCStr("(the JS host fetches from api.open-meteo.com");
-        MoveTo(cr.left + 16, cr.top + 124);
-        DrawCStr(" and writes the file every 15 minutes)");
+        MoveTo(cr.left + 16, cr.top + 90);
+        DrawCStr("Trying Unix:weather.json (live), then :Shared:weather.json (baked).");
+        MoveTo(cr.left + 16, cr.top + 104);
+        DrawCStr("Updates from api.open-meteo.com, written by the JS host every 15 minutes.");
         return;
     }
 
     /* --- Top half: glyph + big temperature + summary stats --- */
-    short topY = (short)(cr.top + 24);
-    short glyphX = (short)(cr.left + 16);
+    short topY = (short)(cr.top + 22);
+    short glyphX = (short)(cr.left + 12);
     short glyphY = topY;
-    short glyphSize = 64;
+    short glyphSize = 48;
 
     WeatherDrawGlyph(gWeather.wmo_code, glyphX, glyphY, glyphSize);
 
-    /* Big temperature. Geneva 24 bold (numeric IDs because Retro68's
+    /* Big temperature. Geneva 18 bold (numeric IDs because Retro68's
      * Fonts.h doesn't expose `geneva`). */
     TextFont(applFont);
-    TextSize(24);
+    TextSize(18);
     TextFace(bold);
     Str255 tempStr;
     IntToPStr(gWeather.temp_f, tempStr);
@@ -232,26 +302,26 @@ static void DrawWeather(void)
     tempStr[addAt + 1] = 0xA1;     /* MacRoman degree sign */
     tempStr[addAt + 2] = 'F';
     tempStr[0] = (unsigned char)(addAt + 2);
-    short tx = (short)(glyphX + glyphSize + 16);
-    short ty = (short)(topY + 30);
+    short tx = (short)(glyphX + glyphSize + 12);
+    short ty = (short)(topY + 18);
     MoveTo(tx, ty);
     DrawString(tempStr);
 
     /* Condition label, regular weight. */
-    TextSize(12);
+    TextSize(10);
     TextFace(0);
-    MoveTo(tx, (short)(ty + 18));
+    MoveTo(tx, (short)(ty + 14));
     DrawCStr(WmoLabel(gWeather.wmo_code));
 
     /* "Feels like XX°F" line. */
-    TextSize(10);
+    TextSize(9);
     Str255 feels;
     IntToPStr(gWeather.feels_like_f, feels);
     short fa = feels[0];
     feels[fa + 1] = 0xA1;
     feels[fa + 2] = 'F';
     feels[0] = (unsigned char)(fa + 2);
-    MoveTo(tx, (short)(ty + 34));
+    MoveTo(tx, (short)(ty + 26));
     DrawCStr("Feels like ");
     DrawString(feels);
 
@@ -261,7 +331,7 @@ static void DrawWeather(void)
     short wa = wind[0];
     wind[wa + 1] = ' '; wind[wa + 2] = 'm'; wind[wa + 3] = 'p'; wind[wa + 4] = 'h';
     wind[0] = (unsigned char)(wa + 4);
-    MoveTo(tx, (short)(ty + 48));
+    MoveTo(tx, (short)(ty + 38));
     DrawCStr("Wind ");
     if (gWeather.wind_dir < 16) {
         DrawCStr(kCompass[gWeather.wind_dir]);
@@ -274,24 +344,24 @@ static void DrawWeather(void)
     short ha = hum[0];
     hum[ha + 1] = '%';
     hum[0] = (unsigned char)(ha + 1);
-    MoveTo(tx, (short)(ty + 62));
+    MoveTo(tx, (short)(ty + 50));
     DrawCStr("Humidity ");
     DrawString(hum);
 
     /* Divider. */
-    short divY = (short)(cr.top + 24 + 100);
+    short divY = (short)(cr.top + 22 + 70);
     MoveTo((short)(cr.left + 8), divY);
     LineTo((short)(cr.right - 8), divY);
 
     /* --- Bottom half: 3 daily-forecast panels --- */
-    short panelTop = (short)(divY + 12);
+    short panelTop = (short)(divY + 8);
     short panelW = (short)((cr.right - cr.left - 16) / 3);
     for (int i = 0; i < WEATHER_DAILY_COUNT; i++) {
         short px = (short)(cr.left + 8 + i * panelW);
         /* DOW */
-        TextSize(10);
+        TextSize(9);
         TextFace(bold);
-        MoveTo((short)(px + panelW / 2 - 12), (short)(panelTop + 12));
+        MoveTo((short)(px + panelW / 2 - 10), (short)(panelTop + 10));
         Str255 dow;
         dow[0] = 3;
         dow[1] = (unsigned char)gWeather.daily[i].dow[0];
@@ -302,18 +372,18 @@ static void DrawWeather(void)
         /* Glyph. */
         TextFace(0);
         WeatherDrawGlyph(gWeather.daily[i].wmo_code,
-                         (short)(px + panelW / 2 - 16),
-                         (short)(panelTop + 18),
-                         32);
+                         (short)(px + panelW / 2 - 12),
+                         (short)(panelTop + 14),
+                         24);
 
         /* Hi / lo. */
-        TextSize(10);
+        TextSize(9);
         Str255 hi, lo;
         IntToPStr(gWeather.daily[i].hi_f, hi);
         short hia = hi[0]; hi[hia + 1] = 0xA1; hi[0] = (unsigned char)(hia + 1);
         IntToPStr(gWeather.daily[i].lo_f, lo);
         short loa = lo[0]; lo[loa + 1] = 0xA1; lo[0] = (unsigned char)(loa + 1);
-        MoveTo((short)(px + panelW / 2 - 24), (short)(panelTop + 70));
+        MoveTo((short)(px + panelW / 2 - 18), (short)(panelTop + 54));
         TextFace(bold);
         DrawString(hi);
         TextFace(0);
@@ -343,6 +413,11 @@ static void DrawWeather(void)
 
     MoveTo((short)(cr.left + 8), (short)(cr.bottom - 8));
     DrawString(time);
+    if (gReadFromBoot) {
+        DrawCStr("  (baked)");
+    } else {
+        DrawCStr("  (live)");
+    }
 
     {
         const char *hint = "Cmd-R to refresh";

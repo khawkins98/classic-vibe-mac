@@ -257,15 +257,27 @@ if ! hls -a 2>/dev/null | grep -q "^Applications$"; then
   hmkdir ":Applications" || true
 fi
 
-# Copy each MacBinary in twice — once into Startup Items (auto-launch) and
-# once into :Applications: (user-launch). hcopy -m decodes MacBinary back
-# into a real two-fork Mac file (data fork + resource fork + Finder
-# Type/Creator), which is what System 7's Finder needs to recognise it as
-# launchable.
-for BINARY in "${BINARIES[@]}"; do
+# Copy each MacBinary in. Every app goes into :Applications: (so users
+# can re-launch from the desktop). For Startup Items (auto-launch), only
+# the LAST app in the list is installed — System 7's Finder launches
+# Startup Items concurrently, but the last-launched app ends up in
+# front, and our chrome only shows the foreground window cleanly. The
+# CI workflow orders the comma-separated list so the most-interesting
+# demo (MacWeather, with live data) ends up frontmost.
+#
+# hcopy -m decodes MacBinary back into a real two-fork Mac file (data
+# fork + resource fork + Finder Type/Creator), which is what System 7's
+# Finder needs to recognise it as launchable.
+LAST_INDEX=$(( ${#BINARIES[@]} - 1 ))
+for i in "${!BINARIES[@]}"; do
+  BINARY="${BINARIES[$i]}"
   APP_NAME_NOEXT="$(basename "${BINARY}" .bin)"
-  echo "[boot-disk] installing ${APP_NAME_NOEXT} (Startup Items + Applications)"
-  hcopy -m "${BINARY}" ":System Folder:Startup Items:"
+  if [[ $i -eq $LAST_INDEX ]]; then
+    echo "[boot-disk] installing ${APP_NAME_NOEXT} (Startup Items + Applications)"
+    hcopy -m "${BINARY}" ":System Folder:Startup Items:"
+  else
+    echo "[boot-disk] installing ${APP_NAME_NOEXT} (Applications only)"
+  fi
   hcopy -m "${BINARY}" ":Applications:"
 
   # Verify the copy landed and looks Mac-shaped (Type/Creator codes).
@@ -275,10 +287,15 @@ for BINARY in "${BINARIES[@]}"; do
   # length. An APPL with rsrc==0 is a paperweight: no SIZE resource means
   # the Process Manager has no memory partition info and the launch path
   # bombs on an unimplemented-trap dialog before main() even runs.
-  HLS_OUT="$(hls -l ":System Folder:Startup Items:")"
+  if [[ $i -eq $LAST_INDEX ]]; then
+    VERIFY_DIR=":System Folder:Startup Items:"
+  else
+    VERIFY_DIR=":Applications:"
+  fi
+  HLS_OUT="$(hls -l "${VERIFY_DIR}")"
   APP_LINE="$(printf '%s\n' "${HLS_OUT}" | awk -v n="${APP_NAME_NOEXT}" '$NF==n')"
   if [[ -z "${APP_LINE}" ]]; then
-    echo "FATAL: copied app '${APP_NAME_NOEXT}' not found in Startup Items listing." >&2
+    echo "FATAL: copied app '${APP_NAME_NOEXT}' not found in ${VERIFY_DIR} listing." >&2
     echo "${HLS_OUT}" >&2
     exit 1
   fi
@@ -344,6 +361,19 @@ if [[ -z "${SHARED_DIR}" ]]; then
 fi
 
 if [[ -n "${SHARED_DIR}" && -d "${SHARED_DIR}" ]]; then
+  # MacWeather: bake an initial weather.json into :Shared: so MacWeather has
+  # something to display on first boot, before (or in lieu of) the JS poller
+  # writing live data into the extfs `Unix:` volume. Sample JSON file that
+  # mirrors the open-meteo response shape MacWeather parses — same shape the
+  # JS poller writes at runtime.
+  WEATHER_FIXTURE="${SHARED_DIR}/weather.json"
+  if [[ ! -f "${WEATHER_FIXTURE}" ]]; then
+    cat > "${WEATHER_FIXTURE}" <<'WEATHER_JSON'
+{"current":{"time":"2026-05-08T12:00","temperature_2m":62,"apparent_temperature":58,"weather_code":2,"wind_speed_10m":7,"wind_direction_10m":290,"relative_humidity_2m":58},"daily":{"time":["2026-05-08","2026-05-09","2026-05-10","2026-05-11"],"temperature_2m_max":[68,71,65,72],"temperature_2m_min":[48,50,46,49],"weather_code":[2,1,61,0]}}
+WEATHER_JSON
+    echo "[boot-disk] wrote sample fixture ${WEATHER_FIXTURE}"
+  fi
+
   HTML_FILES=("${SHARED_DIR}"/*.html)
   if [[ -e "${HTML_FILES[0]}" ]]; then
     echo "[boot-disk] baking :Shared: folder from ${SHARED_DIR}"
@@ -382,6 +412,24 @@ if [[ -n "${SHARED_DIR}" && -d "${SHARED_DIR}" ]]; then
       hattrib -t TEXT -c CVMR ":System Folder:Startup Items:Shared:${base}" \
         || echo "[boot-disk] WARN: hattrib failed on :System Folder:Startup Items:Shared:${base}"
     done
+
+    # weather.json: similar copy + tag with TEXT/CVMW so MacWeather owns
+    # the file type. The fallback path inside MacWeather opens
+    # :Shared:weather.json, so we copy it both at the volume root (where
+    # MacWeather's HOpen with vRefNum=0 + path :Shared:... resolves
+    # against the Process Manager-set working directory) and into the
+    # Startup Items Shared subfolder (the actual :Shared: that resolves
+    # when launched from there). Same pattern as the HTML files for
+    # Reader.
+    if [[ -f "${WEATHER_FIXTURE}" ]]; then
+      echo "[boot-disk]   :Shared:weather.json"
+      hcopy "${WEATHER_FIXTURE}" ":Shared:weather.json"
+      hcopy "${WEATHER_FIXTURE}" ":System Folder:Startup Items:Shared:weather.json"
+      hattrib -t TEXT -c CVMW ":Shared:weather.json" \
+        || echo "[boot-disk] WARN: hattrib failed on :Shared:weather.json"
+      hattrib -t TEXT -c CVMW ":System Folder:Startup Items:Shared:weather.json" \
+        || echo "[boot-disk] WARN: hattrib failed on :System Folder:Startup Items:Shared:weather.json"
+    fi
 
     echo "[boot-disk] :Shared: contents:"
     hls -l ":Shared:" || true

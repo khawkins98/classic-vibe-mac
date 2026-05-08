@@ -65,9 +65,14 @@ resource 'MBAR' (128) {
 
 /* ----------------------------------------------------------------- Window */
 
-/* Content rect: 480 wide x 340 tall (top, left, bottom, right). */
+/* Content rect: 360 wide x 240 tall (top, left, bottom, right).
+ * Positioned in the lower-right so it doesn't fully overlap with
+ * Reader (which sits in the upper-left). System 7's screen is 640x480
+ * by default; with Reader at {40, 40, 380, 520} we want MacWeather
+ * to peek out from below. Both windows visible after both apps
+ * auto-launch from Startup Items. */
 resource 'WIND' (128) {
-    { 60, 60, 400, 540 },
+    { 220, 260, 460, 620 },
     documentProc,
     visible,
     goAway,
@@ -90,7 +95,7 @@ resource 'DITL' (128) {
         StaticText { disabled, "classic-vibe-mac, 2026." };
 
         { 60, 70, 80, 320 },
-        StaticText { disabled, "Reads :Unix:weather.json from the host." };
+        StaticText { disabled, "Reads Unix:weather.json from the host." };
 
         { 85, 70, 105, 320 },
         StaticText { disabled, "Data: api.open-meteo.com" };

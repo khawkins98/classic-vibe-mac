@@ -1,28 +1,29 @@
 /**
- * weather-poller.ts — fetch weather from open-meteo and surface it to the
- * emulated Mac as `:Unix:weather.json`.
+ * weather-poller.ts — fetch weather from open-meteo on the main thread and
+ * surface it to the emulated Mac as `:Unix:weather.json`.
  *
  * Architecture:
- *   - This runs INSIDE the BasiliskII worker (after the Module's preRun has
- *     created /Shared/), not on the main thread. The Module's FS lives in
- *     the worker, and BasiliskII's `extfs /Shared/` mounts that tree as
- *     the Mac volume "Unix:" — so a write to /Shared/weather.json in the
- *     worker shows up as :Unix:weather.json inside the guest.
- *   - We try `navigator.geolocation` (only available on the main thread, so
- *     the caller passes coords in if it has them; we fall back to the
- *     configured default otherwise).
- *   - Fetch interval: 15 minutes — open-meteo's free tier is generous and
- *     their data updates hourly, but 15 min lines up nicely with the user
- *     leaving the page open for a quick boot demo.
+ *   - Runs on the **main thread**, not in the BasiliskII worker. The
+ *     worker's microtask queue is starved by the WASM event loop (it
+ *     blocks inside `Atomics.wait` between blits), so a `fetch()` issued
+ *     from the worker never gets its `then()` callback scheduled. The
+ *     main thread is idle in between requestAnimationFrame frames and
+ *     can run fetch promises normally.
+ *   - The poller posts the JSON bytes to the worker via
+ *     `worker.postMessage({ type: "weather_data", bytes })`. The worker
+ *     handler writes them into the Emscripten FS at /Shared/weather.json,
+ *     which BasiliskII's `extfs /Shared/` mounts as the Mac volume
+ *     "Unix:" — so MacWeather sees :Unix:weather.json.
+ *   - Fetch interval: 15 minutes. open-meteo's data updates hourly.
  *
- * Failure mode: on fetch error, we DO NOT write a stub error file — the
- * Mac side stays on whatever it had (or the friendly "no data" placeholder
- * if this is the first attempt). MacWeather watches modtime, not absence.
+ * Failure mode: on fetch error, we DO NOT post anything — the Mac side
+ * stays on whatever it had (or the "no data" placeholder if this is the
+ * first attempt). MacWeather watches modtime, not absence.
  */
 
 export interface WeatherPollerConfig {
-  /** Emscripten Module.FS instance, with /Shared/ already created. */
-  emscriptenFs: any;
+  /** Worker to which we post `{ type: "weather_data", bytes }` messages. */
+  worker: Worker;
   /** Coordinates to use if no overriding source supplies any. */
   fallbackLat: number;
   fallbackLon: number;
@@ -56,14 +57,19 @@ function buildUrl(lat: number, lon: number): string {
   return `https://api.open-meteo.com/v1/forecast?${q.toString()}`;
 }
 
-async function fetchAndWrite(
-  fs: any,
+async function fetchAndPost(
+  worker: Worker,
   lat: number,
   lon: number,
 ): Promise<boolean> {
   try {
     const url = buildUrl(lat, lon);
-    const resp = await fetch(url, { cache: "no-store" });
+    console.log("[weather-poller] GET", url);
+    const resp = await fetch(url, {
+      cache: "no-store",
+      mode: "cors",
+      credentials: "omit",
+    });
     if (!resp.ok) {
       console.warn(
         `[weather-poller] HTTP ${resp.status} on ${url}; keeping previous data.`,
@@ -72,12 +78,16 @@ async function fetchAndWrite(
     }
     const text = await resp.text();
     const bytes = new TextEncoder().encode(text);
-    const path = "/Shared/weather.json";
-    if (fs.analyzePath(path).exists) fs.unlink(path);
-    // FS.createDataFile arguments: parent, name, data, canRead, canWrite, canOwn.
-    fs.createDataFile("/Shared", "weather.json", bytes, true, true, true);
+    const n = bytes.length;
+    console.log(`[weather-poller] received ${n} bytes from open-meteo`);
+    // Transfer the underlying buffer to avoid a copy. The worker handler
+    // immediately writes the bytes into FS and discards them.
+    worker.postMessage(
+      { type: "weather_data", bytes },
+      [bytes.buffer],
+    );
     console.log(
-      `[weather-poller] wrote ${bytes.length} bytes to /Shared/weather.json (Mac sees :Unix:weather.json)`,
+      `[weather-poller] posted ${n} bytes to worker (Mac will see :Unix:weather.json)`,
     );
     return true;
   } catch (err) {
@@ -90,22 +100,24 @@ async function fetchAndWrite(
  * Start the poller. Returns a stop() function. The first fetch is fired
  * immediately; subsequent fetches happen on `intervalMs`.
  *
- * Safe to call before the Mac side is ready — we just write to the
- * Emscripten FS, and the Mac picks it up on the next 30-tick poll inside
- * MacWeather's event loop.
+ * Safe to call before the Mac side is ready — the worker buffers the
+ * write until preRun has created /Shared/, and the Mac picks the file
+ * up on the next 30-tick poll inside MacWeather's event loop.
  */
 export function startWeatherPoller(cfg: WeatherPollerConfig): () => void {
   const lat = typeof cfg.lat === "number" ? cfg.lat : cfg.fallbackLat;
   const lon = typeof cfg.lon === "number" ? cfg.lon : cfg.fallbackLon;
   const intervalMs = cfg.intervalMs ?? DEFAULT_INTERVAL_MS;
 
-  // Fire-and-forget the first fetch. We don't await it because callers
-  // (like the worker's start() function) should not block the Mac boot
-  // on a network round-trip.
-  void fetchAndWrite(cfg.emscriptenFs, lat, lon);
+  console.log(
+    `[weather-poller] starting (lat=${lat}, lon=${lon}, interval=${intervalMs}ms)`,
+  );
+  fetchAndPost(cfg.worker, lat, lon).catch((err) =>
+    console.warn("[weather-poller] first fetch threw:", err),
+  );
 
   const handle = setInterval(() => {
-    void fetchAndWrite(cfg.emscriptenFs, lat, lon);
+    void fetchAndPost(cfg.worker, lat, lon);
   }, intervalMs);
 
   return () => clearInterval(handle);

@@ -119,8 +119,11 @@ jobs:
         # Track in PRD risks table.
         #
         # The first arg is comma-separated; build-boot-disk.sh installs
-        # each binary into both Startup Items (auto-launch on boot) and
-        # :Applications: (user-launchable from the desktop).
+        # every binary into :Applications: (user-launchable from the
+        # desktop) and the LAST one in the list also into Startup Items
+        # (auto-launch on boot — also ends up the front-most app).
+        # Order matters: MacWeather is last so it's the front-most app
+        # after boot, with Reader still available via :Applications:.
         run: |
           ./scripts/build-boot-disk.sh \
             build/reader/Reader.bin,build/macweather/MacWeather.bin \

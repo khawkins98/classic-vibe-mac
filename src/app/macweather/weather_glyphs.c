@@ -120,17 +120,24 @@ static void DrawCloudGlyph(short x, short y, short size)
 static void DrawPartlyCloudyGlyph(short x, short y, short size)
 {
     /* Sun in the upper-right, cloud in the lower-left. */
-    short half = (short)(size * 2 / 3);
-    DrawSunGlyph((short)(x + size - half),
+    short sunSize = (short)(size * 2 / 3);
+    DrawSunGlyph((short)(x + size - sunSize),
                  (short)(y),
-                 half);
-    /* Erase a small notch inside the cloud area so the sun rays don't
-     * poke through. Then draw the cloud on top. */
-    DrawCloudShape((short)(x), (short)(y + size / 3), (short)(size * 3 / 4), true);
-    /* Outline the cloud with a frame so it stays legible against the rays. */
-    PenMode(srcXor);
-    DrawCloudShape((short)(x), (short)(y + size / 3), (short)(size * 3 / 4), false);
-    PenMode(srcCopy);
+                 sunSize);
+    /* Cloud on top — erase its silhouette first (white-fill an oval-ish
+     * area) so the sun rays underneath don't bleed through, then draw
+     * the outlined cloud. We use a simple white-fill of the cloud's
+     * bounding rect rather than XOR or PenMode tricks (which surface as
+     * speckle on 1-bit displays under the existing 50% gray pen). */
+    short cloudW = (short)(size * 3 / 4);
+    short cloudY = (short)(y + size / 3);
+    Rect erase;
+    erase.left = x;
+    erase.top = cloudY;
+    erase.right = (short)(x + cloudW);
+    erase.bottom = (short)(cloudY + size * 5 / 8);
+    EraseRect(&erase);
+    DrawCloudShape(x, cloudY, cloudW, false);
 }
 
 /* Three little vertical strokes under a cloud = rain. */

@@ -67,6 +67,96 @@ keyed on the file's Type/Creator, not its resources.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Network fetch must run on main thread; the WASM worker's microtask queue is starved
+**Context:** MacWeather needs live weather JSON written into the Mac's
+extfs-mounted `/Shared/` tree. First attempt: run the `fetch()` poller
+inside the BasiliskII Web Worker (where `Module.FS` lives) so we could
+write to the Emscripten FS directly.
+**Finding:** The fetch network request goes out cleanly, but the
+`then()`/`await` callback after the response arrives never fires. The
+worker is busy: BasiliskII's idleWait calls `Atomics.wait` on the SAB
+input lock between blits, blocking the worker until a UI event arrives
+or the timeout (~16ms) expires. The microtask queue runs only between
+event-loop turns, and `Atomics.wait` keeps the worker pinned in
+`run-script` state — the fetch's response event handler queues a
+microtask, but no event-loop turn happens to drain it. Net result: the
+poller's first fetch hangs forever (visible: `[weather-poller] GET …`
+log fires, no `received N bytes` follows).
+**Action:** Run the poller on the main thread instead, where the page's
+event loop has plenty of idle time between requestAnimationFrame
+frames. The main thread posts `{ type: "weather_data", bytes }` to the
+worker via `postMessage` (with a transfer list to avoid copy); the
+worker's message handler writes the bytes into `FS` at
+`/Shared/weather.json`. If the message arrives before preRun has
+created `/Shared/`, we buffer in a module-scope array and replay on
+preRun. This is also how Infinite Mac structures their persistent-disk
+saver (UI thread does IndexedDB I/O, posts results to the worker).
+Bonus: the main thread can use `navigator.geolocation` later if we want
+real coords; the worker can't.
+
+### 2026-05-08 — Vite dev needs `Cross-Origin-Embedder-Policy: credentialless` for cross-origin fetches
+**Context:** Even with the poller moved to the main thread (above),
+fetches to `api.open-meteo.com` were silently hanging in `npm run dev`.
+**Finding:** Vite's dev server was sending
+`Cross-Origin-Embedder-Policy: require-corp` (required for SAB).
+`require-corp` blocks any cross-origin response that doesn't carry a
+`Cross-Origin-Resource-Policy: cross-origin` header. open-meteo doesn't
+emit CORP, so the network response is delivered but the renderer
+refuses to surface it — fetch promise hangs forever, no error, no
+console message. Production GH Pages avoids this by routing requests
+through the `coi-serviceworker` shim, which intercepts the response and
+rewrites the headers; in dev there's no SW.
+**Action:** Switch the dev server header to
+`Cross-Origin-Embedder-Policy: credentialless`. Same SAB guarantees,
+but cross-origin fetches without credentials are allowed without CORP.
+Production stays on `require-corp` via the SW shim. Belt-and-braces:
+the fetch call uses `mode: "cors", credentials: "omit"` so the same
+code path works in both contexts.
+
+### 2026-05-08 — System 7 Startup Items: every app runs concurrently, but the LAST one launched is frontmost
+**Context:** Multi-app boot: I want both Reader and MacWeather to
+auto-launch on boot, both visible. First version: copy both .bin files
+into `:System Folder:Startup Items:` and let Finder run them.
+**Finding:** Mac OS 7's Finder DOES launch every Startup Item — they
+run concurrently under cooperative multitasking — but the
+last-to-launch wins front-most-app. Whichever app was most recently
+sent `kAEOpenApplication` (or whose `WaitNextEvent` returned first
+after launch) sits in front. With Reader and MacWeather both in
+Startup Items, Reader's window covered MacWeather's nearly-completely;
+only the bottom strip "Updated 12:00 (baked)" peeked out.
+**Action:** Install only ONE app into `:System Folder:Startup Items:`
+(the one we want frontmost on first boot — currently MacWeather, since
+it's the live-data demo). Every other app goes into `:Applications:`
+and the user double-clicks to launch. `scripts/build-boot-disk.sh`
+takes a comma-separated `<app1.bin,app2.bin,…>` list; the LAST entry
+goes to Startup Items. CI orders the list so the demo we want
+front-most is last.
+
+### 2026-05-08 — extfs `Unix:` volume isn't reliably mountable in System 7.5.5; bake samples onto `:Shared:` for first-boot reliability
+**Context:** MacWeather opens `weather.json` from the extfs-mounted
+`/Shared/` tree (BasiliskII surfaces it as `Unix:` per the existing
+LEARNINGS entry). The JS poller writes `/Shared/weather.json` after
+each fetch, so the file IS present in the worker's FS.
+**Finding:** Iterating mounted volumes via `PBHGetVInfoSync` from
+inside MacWeather returns only the boot disk and (sometimes) the
+chunked app disk — the `Unix:` extfs volume isn't always in the VCB
+chain. `HOpen(0, 0, "Unix:weather.json", …)` returns -35 (`nsvErr`,
+"no such volume"). The volume name in upstream macemu IS "Unix" (per
+the prior learning), but System 7's Finder isn't always picking up the
+extfs mount. Couldn't pin down whether it's a timing issue
+(volume mounts after our app starts), a Mount Manager issue (no `MNTR`
+trap installed?), or a pref issue (`extfs /Shared/` vs `/Shared` —
+checked both, no change).
+**Action:** Two-tier read path. MacWeather first tries the live extfs
+volume (`PBHGetVInfo` for "Unix" → `HOpen` with that vRefNum); if that
+fails, falls back to `:Shared:weather.json` baked onto the boot disk
+at build time by `scripts/build-boot-disk.sh`. The baked file is a
+sane sample (Cupertino, May 8, 62°F) so first-boot demos work even if
+extfs is wedged. The "live" plumbing is wired end-to-end and verified
+working (worker logs `wrote N bytes`); fixing the System-7-side mount
+is future work. UI shows `(baked)` or `(live)` next to the time so
+the data source is visible.
+
 ### 2026-05-08 — extfs surfaces as Mac volume `Unix:`, not `Shared:` (bake :Shared: onto the boot disk instead)
 **Context:** Reader was launching from Startup Items but logging "no
 content found" — every `HOpen(0, 0, ":Shared:index.html", fsRdPerm, ...)`

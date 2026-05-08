@@ -56,7 +56,6 @@ import {
   type EmulatorChunkedFileSpec,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
-import { startWeatherPoller } from "./weather-poller";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -337,8 +336,35 @@ function buildPrefs(opts: {
 }
 
 // ── Worker message handler ───────────────────────────────────────────
+//
+// MacWeather flow: the main thread runs the open-meteo poll (it can't
+// run in the worker because BasiliskII's WASM event loop blocks the
+// microtask queue, and a fetch's then() callback never fires). When new
+// JSON arrives, the main thread posts `{ type: "weather_data", bytes }`
+// here, and we write it into the Emscripten FS at /Shared/weather.json
+// — surfaced to the Mac as :Unix:weather.json by BasiliskII's extfs.
+// If the message arrives before preRun has created /Shared/, we buffer
+// it and replay on preRun.
 
 let started = false;
+let sharedReady = false;
+const pendingWeather: Uint8Array[] = [];
+let activeFs: any = null;
+
+function writeWeatherJson(fs: any, bytes: Uint8Array) {
+  try {
+    if (!fs.analyzePath("/Shared").exists) fs.mkdir("/Shared");
+    const path = "/Shared/weather.json";
+    if (fs.analyzePath(path).exists) fs.unlink(path);
+    fs.createDataFile("/Shared", "weather.json", bytes, true, true, true);
+    console.log(
+      `[worker] wrote ${bytes.length} bytes to /Shared/weather.json`,
+    );
+  } catch (err) {
+    console.warn("[worker] failed to write weather.json:", err);
+  }
+}
+
 self.addEventListener("message", (ev: MessageEvent) => {
   const data = ev.data;
   if (data?.type === "start" && !started) {
@@ -350,6 +376,12 @@ self.addEventListener("message", (ev: MessageEvent) => {
         error: err instanceof Error ? err.message : String(err),
       });
     });
+  } else if (data?.type === "weather_data" && data.bytes instanceof Uint8Array) {
+    if (sharedReady && activeFs) {
+      writeWeatherJson(activeFs, data.bytes);
+    } else {
+      pendingWeather.push(data.bytes);
+    }
   }
 });
 
@@ -389,7 +421,6 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     screenHeight,
     ramSizeMB,
     sharedFolderFiles,
-    weather,
   } = msg;
 
   // ── Allocate the shared memory regions ──
@@ -528,11 +559,18 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
 
     preRun: [
       function () {
+        console.log("[worker] preRun: setting up /Shared/");
         // Expose FS globally; emscripten's TS types want it on globalThis.
         (self as any).FS = moduleOverrides.FS;
         const FS = moduleOverrides.FS;
         if (!FS.analyzePath("/Shared").exists) FS.mkdir("/Shared");
         if (!FS.analyzePath("/Shared/Downloads").exists) FS.mkdir("/Shared/Downloads");
+        activeFs = FS;
+        sharedReady = true;
+        // Drain any weather-data messages that arrived before preRun
+        // had a chance to create /Shared/.
+        for (const bytes of pendingWeather) writeWeatherJson(FS, bytes);
+        pendingWeather.length = 0;
         // Seed /Shared/ in the Emscripten FS. extfs surfaces this as a
         // Mac volume named "Unix:" (not "Shared:"), so Reader can't find
         // its HTML through this path — the Reader's :Shared: folder is
@@ -557,24 +595,6 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
 
     onRuntimeInitialized() {
       self.postMessage({ type: "emulator_ready" });
-      // Start the live weather poll. /Shared/ exists at this point (preRun
-      // created it), and BasiliskII's extfs surfaces it as the Mac volume
-      // "Unix:" — so MacWeather's HOpen of :Unix:weather.json will see
-      // whatever JSON we drop in. First fetch fires immediately, then
-      // every 15 minutes. See weather-poller.ts.
-      if (weather) {
-        try {
-          startWeatherPoller({
-            emscriptenFs: moduleOverrides.FS,
-            fallbackLat: weather.fallbackLat,
-            fallbackLon: weather.fallbackLon,
-            lat: weather.lat,
-            lon: weather.lon,
-          });
-        } catch (err) {
-          console.warn("[worker] weather poller failed to start:", err);
-        }
-      }
     },
 
     print: (...args: unknown[]) => console.log("[basilisk]", ...args),
