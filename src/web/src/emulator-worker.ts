@@ -55,6 +55,7 @@ import {
   PauseFlagState,
   type EmulatorWorkerStartMessage,
   type EmulatorChunkedFileSpec,
+  type EmulatorInMemoryDiskSpec,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
 
@@ -166,6 +167,58 @@ class ChunkedDisk {
   }
 }
 
+// ── InMemoryDisk: bytes-in, bytes-out, no HTTP ───────────────────────
+//
+// Issue #28. Used for hot-load: the playground produces an HFS image in
+// the browser (hfs-patcher.ts → patched bytes) and hands it directly to
+// the worker via the `start` message. We expose the same `read(buf, off,
+// len) → bytesRead` and `write(buf, off, len) → bytesWritten` shape as
+// ChunkedDisk so DisksApi treats both uniformly. Writes mutate the in-
+// memory bytes (the Mac side may write to the volume — e.g. Desktop DB
+// updates, cached icon caches). We don't persist back to the host; on
+// reboot the disk is regenerated fresh from the patcher anyway.
+//
+// Why no chunking? The whole disk is ~1.4MB. Holding it as a single
+// Uint8Array is cheaper than wrapping CHUNK_SIZE buckets.
+
+class InMemoryDisk {
+  readonly name: string;
+  readonly size: number;
+  isCdrom = false;
+  #bytes: Uint8Array;
+
+  constructor(spec: EmulatorInMemoryDiskSpec) {
+    this.#bytes = spec.bytes;
+    this.name = spec.name;
+    this.size = spec.bytes.length;
+  }
+
+  read(buf: Uint8Array, offset: number, length: number): number {
+    if (offset >= this.size) return 0;
+    const end = Math.min(offset + length, this.size);
+    const n = end - offset;
+    buf.set(this.#bytes.subarray(offset, end), 0);
+    return n;
+  }
+
+  write(buf: Uint8Array, offset: number, length: number): number {
+    if (offset >= this.size) return 0;
+    const end = Math.min(offset + length, this.size);
+    const n = end - offset;
+    this.#bytes.set(buf.subarray(0, n), offset);
+    return n;
+  }
+
+  prefetch(): void {
+    // No-op. Bytes are already resident.
+  }
+}
+
+/** A disk read/written by ChunkedDisk OR InMemoryDisk. They both expose
+ *  `read(buf, off, len)` / `write(buf, off, len)` / `name` / `size`,
+ *  which is all DisksApi needs to drive them. */
+type AnyDisk = ChunkedDisk | InMemoryDisk;
+
 // ── DisksApi: the surface the Emscripten core calls into ─────────────
 //
 // Port of EmulatorWorkerDisksApi (upstream disks.ts). The BasiliskII core
@@ -176,10 +229,10 @@ class ChunkedDisk {
 const REMOVABLE_DISK_COUNT = 7;
 
 class RemovableDisk {
-  #disk: ChunkedDisk | null = null;
+  #disk: AnyDisk | null = null;
   get name() { return this.#disk?.name ?? ""; }
   get size() { return this.#disk?.size ?? 0; }
-  insert(d: ChunkedDisk) { this.#disk = d; }
+  insert(d: AnyDisk) { this.#disk = d; }
   eject() { this.#disk = null; }
   hasDisk() { return this.#disk !== null; }
   read(buf: Uint8Array, off: number, len: number) {
@@ -191,16 +244,16 @@ class RemovableDisk {
 }
 
 class DisksApi {
-  #disks: ChunkedDisk[];
+  #disks: AnyDisk[];
   #removable: RemovableDisk[] = [];
-  #opened = new Map<number, ChunkedDisk | RemovableDisk>();
+  #opened = new Map<number, AnyDisk | RemovableDisk>();
   #idCounter = 0;
   #pendingNames: string[] = [];
   #emscriptenModule: any;
   #bytesRead = 0;
   #bytesWritten = 0;
 
-  constructor(disks: ChunkedDisk[], usePlaceholders: boolean, mod: any) {
+  constructor(disks: AnyDisk[], usePlaceholders: boolean, mod: any) {
     this.#disks = disks;
     this.#emscriptenModule = mod;
     if (usePlaceholders) {
@@ -227,7 +280,7 @@ class DisksApi {
   }
   open(name: string): number {
     const id = this.#idCounter++;
-    let disk: ChunkedDisk | RemovableDisk | undefined;
+    let disk: AnyDisk | RemovableDisk | undefined;
     if (name.startsWith("/placeholder/")) {
       const i = parseInt(name.slice("/placeholder/".length), 10);
       disk = this.#removable[i];
@@ -507,14 +560,18 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     `[worker] shared-folder: ${sharedToWrite.length}/${sharedFolderFiles?.length ?? 0} files ready to seed into /Shared/`,
   );
 
-  // ── Build the disks. Synchronous XHR happens inside read(); we still
-  // pre-fetch the prefetch list so first-boot reads don't stall on each
-  // chunk individually. ──
-  const disks = diskSpecs.map((spec) =>
-    new ChunkedDisk(spec, (idx) => {
+  // ── Build the disks. Chunked specs use synchronous XHR inside read();
+  // we still pre-fetch the prefetch list so first-boot reads don't stall
+  // on each chunk individually. In-memory specs (e.g. playground hot-load
+  // disks) just wrap a Uint8Array — no I/O needed.
+  const disks: AnyDisk[] = diskSpecs.map((spec) => {
+    if ((spec as EmulatorInMemoryDiskSpec).kind === "inMemory") {
+      return new InMemoryDisk(spec as EmulatorInMemoryDiskSpec);
+    }
+    return new ChunkedDisk(spec as EmulatorChunkedFileSpec, (idx) => {
       self.postMessage({ type: "emulator_chunk_loaded", chunkIndex: idx });
-    }),
-  );
+    });
+  });
 
   for (const d of disks) {
     self.postMessage({ type: "emulator_status", phase: "prefetching", name: d.name });

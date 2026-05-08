@@ -37,6 +37,10 @@ run: all
 		echo "==> ./$$t"; \
 		./$$t; \
 	done
+	@echo "==> node preprocessor.test.mjs"
+	@cd ../.. && node tests/unit/preprocessor.test.mjs
+	@echo "==> node hfs-patcher.test.mjs"
+	@cd ../.. && node tests/unit/hfs-patcher.test.mjs
 	@echo "All unit tests passed."
 
 clean:
