@@ -43,6 +43,11 @@ import {
 } from "./build";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
+  showBuildExplainer,
+  showBuildExplainerIfFirstTime,
+  type BuildExplainContext,
+} from "./build-explainer";
+import {
   lintExtensions,
   setEditorDiagnostics,
   clearEditorDiagnostics,
@@ -108,10 +113,16 @@ export async function mountPlayground(
   const buildRunBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-buildrun",
   )!;
+  const whatBtn = rootEl.querySelector<HTMLButtonElement>(
+    "#cvm-pg-whatjusthappened",
+  )!;
   const statusEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-status")!;
   const editorMount = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-editor-mount",
   )!;
+
+  // Last Build & Run context; populated after every successful hot-load.
+  let lastBuildCtx: BuildExplainContext | null = null;
 
   // Restore last-open project + file, falling back to the first sample.
   const savedProject = (await readUiState<string>(UI_PROJECT)) ?? "reader";
@@ -479,12 +490,32 @@ export async function mountPlayground(
         `Done in ${totalMs.toFixed(0)}ms — double-click "Apps" on the desktop.`,
         "ok",
       );
-      // Smooth-scroll the page back up to the emulator window so the
-      // user sees the boot. The Mac window has id="emulator"; if the
-      // user has scrolled down to the editor, this brings them back.
-      const emWin = document.getElementById("emulator");
-      if (emWin) {
-        emWin.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // Populate the build context for the explainer modal.
+      lastBuildCtx = {
+        appName: fname,
+        rezFile: current.filename,
+        totalMs,
+        volumeName: "Apps",
+      };
+      // Unhide the "What just happened?" button — only after a real hot-load.
+      whatBtn.hidden = false;
+
+      // Only auto-scroll if the first-time explainer won't show.
+      // Both competing for focus at the same time creates a confusing UX.
+      const willShowModal = !(() => {
+        try { return !!localStorage.getItem("cvm.buildExplainerSeen"); } catch { return false; }
+      })();
+      if (willShowModal) {
+        showBuildExplainerIfFirstTime(lastBuildCtx, buildRunBtn);
+      } else {
+        // Smooth-scroll the page back up to the emulator window so the
+        // user sees the boot. The Mac window has id="emulator"; if the
+        // user has scrolled down to the editor, this brings them back.
+        const emWin = document.getElementById("emulator");
+        if (emWin) {
+          emWin.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       }
     } catch (e) {
       setStatus(
@@ -497,6 +528,11 @@ export async function mountPlayground(
       buildRunBtn.disabled = false;
       rootEl.removeAttribute("data-rebooting");
     }
+  });
+
+  // "What just happened?" — re-opens the explainer any time after a hot-load.
+  whatBtn.addEventListener("click", () => {
+    if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
 
   // Visibility toggle. We hide the entire section, not just the editor,
@@ -620,7 +656,12 @@ function renderShell(persistent: boolean): string {
           Download .zip
         </button>
       </div>
-      <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
+      <div class="cvm-pg-status-row">
+        <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
+        <button type="button" id="cvm-pg-whatjusthappened" class="cvm-pg-btn-what" hidden>
+          What just happened?
+        </button>
+      </div>
       <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
         <strong>Heads-up:</strong> this file isn't compiled in your browser.
         Only Rez resource files (<code>.r</code>) recompile in-browser today
