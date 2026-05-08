@@ -31,13 +31,16 @@ test_html_parse: test_html_parse.c $(HTML_PARSE) $(READER_SRC)/html_parse.h
 test_weather_parse: test_weather_parse.c $(WEATHER_PARSE) $(MACWEATHER_SRC)/weather_parse.h
 	$(CC) $(CFLAGS) -I. -I$(MACWEATHER_SRC) -o $@ test_weather_parse.c $(WEATHER_PARSE)
 
+# Just runs the host-cc C suite. The JS unit tests (preprocessor.test.mjs
+# + hfs-patcher.test.mjs) live under `npm run test:unit:js` so this
+# Makefile stays tsc-free; `npm run test:unit` chains both halves.
 run: all
 	@set -e; \
 	for t in $(TESTS); do \
 		echo "==> ./$$t"; \
 		./$$t; \
 	done
-	@echo "All unit tests passed."
+	@echo "All host C unit tests passed."
 
 clean:
 	rm -f $(TESTS)
