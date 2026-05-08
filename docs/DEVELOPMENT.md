@@ -47,7 +47,7 @@ testable in loop 1.
 
 ## First-time setup
 
-The [README's "How to use it"](../README.md#how-to-use-it) section is the
+The [README's "Try it" section](../README.md#try-it) is the
 authoritative version of this. Quick pass:
 
 ```sh
@@ -136,17 +136,19 @@ gh run download \
   -D /tmp/cvm-artifact
 
 # The artifact name carries the SHA. Resolve it:
-ART="$(echo /tmp/cvm-artifact/Reader-*)"
+ART="$(echo /tmp/cvm-artifact/classic-vibe-mac-*)"
 ls "$ART"
-#   build/Reader.bin   build/Reader.dsk   build/Reader.APPL
+#   build/reader/Reader.bin       build/reader/Reader.{dsk,APPL}
+#   build/macweather/MacWeather.{bin,dsk,APPL}
 #   dist/app.dsk       dist/system755-vibe.dsk   dist/system755-vibe.dsk.json
 #   dist/system755-vibe-chunks/
 
 # Bake the boot disk + chunks into src/web/public/. This is the only
 # step that has to run on the host (CI does the same thing, but its
-# output is ready-to-deploy).
+# output is ready-to-deploy). The script takes a comma-separated list
+# of .bin paths so all apps land on the same boot disk.
 bash scripts/build-boot-disk.sh \
-  "$ART/build/Reader.bin" \
+  "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin" \
   src/web/public/system755-vibe.dsk
 
 # Copy the secondary app.dsk (the loader HEAD-checks for it).
@@ -181,27 +183,29 @@ docker run --rm -v "$PWD:/work" -w /work ghcr.io/autc04/retro68:latest \
 ```
 
 The first run pulls the ~2 GB Retro68 image (one time). After that the
-build itself is on the order of 10-20 seconds for the small Reader app.
+build itself is on the order of 10-20 seconds for the small demo apps.
 
-Outputs land under `build/`:
+Outputs land under `build/<app>/` — one subdirectory per app:
 
 | File | What it is |
 |------|------------|
-| `Reader.bin` | MacBinary, both forks. Feed to `build-boot-disk.sh`. |
-| `Reader.dsk` | Standalone HFS image with just the app inside. Useful for sanity. |
-| `Reader.APPL` | Data fork only. Often 0 bytes — that's normal. |
+| `build/reader/Reader.bin` | MacBinary, both forks. Feed to `build-boot-disk.sh`. |
+| `build/reader/Reader.dsk` | Standalone HFS image with just the app inside. Useful for sanity. |
+| `build/reader/Reader.APPL` | Data fork only. Often 0 bytes — that's normal. |
+| `build/macweather/MacWeather.{bin,dsk,APPL}` | Same outputs for MacWeather. |
 
-Then bake the boot disk the same way Path A does:
+Then bake the boot disk the same way Path A does — pass all
+`.bin` paths comma-separated so every app lands on the same disk:
 
 ```sh
 bash scripts/build-boot-disk.sh \
-  build/Reader.bin \
+  "build/reader/Reader.bin,build/macweather/MacWeather.bin" \
   src/web/public/system755-vibe.dsk
 
 # app.dsk is also produced by CI; if you don't have it locally, the
 # loader will tolerate its absence on dev (it's required on prod).
 # To produce it locally:
-bash scripts/build-disk-image.sh build/Reader.bin src/web/public/app.dsk
+bash scripts/build-disk-image.sh build/reader/Reader.bin src/web/public/app.dsk
 ```
 
 Then `npm run dev`.
@@ -260,8 +264,10 @@ docker run --rm -v "$PWD:/work" -w /work ghcr.io/autc04/retro68:latest \
   bash -c "cmake -S src/app -B build \
     -DCMAKE_TOOLCHAIN_FILE=/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake \
     && cmake --build build --parallel"
-# 4. Rebuild the boot disk and reload.
-bash scripts/build-boot-disk.sh build/Reader.bin src/web/public/system755-vibe.dsk
+# 4. Rebuild the boot disk and reload (pass every app's .bin).
+bash scripts/build-boot-disk.sh \
+  "build/reader/Reader.bin,build/macweather/MacWeather.bin" \
+  src/web/public/system755-vibe.dsk
 # (npm run dev in another terminal — hard-reload the tab)
 ```
 

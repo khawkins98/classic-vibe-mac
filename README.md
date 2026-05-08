@@ -3,10 +3,10 @@
 A 1993 Macintosh that lives at a URL — and lets you build apps for it
 in the same tab. System 7.5.5 boots in your browser. Two demo apps
 launch. Open the source panel and you can edit them, hit Build, and
-the page returns a real `.bin` you can drop into any classic-Mac
-emulator. Compile-and-hot-load — your edits booting back into the Mac
-running above without a reload — is the next milestone; the
-edit / compile / download loop already works.
+the page returns a real `.bin`; hit Build & Run and the Mac above
+reboots ~1s later with your edits applied, no reload, no toolchain.
+The full read / edit / compile / hot-load loop is live in production
+today.
 
 ## Live at
 
@@ -29,11 +29,10 @@ one screen, all running in the visitor's tab:
   the project's marketing copy. Below it, the shipped editor panel.
 - **The editor** — CodeMirror 6 with C syntax highlighting, seeded
   with the same `reader.c` / `macweather.c` / `*.r` sources that
-  built the apps running above. Edits persist in IndexedDB; you can
-  Build to download a fresh `.bin` (your edited resource fork
-  spliced onto the CI-precompiled code fork); "compile-and-hot-load"
-  — boot your edits back into the Mac running above — is the next
-  milestone (see [Status](#status)).
+  built the apps running above. Edits persist in IndexedDB; Build
+  downloads a fresh `.bin` (your edited resource fork spliced onto
+  the CI-precompiled code fork); Build & Run reboots the Mac above
+  with your edits in ~820ms warm. See [Status](#status).
 
 ## What it does
 
@@ -41,11 +40,10 @@ Two things, sequenced in that order:
 
 - **Playground** — visit the live URL, open the source panel,
   read the C and Rez code that's running above it, edit it, watch
-  your edits persist across reloads. Today the loop is *read /
-  edit / persist / download zip*. Next milestone: *read / edit /
-  compile / hot-load / watch the Mac re-launch with your change*,
-  via Rez-in-WASM and a synthetic in-memory disk. Architecture
-  rationale and the phase plan live in
+  your edits persist across reloads. The full loop is live: *read /
+  edit / compile (in-browser WASM-Rez) / hot-load / watch the Mac
+  re-launch with your change* in ~820ms warm. Architecture rationale
+  and the phase plan live in
   [`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md).
 - **Template** — the same repo is structured so you can fork it,
   drop your own C source under `src/app/<your-app>/`, push, and
@@ -104,11 +102,10 @@ edits.
 What works today: read, edit, persist, **Build** (runs Rez in
 the browser against your edited resource fork, splices the output
 onto the CI-precompiled code fork, downloads a complete MacBinary
-`.bin`), download as zip. What's coming next: a Build & Run button
-that hot-loads the result onto a synthetic in-memory disk and
-re-spawns the emulator worker so your change boots back into the
-Mac running above ~1 second later. See [Status](#status) for the
-honest "what works when" breakdown.
+`.bin`), **Build & Run** (hot-loads the result onto a synthetic
+in-memory disk and re-spawns the emulator worker so your change
+boots back into the Mac running above in ~820ms warm), download as
+zip. See [Status](#status) for the full breakdown.
 
 ### Locally (full template flow)
 
@@ -247,17 +244,19 @@ Honest as of 2026-05-08.
   JSZip, sample projects seeded at Vite build time. Mobile shows an
   "open on desktop" message. Reset-to-default per file. Strict CSP.
   Edits persist; compile-and-run is not yet wired.
-- **Playground Phase 2 — in-browser Rez compilation:** in build-out.
-  The research spike on `spike/wasm-rez` (PR #34, do-not-merge)
-  proved feasibility: WASM-Rez compiles a `.r` file in the browser
-  and the output bytes are SHA-256-identical to native Retro68 Rez,
-  with a 103KB gzipped WASM bundle. Build-out tracker:
-  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
-  Honest estimate: 2.5-3 weeks of focused work.
-- **Playground Phase 3 — hot-load into the running Mac:** ahead of
-  us, gated on Phase 2. Template-splice path (patch a precompiled
-  empty-volume `.dsk` in-browser, ~500 lines TS) plus an
-  `InMemoryDisk` class for the BasiliskII disks API. Tracked at
+- **Playground Phase 2 — in-browser Rez compilation:** ✅ shipped on
+  `main`. The research spike landed first under `spike/wasm-rez`
+  (PR #34, do-not-merge); WASM-Rez source vendored under
+  `tools/wasm-rez/` and compiled artefacts under
+  `src/web/public/wasm-rez/`. Output bytes are SHA-256-identical to
+  native Retro68 Rez at 103KB gzipped. The Build button preprocesses,
+  runs WASM-Rez, splices a fresh resource fork onto the
+  CI-precompiled `.code.bin`, and downloads a complete MacBinary.
+- **Playground Phase 3 — hot-load into the running Mac:** ✅ shipped
+  on `main`. Template-splice path (patch a precompiled empty-volume
+  `.dsk` in-browser) plus an `InMemoryDisk` class for the BasiliskII
+  disks API plus worker re-spawn. Build & Run round-trips in ~820ms
+  warm in production. Tracked at
   [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27),
   [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28),
   [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31).
@@ -274,20 +273,9 @@ roadmap — is at
 
 ## Coming soon
 
-In rough sequence. The playground is the priority; the rest are
-real but slot in behind it.
+In rough sequence. With Phases 1, 2, and 3 of the playground all
+shipped, the next slate is polish + new demo apps.
 
-- **Phase 2 build-out** —
-  [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30).
-  Wire WASM-Rez into the editor, splice the resource fork onto the
-  precompiled code fork, surface Rez errors as editor markers.
-- **Phase 3 hot-load** —
-  [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27),
-  [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28),
-  [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31).
-  Template-splice path, `InMemoryDisk`, lock Type/Creator editing,
-  weather-poller teardown on worker re-spawn
-  ([#29](https://github.com/khawkins98/classic-vibe-mac/issues/29)).
 - **Pixel Pad** —
   [#17](https://github.com/khawkins98/classic-vibe-mac/issues/17).
   Tiny QuickDraw drawing app, exports the canvas to the host page

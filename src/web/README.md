@@ -29,9 +29,10 @@ into `dist/` before publishing to GitHub Pages. See
 Production: System 7.5.5 boots in-page, Reader and MacWeather
 auto-launch from `:System Folder:Startup Items:`, the playground panel
 below the Mac lets visitors read and edit the apps' C and Rez sources,
-and the Build button compiles edited resource forks via WASM-Rez and
-downloads a complete MacBinary `.bin`. Hot-loading the build back into
-the running Mac is Phase 3 (in flight).
+the Build button compiles edited resource forks via WASM-Rez and
+downloads a complete MacBinary `.bin`, and Build & Run hot-loads the
+result back into the Mac above in ~820ms warm via an in-browser HFS
+template-splice + worker re-spawn.
 
 ## Files
 

@@ -4,13 +4,17 @@ Thanks for your interest in contributing to classic-vibe-mac.
 
 ## Branching
 
-The project is in early scaffolding. Until the initial scaffold lands on
-`main`, expect work to happen on a long-lived feature branch off the first
-commit. After that, normal flow resumes:
-
 - Branch from `main` for each piece of work
-- Use short, descriptive branch names (e.g. `feat/hfs-packer`,
-  `fix/wasm-loader-path`)
+- Use short, descriptive branch names. Conventional prefixes the
+  project uses today: `feat/<thing>`, `fix/<thing>`, `docs/<thing>`,
+  `chore/<thing>`, `refactor/<thing>`, `spike/<thing>` (research,
+  do-not-merge).
+- Never commit directly to `main`. Open a PR.
+
+For the multi-agent dispatch hygiene the project has converged on
+(non-overlapping file ownership, time-boxed spikes, the
+five-reviewer Epic pass), see
+[`docs/AGENT-PROCESS.md`](./docs/AGENT-PROCESS.md).
 
 ## Commit messages — Conventional Commits
 
