@@ -1,20 +1,16 @@
 /**
- * editor.ts — CodeMirror 6 mount + project/file dropdowns + zip download.
+ * editor.ts — CodeMirror 6 mount + project dropdown + file tab bar + zip download.
  *
- * Phase 1 scope (per the editor reviewer's "scope down" note on Issue #21):
- *   - One CodeMirror instance, swapped in-place when the file dropdown
- *     changes (no tabs, no file tree).
+ *   - One CodeMirror instance, swapped in-place when the active tab changes.
  *   - C syntax highlighting via `@codemirror/lang-cpp`. `.r` (Rez) files
  *     get Rez syntax highlighting via the local `lang-rez` module (issue #23).
  *     Everything else gets plain text.
  *   - Edits debounce-save to IDB on every keystroke (1s) AND save
- *     immediately on file/project switch.
+ *     immediately on file/project switch. Unsaved files show a ● dirty
+ *     indicator on their tab (issue #22).
  *   - "Download project as zip" button packages the user's CURRENT edits
  *     for the selected project as a `.zip` (no boot disks, no build
  *     outputs, just `.c` / `.r` / `.h`).
- *
- * No file-tree, no tabs, no diff UI, no side-by-side layout. Those all live
- * in the deferred "Phase 2+" pile.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
@@ -74,9 +70,10 @@ interface PlaygroundContext {
  * checkbox can collapse the section.
  *
  * Layout: a single `<section class="window">` containing
- *   1. caption row (project + file dropdown, download button)
- *   2. CodeMirror mount
- *   3. small caption underneath with the explanatory paragraph + status
+ *   1. toolbar (project dropdown + build/download buttons)
+ *   2. file tab bar (one tab per project file, ● dirty indicator)
+ *   3. CodeMirror mount (role="tabpanel")
+ *   4. status row + explanatory paragraph
  */
 export interface PlaygroundHandle {
   setVisible(visible: boolean): void;
@@ -105,7 +102,7 @@ export async function mountPlayground(
   const projectSelect = rootEl.querySelector<HTMLSelectElement>(
     "#cvm-pg-project",
   )!;
-  const fileSelect = rootEl.querySelector<HTMLSelectElement>("#cvm-pg-file")!;
+  const tabBarEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-tabbar")!;
   const downloadBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-download",
   )!;
@@ -133,12 +130,56 @@ export async function mountPlayground(
     ? savedFile
     : project.files[0]!;
 
-  // Seed both dropdowns.
+  // Seed project dropdown.
   projectSelect.innerHTML = SAMPLE_PROJECTS.map(
     (p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`,
   ).join("");
   projectSelect.value = project.id;
-  populateFileDropdown(fileSelect, project, filename);
+
+  // ── Dirty-state tracking (issue #22) ─────────────────────────────────────
+  // Maps "${projectId}/${filename}" → edit-version at last user keystroke.
+  // Cleared when a save completes at the same version (meaning no new edits
+  // happened during the async IDB write).
+  const dirtyVersions = new Map<string, number>();
+
+  function fileKey(projectId: string, file: string): string {
+    return `${projectId}/${file}`;
+  }
+  function isDirty(projectId: string, file: string): boolean {
+    return dirtyVersions.has(fileKey(projectId, file));
+  }
+  function markDirty(projectId: string, file: string): void {
+    const key = fileKey(projectId, file);
+    dirtyVersions.set(key, (dirtyVersions.get(key) ?? 0) + 1);
+    updateTabBar();
+  }
+
+  // Central save point — wraps writeFile() with version-aware dirty clearing.
+  async function saveFile(
+    projectId: string,
+    file: string,
+    content: string,
+  ): Promise<void> {
+    const key = fileKey(projectId, file);
+    const versionAtSave = dirtyVersions.get(key) ?? 0;
+    try {
+      await writeFile(projectId, file, content);
+      // Clear dirty only if no new edits arrived during the async write.
+      if ((dirtyVersions.get(key) ?? 0) === versionAtSave) {
+        dirtyVersions.delete(key);
+      }
+    } catch {
+      // IDB write failed; keep dirty so the user knows the save didn't land.
+    }
+    updateTabBar();
+  }
+
+  // Flag set while switchTo() does a programmatic view.dispatch(). The
+  // docChanged listener checks this to skip marking dirty / scheduling a save.
+  let loadingFile = false;
+  // Monotone counter for switchTo() race prevention: if a newer call starts
+  // while an older one is awaiting, the older one exits early.
+  let switchSeq = 0;
 
   // Mount CodeMirror.
   const initialContent = await readOrSeedFile(baseUrl, project.id, filename);
@@ -163,11 +204,7 @@ export async function mountPlayground(
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
-      void writeFile(
-        current.project,
-        current.filename,
-        view.state.doc.toString(),
-      );
+      void saveFile(current.project, current.filename, view.state.doc.toString());
     }, SAVE_DEBOUNCE_MS);
   }
   function scheduleCursorSave() {
@@ -244,7 +281,10 @@ export async function mountPlayground(
       ),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          scheduleSave();
+          if (!loadingFile) {
+            markDirty(current.project, current.filename);
+            scheduleSave();
+          }
           // Clear stale diagnostics on any edit. Squiggles on a now-edited
           // line are misleading — better to vanish until the next Build
           // run replays them on the freshly-compiled output.
@@ -304,32 +344,38 @@ export async function mountPlayground(
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    await writeFile(
-      current.project,
-      current.filename,
-      view.state.doc.toString(),
-    );
+    await saveFile(current.project, current.filename, view.state.doc.toString());
   }
 
   // Switch the editor's contents to a new file. Saves the previous file
-  // first so transient edits don't get dropped.
+  // first so transient edits don't get dropped. Uses a sequence token to
+  // discard results from an older switch that finished after a newer one.
   async function switchTo(projectId: string, file: string): Promise<void> {
+    const seq = ++switchSeq;
     await flushSave();
+    if (seq !== switchSeq) return;
     const nextProject = SAMPLE_PROJECTS.find((p) => p.id === projectId);
     if (!nextProject) return;
     const nextFile = nextProject.files.includes(file)
       ? file
       : nextProject.files[0]!;
     const content = await readOrSeedFile(baseUrl, projectId, nextFile);
+    if (seq !== switchSeq) return;
     current.project = projectId;
     current.filename = nextFile;
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: content },
-      effects: langCompartment.reconfigure(extensionsForFile(nextFile)),
-      selection: { anchor: 0, head: 0 },
-      scrollIntoView: true,
-    });
+    loadingFile = true;
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: content },
+        effects: langCompartment.reconfigure(extensionsForFile(nextFile)),
+        selection: { anchor: 0, head: 0 },
+        scrollIntoView: true,
+      });
+    } finally {
+      loadingFile = false;
+    }
     updateNonCompiledBanner(nextFile);
+    renderTabBar(nextProject, nextFile);
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
   }
@@ -351,22 +397,100 @@ export async function mountPlayground(
     const newId = projectSelect.value;
     const newProject = SAMPLE_PROJECTS.find((p) => p.id === newId);
     if (!newProject) return;
-    populateFileDropdown(fileSelect, newProject, newProject.files[0]!);
     void switchTo(newId, newProject.files[0]!);
   });
-  fileSelect.addEventListener("change", () => {
-    void switchTo(projectSelect.value, fileSelect.value);
+
+  // ── Tab bar event delegation ──────────────────────────────────────────────
+  tabBarEl.addEventListener("click", (e) => {
+    const btn = (e.target as Element).closest(
+      "[role='tab']",
+    ) as HTMLButtonElement | null;
+    if (!btn || btn.getAttribute("aria-selected") === "true") return;
+    void switchTo(current.project, btn.dataset.file!);
   });
+
+  // Arrow-key navigation with automatic activation (ARIA APG tab pattern).
+  tabBarEl.addEventListener("keydown", (e) => {
+    const tabs = Array.from(
+      tabBarEl.querySelectorAll<HTMLButtonElement>("[role='tab']"),
+    );
+    const idx = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (idx === -1) return;
+    let next = idx;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      next = (idx + 1) % tabs.length;
+      e.preventDefault();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      next = (idx - 1 + tabs.length) % tabs.length;
+      e.preventDefault();
+    } else if (e.key === "Home") {
+      next = 0;
+      e.preventDefault();
+    } else if (e.key === "End") {
+      next = tabs.length - 1;
+      e.preventDefault();
+    } else {
+      return;
+    }
+    tabs[next]!.focus();
+    void switchTo(current.project, tabs[next]!.dataset.file!);
+  });
+
+  // Initial tab bar render.
+  renderTabBar(project, filename);
+
+  // ── Tab bar rendering ─────────────────────────────────────────────────────
+  // Builds the tab bar from scratch using DOM methods (no innerHTML injection)
+  // to avoid escaping issues with filenames.
+  function renderTabBar(proj: SampleProject, activeFile: string): void {
+    tabBarEl.innerHTML = "";
+    const activeIdx = proj.files.indexOf(activeFile);
+    proj.files.forEach((file, idx) => {
+      const isActive = file === activeFile;
+      const dirty = isDirty(proj.id, file);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "tab");
+      btn.setAttribute("aria-selected", String(isActive));
+      btn.setAttribute("aria-controls", "cvm-pg-editor-mount");
+      btn.id = `cvm-pg-tab-${idx}`;
+      btn.className = "cvm-pg-tab" + (isActive ? " cvm-pg-tab--active" : "");
+      btn.tabIndex = isActive ? 0 : -1;
+      btn.dataset.file = file;
+      if (dirty) {
+        btn.setAttribute("aria-label", `${file}, unsaved changes`);
+        const indicator = document.createElement("span");
+        indicator.className = "cvm-pg-tab__dirty";
+        indicator.setAttribute("aria-hidden", "true");
+        indicator.textContent = "\u25cf\u00a0"; // ● + non-breaking space
+        btn.appendChild(indicator);
+      } else {
+        btn.setAttribute("aria-label", file);
+      }
+      const label = document.createElement("span");
+      label.textContent = file;
+      btn.appendChild(label);
+      tabBarEl.appendChild(btn);
+    });
+    // Point the tabpanel at the active tab for screen readers.
+    const editorMount = rootEl.querySelector("#cvm-pg-editor-mount");
+    if (editorMount && activeIdx >= 0) {
+      editorMount.setAttribute("aria-labelledby", `cvm-pg-tab-${activeIdx}`);
+    }
+  }
+
+  function updateTabBar(): void {
+    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    if (!proj) return;
+    renderTabBar(proj, current.filename);
+  }
 
   // Save on tab close so unflushed edits don't go missing.
   window.addEventListener("beforeunload", () => {
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
-      // Synchronous fire-and-forget — IDB write may not complete but the
-      // in-memory map is already updated, so a same-session reopen still
-      // sees the latest content.
-      void writeFile(
+      void saveFile(
         current.project,
         current.filename,
         view.state.doc.toString(),
@@ -576,17 +700,6 @@ function isCompiledInBrowser(filename: string): boolean {
   return /\.r$/i.test(filename);
 }
 
-function populateFileDropdown(
-  el: HTMLSelectElement,
-  project: SampleProject,
-  selected: string,
-) {
-  el.innerHTML = project.files
-    .map((f) => `<option value="${f}">${escapeHtml(f)}</option>`)
-    .join("");
-  el.value = selected;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {
     switch (c) {
@@ -642,10 +755,6 @@ function renderShell(persistent: boolean): string {
           <span class="cvm-pg-field__label">Project</span>
           <select id="cvm-pg-project" class="cvm-pg-select"></select>
         </label>
-        <label class="cvm-pg-field">
-          <span class="cvm-pg-field__label">File</span>
-          <select id="cvm-pg-file" class="cvm-pg-select"></select>
-        </label>
         <button type="button" id="cvm-pg-build" class="cvm-pg-button cvm-pg-button--primary">
           Build .bin
         </button>
@@ -673,7 +782,8 @@ function renderShell(persistent: boolean): string {
         <a href="https://github.com/khawkins98/classic-vibe-mac/issues/57" target="_blank" rel="noopener">issue #57</a>
         for the in-browser-C-compile feasibility study.
       </div>
-      <div id="cvm-pg-editor-mount" class="cvm-pg-editor"></div>
+      <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
+      <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
         browser to read or edit the source.
