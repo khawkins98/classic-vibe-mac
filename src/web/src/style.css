@@ -975,6 +975,62 @@ body.cvm-paused .emulator-canvas {
   outline-offset: 2px;
 }
 
+/* --- File tab bar (issue #22) --------------------------------------- */
+
+.cvm-pg-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 0;
+  padding: 4px 4px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--chrome);
+  margin-bottom: -1px; /* tabs sit on top of editor border */
+}
+
+.cvm-pg-tab {
+  position: relative;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  background: var(--chrome);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+  color: var(--ink);
+  white-space: nowrap;
+  /* Visually inactive tabs sit a pixel lower so the active one "connects". */
+  margin-top: 2px;
+  transition: background 0.1s;
+}
+
+.cvm-pg-tab[aria-selected="true"] {
+  background: var(--paper);
+  border-color: var(--border);
+  /* Cover the tab bar's bottom border so it merges with the editor. */
+  border-bottom: 1px solid var(--paper);
+  margin-top: 0;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.cvm-pg-tab[aria-selected="false"]:hover {
+  background: color-mix(in srgb, var(--chrome) 60%, var(--paper) 40%);
+}
+
+.cvm-pg-tab:focus-visible {
+  outline: 2px solid var(--accent, #0062cc);
+  outline-offset: -2px;
+}
+
+/* Dirty indicator dot — muted so it doesn't compete with code. */
+.cvm-pg-tab__dirty {
+  color: var(--ink);
+  opacity: 0.45;
+  font-size: 0.65rem;
+  vertical-align: middle;
+}
+
 /* --- Responsive ----------------------------------------------------- */
 
 @media (max-width: 540px) {
