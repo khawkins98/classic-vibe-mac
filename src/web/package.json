@@ -8,6 +8,13 @@
     "build": "vite build",
     "preview": "vite preview"
   },
+  "dependencies": {
+    "@codemirror/commands": "^6.6.0",
+    "@codemirror/lang-cpp": "^6.0.2",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.34.1",
+    "jszip": "^3.10.1"
+  },
   "devDependencies": {
     "typescript": "^5.5.4",
     "vite": "^5.4.10"

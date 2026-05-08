@@ -3,6 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Strict CSP for Phase 1 of the playground. Everything we ship is
+      first-party: the page chrome script, CodeMirror, JSZip, the
+      coi-serviceworker shim. Worker scripts (BasiliskII) are spawned
+      from same-origin URLs. The emulator pulls the disk image and
+      worker JS from the same origin too.
+
+      `default-src 'self'` covers img/font/style/connect by inheritance;
+      we explicitly set `script-src 'self'` to make the no-inline-script
+      story unambiguous, `object-src 'none'` to disable plugins, and
+      `base-uri 'none'` to lock the document base URL.
+
+      Two carve-outs:
+        - `worker-src 'self' blob:` — Emscripten/BasiliskII can construct
+          worker URLs from Blob objects in some code paths.
+        - `connect-src 'self' https:` — MacWeather hits api.open-meteo.com
+          from the page-side fetch. Without this carve-out the live
+          forecast wouldn't load. https-only.
+
+      If a future change needs `unsafe-eval`, document the reason in
+      LEARNINGS.md before relaxing.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none';"
+    />
     <title>classic-vibe-mac</title>
     <meta
       name="description"

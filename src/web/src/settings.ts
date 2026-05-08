@@ -21,9 +21,12 @@
 
 /** localStorage key for the "sleep when hidden" toggle. */
 const KEY_PAUSE_WHEN_HIDDEN = "cvm.pauseWhenHidden";
+/** localStorage key for the "Show editor" (playground) toggle. */
+const KEY_SHOW_EDITOR = "cvm.showEditor";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
+const editorListeners = new Set<Listener>();
 
 /**
  * Read the current value. Defaults to `true` (sleep when hidden) — the
@@ -71,12 +74,49 @@ export function onPauseWhenHiddenChange(fn: Listener): () => void {
   };
 }
 
+/**
+ * "Show editor" (playground visibility) — persisted, default ON.
+ *
+ * The same listener pattern as the pause toggle. The editor lives in its
+ * own `<section>` under the Macintosh window; flipping this toggle just
+ * shows/hides that section without unmounting CodeMirror, so re-enabling
+ * is instant and edit state isn't lost.
+ */
+export function isShowEditorEnabled(): boolean {
+  try {
+    const raw = localStorage.getItem(KEY_SHOW_EDITOR);
+    if (raw === null) return true;
+    return raw !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function setShowEditor(value: boolean): void {
+  try {
+    localStorage.setItem(KEY_SHOW_EDITOR, value ? "true" : "false");
+  } catch {
+    // Same fallback story as pauseWhenHidden — we still notify in-tab
+    // listeners so the UI flips even when persistence fails.
+  }
+  for (const fn of editorListeners) fn();
+}
+
+export function onShowEditorChange(fn: Listener): () => void {
+  editorListeners.add(fn);
+  return () => {
+    editorListeners.delete(fn);
+  };
+}
+
 // Wire cross-tab observability once. `addEventListener` is no-op safe to
 // call multiple times only if we use a stable handler — we do.
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (ev) => {
     if (ev.key === KEY_PAUSE_WHEN_HIDDEN) {
       for (const fn of listeners) fn();
+    } else if (ev.key === KEY_SHOW_EDITOR) {
+      for (const fn of editorListeners) fn();
     }
   });
 }
