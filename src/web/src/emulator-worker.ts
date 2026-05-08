@@ -52,6 +52,7 @@
 import {
   InputBufferAddresses,
   LockStates,
+  PauseFlagState,
   type EmulatorWorkerStartMessage,
   type EmulatorChunkedFileSpec,
   type EmulatorWorkerVideoBlitRect,
@@ -421,7 +422,18 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     screenHeight,
     ramSizeMB,
     sharedFolderFiles,
+    pauseFlagBuffer,
   } = msg;
+
+  // ── Pause flag view (sleep-when-hidden). ──
+  // The main thread allocated this 1-Int32 SAB and wrote PauseFlagState.RUNNING.
+  // We park on Atomics.wait inside idleWait/sleep when it flips to PAUSED.
+  // If pauseFlagBuffer is undefined (older sender, or unit test bypassing the
+  // main-thread loader) we synthesise a local SAB so the rest of the worker
+  // can treat it uniformly — but no one will ever flip it, so we never pause.
+  const pauseFlagView = new Int32Array(
+    pauseFlagBuffer ?? new SharedArrayBuffer(4),
+  );
 
   // ── Allocate the shared memory regions ──
   // Video framebuffer: 32bpp pixels, sized for the largest plausible mode.
@@ -676,7 +688,27 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
 
     // ── Idle / sleep: block the worker until a UI event arrives or the
     // timeout expires. SharedMemoryEmulatorWorkerInput pattern. ──
+    //
+    // Sleep-when-hidden: BasiliskII calls into idleWait/sleep whenever the
+    // emulated Mac has nothing to do (which is most of the time once the
+    // System 7 desktop is settled). These are the only points the WASM
+    // event loop voluntarily gives the JS thread back — so they're the
+    // right place to park the worker when the user has tabbed away.
+    //
+    // If pauseFlagView[0] === PAUSED we Atomics.wait on the pause flag
+    // INSTEAD of the input lock and INSTEAD of returning. That suspends
+    // the OS thread until the main thread stores RUNNING + Atomics.notify.
+    // Browsers don't throttle Web Workers nearly as hard as main-thread
+    // timers, so without this the WASM keeps churning at full speed in a
+    // hidden tab — burning CPU and battery for frames nobody can see.
+    #waitWhilePaused() {
+      // Loop in case of spurious wakeups; only return when state is RUNNING.
+      while (Atomics.load(pauseFlagView, 0) === PauseFlagState.PAUSED) {
+        Atomics.wait(pauseFlagView, 0, PauseFlagState.PAUSED);
+      }
+    }
     idleWait(): boolean {
+      this.#waitWhilePaused();
       if (this.#lastIdleFrameId === this.#lastBlitFrameId) return false;
       this.#lastIdleFrameId = this.#lastBlitFrameId;
       const t = this.#nextExpectedBlitTime - performance.now() - 2;
@@ -690,6 +722,7 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
       return r === "ok";
     }
     sleep(timeSeconds: number) {
+      this.#waitWhilePaused();
       if (timeSeconds > 0) {
         Atomics.wait(
           this.#inputView,
