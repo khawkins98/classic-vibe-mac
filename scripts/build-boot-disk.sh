@@ -231,6 +231,46 @@ if ! hls -a 2>/dev/null | grep -q "System Folder"; then
   exit 1
 fi
 
+echo "[boot-disk] volume root (before cleanup):"
+hls -a : || true
+
+# --- Step 2.1: strip pre-installed apps to declutter the desktop ---------
+#
+# The archive.org source image ships with bundled tools that crowd the
+# System 7 desktop for our visitors (Disk Copy, The Outside World,
+# Mini vMac Boot v2, various extras). We remove everything at the volume
+# root that isn't one of the known-load-bearing items:
+#
+#   System Folder  — blessed boot folder — never touch
+#   Trash          — Finder-managed special folder — never touch
+#   Desktop DB     — Finder desktop database (may be invisible) — keep
+#   Desktop DF     — Finder desktop database (may be invisible) — keep
+#   Desktop        — older Finder desktop folder — keep
+#
+# We *don't* try to figure out which items are inside folders vs. top-level
+# apps: `hdel` handles both forks for files, and all the extra items on this
+# particular image are single-file HFS applications. If an item can't be
+# deleted (e.g. it's a non-empty folder from a future image revision), we log
+# and continue — the script still succeeds and the app still installs.
+
+BOOT_DISK_KEEP=("System Folder" "Trash" "Desktop DB" "Desktop DF" "Desktop")
+
+while IFS= read -r item; do
+  [[ -z "${item}" ]] && continue
+  keep=0
+  for k in "${BOOT_DISK_KEEP[@]}"; do
+    [[ "${item}" == "${k}" ]] && keep=1 && break
+  done
+  if [[ "${keep}" -eq 0 ]]; then
+    echo "[boot-disk]   removing pre-installed item: ${item}"
+    hdel ":${item}" 2>/dev/null \
+      || echo "[boot-disk]   WARN: hdel failed on :${item} (skipping — non-empty folder or system file?)"
+  fi
+done < <(hls -a : 2>/dev/null)
+
+echo "[boot-disk] volume root (after cleanup):"
+hls -a : || true
+
 # Inspect (and report) the System Folder's blessed bit. hattrib without
 # any flags prints the current attributes; our volume should already
 # have System Folder blessed since this image is community-prepared
