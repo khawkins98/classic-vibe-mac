@@ -28,6 +28,43 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-08 — Retro68 RIncludes ship no `Finder.r`; BNDL/FREF/ICN# must be raw `data` resources
+**Context:** Adding the standard Finder-binding resource set (signature
++ BNDL + FREF + ICN# + STR ) to Reader so double-clicking `.html` files
+on the boot disk would route to us instead of triggering the Finder's
+"Could not find the application program …" dialog.
+**Finding:** Apple's classic MPW Rez had `#include "Types.r"` macros that
+defined the BNDL/FREF/ICN# resource types, so you could write
+`resource 'BNDL' (128) { 'CVMR', 0, { 'ICN#', { 0, 128; 1, 129 }; … } };`
+and Rez would emit the correct on-disk bytes. Retro68's RIncludes are
+generated from the multiversal headers (`autc04/multiversal/defs/*.yaml`)
+and **do NOT include any Finder.r resource type definitions** — multiversal
+focuses on programmatic interfaces (FSSpec, AppleEvent calls, etc.) and
+never carried the Finder resource macros. Trying to use the Apple-style
+syntax fails at Rez parse time with "no type definition for 'BNDL'". The
+multiversal repo doesn't have `Finder.r` either; it's just not part of
+the toolchain.
+**Action:** Write the BNDL/FREF/ICN# bytes longhand using `data 'TYPE'
+(id, "label") { $"hex" };`. Inside Macintosh: More Macintosh Toolbox
+p. 7-58 documents the wire format (signature[4] + sigID[2] +
+typeCount-1[2] + per type: type[4] + count-1[2] + per mapping:
+localID[2] + resID[2]). FREF is type[4] + localIcon[2] + Pascal-string
+filename. ICN# is 128 bytes icon + 128 bytes mask. Once you have the
+bytes the Finder doesn't care that Rez was bypassed.
+
+Also: `add_application(Reader …)` in Retro68 defaults the binary's
+MacBinary Type/Creator to `APPL/????`. The signature resource alone is
+not enough — you have to pass `CREATOR CVMR` to `add_application` so
+the `-c` flag reaches Rez when it builds the .bin. Without that, even a
+correctly-crafted BNDL goes unbound because the Finder's binding is
+keyed on the file's Type/Creator, not its resources.
+
+**Verification trick:** After the boot-disk script runs,
+`hls -l ":Shared:"` should show `TEXT/CVMR` for the HTML files (not
+`????/????`), and `xxd -s 65 -l 8 build/Reader.bin` should print
+`APPLCVMR` (offset 0x41 in the MacBinary header is type+creator).
+
+
 <!-- Newest entries on top. -->
 
 ### 2026-05-08 — extfs surfaces as Mac volume `Unix:`, not `Shared:` (bake :Shared: onto the boot disk instead)
