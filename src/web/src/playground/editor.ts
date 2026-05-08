@@ -94,10 +94,10 @@ export async function mountPlayground(
   baseUrl: string,
   hotLoad?: HotLoadCallback,
 ): Promise<PlaygroundHandle> {
-  const persistent = await initPersistence();
+  const { persistent, preservedCount } = await initPersistence(baseUrl);
   const ctx: PlaygroundContext = { rootEl, baseUrl, persistent };
 
-  rootEl.innerHTML = renderShell(persistent);
+  rootEl.innerHTML = renderShell(persistent, preservedCount);
 
   const projectSelect = rootEl.querySelector<HTMLSelectElement>(
     "#cvm-pg-project",
@@ -725,12 +725,19 @@ function escapeHtml(s: string): string {
  * HTML. Strict CSP (`script-src 'self'`) is therefore safe — there is no
  * inline script and no `innerHTML` of dynamic content.
  */
-function renderShell(persistent: boolean): string {
+function renderShell(persistent: boolean, preservedCount: number): string {
   const banner = persistent
     ? ""
     : `<p class="cvm-pg-banner" role="status">
          Storage isn't available in this browser session — edits won't survive reload.
        </p>`;
+  const migrationBanner = preservedCount > 0
+    ? `<p class="cvm-pg-banner cvm-pg-banner--info" role="status">
+         <strong>Heads-up:</strong> the sample projects were updated.
+         Your edits in ${preservedCount} file${preservedCount === 1 ? "" : "s"} were preserved —
+         only unmodified files were refreshed to the latest version.
+       </p>`
+    : "";
   return `
     <header class="window__titlebar">
       <span class="window__close" aria-hidden="true"></span>
@@ -746,10 +753,11 @@ function renderShell(persistent: boolean): string {
         <strong>Today the in-browser compile only handles
         <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
         <code>.h</code> edits ride along in <em>Download .zip</em> but
-        don't change the running binary (yet &mdash; see
-        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/57" target="_blank" rel="noopener">#57</a>).
+        don't change the running binary (in-browser C compilation requires
+        a native toolchain; see the playground README for details).
       </p>
       ${banner}
+      ${migrationBanner}
       <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
         <label class="cvm-pg-field">
           <span class="cvm-pg-field__label">Project</span>
@@ -778,9 +786,7 @@ function renderShell(persistent: boolean): string {
         locally and ride along in <em>Download .zip</em>, but the data fork
         in your built <code>.bin</code> is whatever CI compiled from
         <code>main</code>. Try editing a <code>.r</code> file to see live
-        changes, or see
-        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/57" target="_blank" rel="noopener">issue #57</a>
-        for the in-browser-C-compile feasibility study.
+        changes.
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>

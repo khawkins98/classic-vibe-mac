@@ -638,6 +638,13 @@ body.cvm-paused .emulator-canvas {
   margin-bottom: 14px;
 }
 
+/* Informational banner — lighter than the warning, used for migration notices. */
+.cvm-pg-banner--info {
+  border-color: var(--shadow);
+  background: #f0f4ff; /* subtle blue-tint */
+  margin-bottom: 14px;
+}
+
 .cvm-pg-banner--warn code {
   background: #fff;
   border: 1px solid var(--shadow);
