@@ -405,13 +405,26 @@ classic-vibe-mac/
 │   │   └── test.yml          ← unit + e2e + vision tests
 │   ├── dependabot.yml
 │   └── pull_request_template.md
+├── docs/
+│   ├── DEVELOPMENT.md        ← day-to-day iteration loops
+│   ├── ARCHITECTURE.md       ← system architecture as built
+│   ├── PLAYGROUND.md         ← Epic #21 design rationale
+│   └── AGENT-PROCESS.md      ← five-reviewer pass + dispatch hygiene
 ├── src/
 │   ├── app/                  ← Mac C source (Retro68 + Toolbox)
-│   │   ├── CMakeLists.txt
-│   │   ├── minesweeper.c     ← Toolbox UI shell
-│   │   ├── minesweeper.r     ← Rez resource file
-│   │   ├── game_logic.c      ← pure-C engine (host-testable)
-│   │   └── game_logic.h
+│   │   ├── CMakeLists.txt    ← aggregator: add_subdirectory(reader); add_subdirectory(macweather)
+│   │   ├── README.md
+│   │   ├── reader/           ← Reader app (CVMR): HTML viewer
+│   │   │   ├── reader.c           Toolbox UI shell
+│   │   │   ├── reader.r           Rez resources
+│   │   │   ├── html_parse.{c,h}   pure-C tokenizer + layout (host-testable)
+│   │   │   └── CMakeLists.txt
+│   │   └── macweather/       ← MacWeather app (CVMW): live-data demo
+│   │       ├── macweather.c
+│   │       ├── macweather.r
+│   │       ├── weather_parse.{c,h}
+│   │       ├── weather_glyphs.{c,h}
+│   │       └── CMakeLists.txt
 │   └── web/                  ← Vite + TypeScript landing page
 │       ├── index.html
 │       ├── package.json
@@ -428,7 +441,7 @@ classic-vibe-mac/
 │           ├── emulator-worker-types.ts
 │           └── emulator-input.ts
 ├── tests/
-│   ├── unit/                 ← host-cc C tests for game_logic
+│   ├── unit/                 ← host-cc C tests for pure-C engines (html_parse, weather_parse)
 │   ├── e2e/                  ← Playwright vs Vite dev server
 │   └── visual/               ← Claude Haiku vision assertions
 ├── scripts/
