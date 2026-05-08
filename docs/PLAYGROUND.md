@@ -112,6 +112,12 @@ don't duplicate this in either file._
 | Playground Phase 3 — hot-load into the running Mac | Template-splice HFS patcher + `InMemoryDisk` + worker re-spawn; Build & Run round-trips ~820ms warm in production | ✅ shipped on `main` |
 | Rez syntax highlighting | CodeMirror 6 StreamLanguage grammar for `.r` files | ✅ shipped (#23) |
 | Build & Run first-run modal | "What just happened?" orientation dialog after first hot-load | ✅ shipped (#46) |
+| Audio | PCM via AudioWorklet; buffer reset on reboot; null-guard on blit | ✅ shipped (#47) |
+| Split-pane layout | Side-by-side editor + emulator at ≥1200px viewport | ✅ shipped (#25, #45) |
+| File tab bar + dirty indicators | Multi-file tabs, unsaved-change dot, per-file persistence | ✅ shipped (#22) |
+| Smart bundle migration | Preserve user-edited files across `bundleVersion` bumps | ✅ shipped (#24) |
+| Hello, Mac! starter sample | Minimal WIND+DrawString+WNE starter project in the playground | ✅ shipped (#26) |
+| Architecture review | 5-reviewer pass; all critical findings resolved | ✅ closed (#49) |
 | Epic #12 — Real Mac TCP/IP via relay | Closed after review (architecture wrong + ToS violation) | ❌ closed |
 | Epic #19 — Full in-browser IDE with C compilation | Closed after review (needs OAuth + backend + 4-9 engineer-month GCC port) | ❌ closed |
 
@@ -230,22 +236,22 @@ Boost.Wave outcome. Actual landed: all three phases shipped on
 entirely (TypeScript-side preprocessor against the IDB virtual FS;
 see [`src/web/src/playground/preprocessor.ts`](../src/web/src/playground/preprocessor.ts)).
 
-## Open child issues
+## Closed child issues
 
-All filed, all linked back to #21:
+All child issues for Epic #21 are closed:
 
-| # | Title | Phase |
+| # | Title | State |
 |---|-------|-------|
-| [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22) | File tree + tabs + dirty-state in editor | v1.2 |
-| [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23) | Rez (.r) syntax highlighting | v1.2 |
-| [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24) | 3-way diff migration UI for upstream sample changes | v1.2 |
-| [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25) | Side-by-side editor + emulator at viewport ≥1200px | v1.2 |
-| [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26) | "Hello, Mac!" minimal starter sample | v1.2 (gated on end-to-end re-verify post-modelid-fix) |
-| [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27) | HFS template-splice path | Phase 3 |
-| [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28) | InMemoryDisk class for the BasiliskII disks API | Phase 3 |
-| [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29) | Weather poller teardown on emulator worker re-spawn | bugfix |
-| [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30) | WASM-Rez full integration build-out | Phase 2 (gated on spike) |
-| [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31) | Lock Type/Creator editing in the editor | v1.x |
+| [#22](https://github.com/khawkins98/classic-vibe-mac/issues/22) | File tree + tabs + dirty-state in editor | ✅ closed |
+| [#23](https://github.com/khawkins98/classic-vibe-mac/issues/23) | Rez (.r) syntax highlighting | ✅ closed |
+| [#24](https://github.com/khawkins98/classic-vibe-mac/issues/24) | Smart bundle migration (preserve user-edited files) | ✅ closed |
+| [#25](https://github.com/khawkins98/classic-vibe-mac/issues/25) | Side-by-side editor + emulator at viewport ≥1200px | ✅ closed |
+| [#26](https://github.com/khawkins98/classic-vibe-mac/issues/26) | "Hello, Mac!" minimal starter sample | ✅ closed |
+| [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27) | HFS template-splice path | ✅ closed |
+| [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28) | InMemoryDisk class for the BasiliskII disks API | ✅ closed |
+| [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29) | Weather poller teardown on emulator worker re-spawn | ✅ closed |
+| [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30) | WASM-Rez full integration build-out | ✅ closed |
+| [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31) | Lock Type/Creator editing in the editor | ✅ closed |
 
 ## Known gotchas the spike will hit
 
