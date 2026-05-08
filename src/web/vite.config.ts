@@ -48,7 +48,15 @@ export default defineConfig({
     // re-derive it.
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "require-corp",
+      // `credentialless` instead of `require-corp` so the worker can
+      // make cross-origin fetches (e.g. api.open-meteo.com for
+      // MacWeather) without the remote needing to opt in via a
+      // Cross-Origin-Resource-Policy header. Same SAB guarantees;
+      // browsers also strip cookies on the cross-origin fetch.
+      // Production keeps `require-corp` via coi-serviceworker which
+      // rewrites response headers, so cross-origin fetches there pass
+      // through the shim.
+      "Cross-Origin-Embedder-Policy": "credentialless",
     },
   },
 });

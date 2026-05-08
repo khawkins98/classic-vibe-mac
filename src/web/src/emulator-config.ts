@@ -50,6 +50,20 @@ export interface EmulatorConfig {
      * (`:Shared:<name>`), `url` is where the worker fetches the bytes. */
     files: Array<{ name: string; url: string }>;
   };
+  /**
+   * Live weather poll: the worker fetches from api.open-meteo.com on
+   * interval and writes `/Shared/weather.json` (which BasiliskII's extfs
+   * surfaces as `:Unix:weather.json` for MacWeather to pick up).
+   *
+   * Coordinates are fallbacks — actual geolocation prompting (if any)
+   * happens on the main thread, which can override these per-request.
+   */
+  weather: {
+    /** Default latitude (Cupertino, CA). */
+    fallbackLat: number;
+    /** Default longitude (Cupertino, CA). */
+    fallbackLon: number;
+  };
 }
 
 // import.meta.env.BASE_URL is the Vite `base` setting at build time, e.g.
@@ -78,5 +92,10 @@ export const emulatorConfig: EmulatorConfig = {
       { name: "inside-macintosh.html", url: `${BASE}shared/inside-macintosh.html` },
       { name: "lorem.html", url: `${BASE}shared/lorem.html` },
     ],
+  },
+  // Cupertino, CA. Where else.
+  weather: {
+    fallbackLat: 37.32,
+    fallbackLon: -122.03,
   },
 };

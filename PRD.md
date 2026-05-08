@@ -98,10 +98,22 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 ## Components
 
-### 1. Mac App — Reader, an HTML viewer (`src/app/`)
+### 1. Mac Apps (`src/app/`)
+
+Multiple apps coexist under `src/app/<name>/`. The top-level
+`CMakeLists.txt` is a tiny aggregator (`add_subdirectory(reader)`,
+`add_subdirectory(macweather)`); each app has its own creator code, its
+own `add_application()` call, its own resource fork, and its own
+subdirectory of pure-C engine modules. Outputs land in `build/<app>/`.
+
+Adding an app: drop a directory under `src/app/`, append one
+`add_subdirectory()` line, push. The boot-disk script installs every
+`.bin` it's given into both `:System Folder:Startup Items:`
+(auto-launch on boot) and `:Applications:` (re-launch from the desktop).
+
+#### Reader (`src/app/reader/`)
 - Written in C using Mac Toolbox APIs (QuickDraw, Window Manager, Menu
   Manager, Event Manager, Dialog Manager, Resource Manager).
-- Targets 68k via Retro68 (`m68k-apple-macos-gcc`).
 - Reads HTML files from the boot disk's `:Shared:` folder and renders
   a sensible subset to the screen: paragraphs and line breaks (with
   word-wrap), `h1`-`h3` headings, bold + italic, ordered/unordered
@@ -112,21 +124,39 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 - Standard Mac UI: document window with vertical scroll bar, Apple /
   File / Edit / View menus, About box, ⌘O (Open from `:Shared:`),
   ⌘R (Reload), ⌘Q (Quit), back-navigation via Backspace.
-- **Source layout** (the reusable architectural pattern for any app
-  here):
+- Creator code `CVMR`. Source split:
   - `html_parse.{c,h}` — pure-C tokenizer + layout. No Toolbox
     includes. Compiled by both Retro68 (linked into the app) and the
-    host C compiler (driven by `tests/unit/test_html_parse.c`,
-    11 passing tests covering tokenizer, layout, word-wrap, link
-    regions, nested formatting, entity decoding).
+    host C compiler (driven by `tests/unit/test_html_parse.c`).
   - `reader.c` — Toolbox UI shell. Owns the event loop, draws the
     rendered layout with QuickDraw, handles scroll bar + link clicks,
     reads files from `:Shared:` via `HOpen` / `FSRead`.
   - `reader.r` — Rez resources: `WIND` (document window), `MBAR` +
     `MENU` (Apple/File/Edit/View), `ALRT`+`DITL` (About), `STR#`,
     `vers`, `SIZE`.
-- Designed to run on System 7.5.5. Per-app architectural details and
-  the swap-in-your-own-app guide live in `src/app/README.md`.
+
+#### MacWeather (`src/app/macweather/`)
+- Live-data demo. Reads `:Unix:weather.json` (the Emscripten
+  `/Shared/` tree, mounted by BasiliskII's extfs as the Mac volume
+  `Unix:` — see `LEARNINGS.md`), parses the open-meteo response shape
+  with a hand-rolled JSON parser, and draws the current conditions
+  plus a 3-day forecast with pixel-art QuickDraw glyphs.
+- The JS host (`src/web/src/weather-poller.ts`) polls
+  `api.open-meteo.com` every 15 minutes and writes the JSON file. The
+  Mac side watches modtime on a 30-tick null-event loop and redraws on
+  change. Cmd-R force-refreshes.
+- Creator code `CVMW`. Source split:
+  - `weather_parse.{c,h}` — pure-C JSON parser scoped to open-meteo's
+    response shape. Host-tested via `tests/unit/test_weather_parse.c`.
+    No JSON library dependency.
+  - `weather_glyphs.{c,h}` — 1-bit pixel-art QuickDraw routines mapped
+    by WMO weather code (sun, partly-cloudy, rain, snow, fog, thunder).
+  - `macweather.c` — Toolbox UI shell.
+  - `macweather.r` — Rez resources (window, menus, About, BNDL/FREF/
+    ICN# Finder binding, SIZE).
+
+Designed to run on System 7.5.5. Per-app architectural details and
+the add-your-own-app guide live in `src/app/README.md`.
 
 #### Previous demo: Minesweeper
 
