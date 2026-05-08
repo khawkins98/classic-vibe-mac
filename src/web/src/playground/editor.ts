@@ -186,8 +186,16 @@ export async function mountPlayground(
             fontSize: "12px",
           },
           ".cm-content": {
+            // Cursor: a 2px-wide black caret reads clearly on white. The
+            // default CM6 caret is 1px and can disappear at a glance —
+            // visitors were missing the affordance entirely.
             caretColor: "#000000",
+            cursor: "text",  // I-beam over the editable area.
             padding: "8px 0",
+          },
+          ".cm-cursor, .cm-dropCursor": {
+            borderLeftWidth: "2px",
+            borderLeftColor: "#000000",
           },
           ".cm-gutters": {
             backgroundColor: "#dddddd",
@@ -206,8 +214,13 @@ export async function mountPlayground(
               backgroundColor: "#0000aa !important",
               color: "#ffffff",
             },
+          // When the editor has focus, draw a subtle period-styled inset
+          // border so visitors get unambiguous feedback that they're now
+          // in editing mode. Default CM6 outline was suppressed; this
+          // replaces it with something that fits the System 7 chrome.
           "&.cm-focused": {
             outline: "none",
+            boxShadow: "inset 0 0 0 1px #000000, inset 1px 1px 0 1px #aaaaaa",
           },
           ".cm-scroller": {
             fontFamily: '"Monaco", "Andale Mono", "Courier New", monospace',
@@ -540,10 +553,11 @@ function renderShell(persistent: boolean): string {
     </header>
     <div class="window__body">
       <p class="cvm-pg-intro">
-        This is the actual source for the bundled apps. Edits save locally in
-        your browser. Hit <em>Build .bin</em> to compile and download a
-        MacBinary, or <em>Build &amp; Run</em> to reboot the Mac with your
-        changes mounted as a secondary disk.
+        Click into the source below and start typing &mdash; this is the real
+        C and Rez code for the apps running in the Mac above, and your edits
+        save automatically in your browser. Hit <em>Build .bin</em> to compile
+        and download a MacBinary, or <em>Build &amp; Run</em> to reboot the
+        Mac with your changes mounted as a secondary disk.
       </p>
       ${banner}
       <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
