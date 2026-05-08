@@ -25,13 +25,12 @@
 
 import type { EmulatorConfig } from "./emulator-config";
 import {
-  InputBufferAddresses,
   type EmulatorChunkedFileSpec,
   type EmulatorWorkerMessage,
   type EmulatorWorkerStartMessage,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
-import { wireInput, setBufferAdapter } from "./emulator-input";
+import { wireInput, setInputBuffer } from "./emulator-input";
 export { wireInput } from "./emulator-input";
 
 type LoaderPhase =
@@ -193,7 +192,6 @@ async function boot(
   let imageData: ImageData | undefined;
   let videoView: Uint8Array | undefined;
   let videoModeView: Int32Array | undefined;
-  let inputView: Int32Array | undefined;
   let frames = 0;
   let firstFrameLogged = false;
   let lastBlitRect: EmulatorWorkerVideoBlitRect | undefined;
@@ -218,7 +216,6 @@ async function boot(
       case "emulator_handles": {
         videoView = new Uint8Array(m.videoBuffer);
         videoModeView = new Int32Array(m.videoModeBuffer);
-        inputView = new Int32Array(m.inputBuffer);
         // Mount the canvas and wire input now that we have shared memory.
         canvas = mountCanvas(handles.mount, {
           width: m.screenWidth,
@@ -226,28 +223,15 @@ async function boot(
         });
         ctx = canvas.getContext("2d", { desynchronized: true })!;
         imageData = ctx.createImageData(m.screenWidth, m.screenHeight);
-        setBufferAdapter({
-          pushMouseMove: (x, y) => {
-            if (!inputView) return;
-            inputView[InputBufferAddresses.mousePositionFlagAddr] = 1;
-            inputView[InputBufferAddresses.mousePositionXAddr] = x;
-            inputView[InputBufferAddresses.mousePositionYAddr] = y;
-          },
-          pushMouseButton: (button, down) => {
-            if (!inputView) return;
-            const slot = button === 2
-              ? InputBufferAddresses.mouseButton2StateAddr
-              : InputBufferAddresses.mouseButtonStateAddr;
-            inputView[slot] = down ? 1 : 0;
-          },
-          pushKey: (macKeyCode, down, modifiers) => {
-            if (!inputView) return;
-            inputView[InputBufferAddresses.keyEventFlagAddr] = 1;
-            inputView[InputBufferAddresses.keyCodeAddr] = macKeyCode;
-            inputView[InputBufferAddresses.keyStateAddr] = down ? 1 : 0;
-            inputView[InputBufferAddresses.keyModifiersAddr] = modifiers;
-          },
-        });
+        // Hand the SharedArrayBuffer to the input layer; emulator-input.ts
+        // now owns the cyclical-lock dance with the worker (compareExchange
+        // READY_FOR_UI_THREAD → UI_THREAD_LOCK, write events, store
+        // READY_FOR_EMUL_THREAD + Atomics.notify). Previously we wrote
+        // event slots directly without participating in the lock, so the
+        // worker's acquireInputLock never saw READY_FOR_EMUL_THREAD and no
+        // input was ever delivered to the emulator. See LEARNINGS.md
+        // 2026-05-08 (input lock entry).
+        setInputBuffer(m.inputBuffer);
         setUnwire(wireInput(canvas));
         canvasMounted = true;
         break;
