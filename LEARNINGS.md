@@ -30,6 +30,48 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — extfs surfaces as Mac volume `Unix:`, not `Shared:` (bake :Shared: onto the boot disk instead)
+**Context:** Reader was launching from Startup Items but logging "no
+content found" — every `HOpen(0, 0, ":Shared:index.html", fsRdPerm, ...)`
+call was failing. The premise from the earlier "Seeding the Shared Mac
+volume" entry — that `extfs /Shared/` would expose `/Shared/` in the
+Emscripten FS as a Mac volume named "Shared" — was wrong.
+**Finding:** Read `mihaip/macemu/BasiliskII/src/Unix/user_strings_unix.cpp`:
+the volume name is hard-coded.
+
+```
+{STR_EXTFS_CTRL,        "Unix Root"},
+{STR_EXTFS_NAME,        "Unix Directory Tree"},
+{STR_EXTFS_VOLUME_NAME, "Unix"},
+```
+
+Confirmed by `ExtFSInit()` in `BasiliskII/src/extfs.cpp`: the root FSItem's
+guest name is `GetString(STR_EXTFS_VOLUME_NAME)`, with no override path.
+Infinite Mac doesn't try to address the volume by Mac name either — they
+treat `/Shared/Downloads` and `/Shared/Uploads` as host-side staging dirs
+the BlueSCSI bridge consumes by inode, not as `:Shared:` paths from the
+guest. Our Reader app, by contrast, opens by Pascal-string `:Shared:`,
+which can never match a `Unix:`-named volume. The seed files were being
+written into `/Shared/` correctly (FS.readdir confirms 5 files post-
+preRun); they just appeared on the guest as `Unix:index.html`,
+`Unix:about.html`, etc. — invisible to a `:Shared:` lookup.
+**Action:** Pivoted to Option B from the brief — bake the HTML files
+directly into the boot HFS image. `scripts/build-boot-disk.sh` now
+copies `src/web/public/shared/*.html` into both `:Shared:` (boot volume
+root) and `:System Folder:Startup Items:Shared:` (so the path works
+regardless of what working directory Process Manager hands the app at
+launch). The `extfs /Shared/` plumbing in the worker stays — it's still
+useful for future Uploads/Downloads features where the guest-volume name
+is irrelevant — it just no longer carries the Reader content. Local
+verification: Reader displays "Welcome to Reader" with working links to
+about/credits/inside-macintosh/lorem (see
+`public/screenshot-shared-fix.png`). Things tried before pivoting:
+trailing-slash variation in the `extfs` pref (`/Shared` vs `/Shared/`)
+— irrelevant, the volume name is the bug; reading the upstream worker
+postMessage handlers for a remount signal — no such thing exists. The
+upstream "premise" was correct *for upstream* because no upstream
+software reads from `:Shared:` by name.
+
 ### 2026-05-08 — Seeding the Shared Mac volume from JS via Emscripten FS
 **Context:** The C-side Reader app (commit 46fe8c4) reads HTML files from
 `:Shared:index.html`. We needed to wire BasiliskII's `extfs /Shared/` pref
