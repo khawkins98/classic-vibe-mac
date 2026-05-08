@@ -138,15 +138,29 @@ jobs:
             echo "::warning::system755-vibe.dsk was not produced. Web build will proceed without it (loader stays in STUB mode regardless)."
           fi
 
+      # Verify the .code.bin precompiles emit. Track 7 of Phase 2 splices a
+      # freshly-WASM-Rez-compiled resource fork onto these data-fork-only
+      # MacBinaries to produce a downloadable .bin in the playground. The
+      # CMake `Retro68_CreateApp` macro produces them as a side-effect (see
+      # build/<app>/<App>.code.bin) — we just assert they exist and ship
+      # them as static assets next to the web bundle.
+      - name: Verify .code.bin precompiles (playground splice inputs)
+        run: |
+          test -s build/reader/Reader.code.bin
+          test -s build/macweather/MacWeather.code.bin
+          ls -la build/reader/Reader.code.bin build/macweather/MacWeather.code.bin
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: classic-vibe-mac-${{ github.sha }}
           path: |
             build/reader/Reader.bin
+            build/reader/Reader.code.bin
             build/reader/Reader.dsk
             build/reader/Reader.APPL
             build/macweather/MacWeather.bin
+            build/macweather/MacWeather.code.bin
             build/macweather/MacWeather.dsk
             build/macweather/MacWeather.APPL
             dist/app.dsk
@@ -222,6 +236,40 @@ jobs:
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
         run: npm run build
+
+      # Verify the vendored prebuilt WASM-Rez blobs are present and roughly
+      # the right size. We ship them committed to git (Track 1b of Issue
+      # #30) rather than rebuilding emsdk in CI; this step exists to flag
+      # if someone accidentally deletes them or commits a wildly-wrong
+      # build (e.g. the unstripped debug build is ~10x bigger).
+      - name: Verify WASM-Rez vendored artifacts
+        run: |
+          test -s src/web/public/wasm-rez/wasm-rez.js
+          test -s src/web/public/wasm-rez/wasm-rez.wasm
+          test -s src/web/public/wasm-rez/RIncludes/Multiverse.r
+          js_size=$(stat -c%s src/web/public/wasm-rez/wasm-rez.js)
+          wasm_size=$(stat -c%s src/web/public/wasm-rez/wasm-rez.wasm)
+          echo "wasm-rez.js   = $js_size B"
+          echo "wasm-rez.wasm = $wasm_size B"
+          # Sanity bounds. The spike was 73KB JS / 316KB WASM. If anything
+          # ever goes 5x off, fail loudly so we notice.
+          if [ "$wasm_size" -lt 100000 ] || [ "$wasm_size" -gt 2000000 ]; then
+            echo "::error::wasm-rez.wasm size ($wasm_size B) is wildly off the ~316 KB target"
+            exit 1
+          fi
+          gz_size=$(gzip -9c src/web/public/wasm-rez/wasm-rez.wasm | wc -c)
+          echo "wasm-rez.wasm.gz = $gz_size B"
+
+      # Co-locate the .code.bin precompiles into the public assets so the
+      # playground's Build button can fetch them and splice the fresh
+      # resource fork on top. We do this BEFORE `npm run build` so Vite
+      # picks them up from public/ during the build.
+      - name: Co-locate .code.bin precompiles into web public/
+        run: |
+          mkdir -p src/web/public/precompiled
+          cp artifact/build/reader/Reader.code.bin src/web/public/precompiled/reader.code.bin
+          cp artifact/build/macweather/MacWeather.code.bin src/web/public/precompiled/macweather.code.bin
+          ls -la src/web/public/precompiled/
 
       # Co-locate the disk images next to index.html so they're reachable at
       # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —
