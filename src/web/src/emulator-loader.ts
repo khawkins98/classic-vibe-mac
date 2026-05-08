@@ -126,6 +126,9 @@ function disposeSession(s: ActiveSession): void {
   // this leak was silent — the message hit a dead port.
   s.stopWeather?.();
   s.worker?.terminate();
+  // Tell the audio worklet to flush its queue before closing the context —
+  // prevents stale PCM chunks from the old session bleeding into the next boot.
+  s.audioWorkletNode?.port.postMessage({ type: "reset" });
   // Close audio context so the AudioWorklet thread doesn't keep draining
   // a dead queue after the worker has been terminated.
   s.audioContext?.close().catch(() => {});
