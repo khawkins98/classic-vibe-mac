@@ -98,28 +98,44 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 ## Components
 
-### 1. Mac App — Minesweeper Clone (`src/app/`)
+### 1. Mac App — Reader, an HTML viewer (`src/app/`)
 - Written in C using Mac Toolbox APIs (QuickDraw, Window Manager, Menu
   Manager, Event Manager, Dialog Manager, Resource Manager).
 - Targets 68k via Retro68 (`m68k-apple-macos-gcc`).
-- Classic features: 9x9 grid, 10 mines (beginner difficulty), reveal,
-  flag (option-click), flood-fill on zero-neighbor cells, win/lose
-  detection, New Game (Cmd-N), Quit (Cmd-Q), About box.
-- **First-click safety:** mines are placed lazily on the first reveal
-  with the clicked cell + its 8 neighbors excluded from the placement
-  pool, so the first click can never lose.
-- **Source layout:**
-  - `game_logic.{c,h}` — pure C engine. No Toolbox includes. Compiled
-    by both Retro68 (linked into the app) and the host C compiler
-    (driven by `tests/unit/test_minesweeper.c`). Uses an internal
-    xorshift32 RNG seeded from `TickCount()` at runtime, or with a
-    fixed seed in tests for reproducibility.
-  - `minesweeper.c` — Toolbox UI shell. Owns the event loop, draws
-    the board with QuickDraw, routes mouse clicks into the engine.
-  - `minesweeper.r` — Rez resources: `WIND` (main window), `MBAR` +
-    `MENU` (Apple/File/Edit), `ALRT`+`DITL` (About + win/lose
-    confirmation), `STR#` (status text), `vers`, `SIZE`.
-- Designed to run on System 7.x.
+- Reads HTML files from the boot disk's `:Shared:` folder and renders
+  a sensible subset to the screen: paragraphs and line breaks (with
+  word-wrap), `h1`-`h3` headings, bold + italic, ordered/unordered
+  lists, `<a href="other.md">` links between bundled files, monospace
+  `<pre>` blocks, common entities (`&amp;` `&lt;` `&gt;` etc.).
+  Out of scope: images, tables, CSS, forms, JavaScript, real network
+  fetching.
+- Standard Mac UI: document window with vertical scroll bar, Apple /
+  File / Edit / View menus, About box, ⌘O (Open from `:Shared:`),
+  ⌘R (Reload), ⌘Q (Quit), back-navigation via Backspace.
+- **Source layout** (the reusable architectural pattern for any app
+  here):
+  - `html_parse.{c,h}` — pure-C tokenizer + layout. No Toolbox
+    includes. Compiled by both Retro68 (linked into the app) and the
+    host C compiler (driven by `tests/unit/test_html_parse.c`,
+    11 passing tests covering tokenizer, layout, word-wrap, link
+    regions, nested formatting, entity decoding).
+  - `reader.c` — Toolbox UI shell. Owns the event loop, draws the
+    rendered layout with QuickDraw, handles scroll bar + link clicks,
+    reads files from `:Shared:` via `HOpen` / `FSRead`.
+  - `reader.r` — Rez resources: `WIND` (document window), `MBAR` +
+    `MENU` (Apple/File/Edit/View), `ALRT`+`DITL` (About), `STR#`,
+    `vers`, `SIZE`.
+- Designed to run on System 7.5.5. Per-app architectural details and
+  the swap-in-your-own-app guide live in `src/app/README.md`.
+
+#### Previous demo: Minesweeper
+
+Originally Minesweeper validated the pipeline (9×9 grid, 10 mines,
+first-click safety, flood-fill, win/loss detection). It was retired
+once the pipeline was end-to-end working — Reader is a more on-brand
+demonstration of what the template can build (a Mac-native consumer of
+content the host page produces). Forks can resurrect the Minesweeper
+sources from git history if they want it as a starting point.
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
 - Uses **`ghcr.io/autc04/retro68:latest`** as the GitHub Actions job container
@@ -300,34 +316,51 @@ System Folder's Startup Items. Everything is served as static files on GitHub Pa
 
 ## Milestones
 
-POC scope is essentially complete. Status as of 2026-05-08:
+POC scope is complete. Status as of 2026-05-08:
 
 1. ✅ **Hello World** — Retro68 compiles, .bin lands in HFS image (CI).
-2. ✅ **Auto-launch** — Minesweeper auto-launches from `:System Folder:
-   Startup Items:` on the pre-baked boot disk; verified locally.
-3. 🟡 **Minesweeper** — full game logic + Toolbox UI implemented; 9/9
-   host-compiled C unit tests passing. Renders in System 7 with the
-   10×10 grid visible. Interaction (clicking cells) blocked by mouse
-   input wiring — see "open work" below.
+2. ✅ **Auto-launch** — App auto-launches from `:System Folder:Startup
+   Items:` on the pre-baked boot disk. Verified live in production.
+3. ✅ **Demo app** — *Minesweeper* shipped first to validate the
+   pipeline, then replaced by *Reader* (a small classic-Mac HTML
+   viewer in C, see `src/app/README.md`) once everything was working
+   end-to-end. Both are/were built with the same Toolbox-shell +
+   pure-C-engine split. Reader currently demonstrates the full demo
+   loop: System 7 boots, Reader auto-launches, reads
+   `:Shared:index.html` from the boot disk, renders the page, and
+   navigates between bundled HTML files via clicks. 11/11 host
+   unit tests passing.
 4. ✅ **GitHub Actions pipeline** — Retro68 build, hfsutils HFS pack,
-   bootable System 7.5.5 disk download + chunked manifest, web build,
-   Pages deploy. End-to-end green.
+   bootable System 7.5.5 disk download + chunked manifest, HTML
+   content baked into `:Shared:`, web build, Pages deploy. End-to-end
+   green.
 5. ✅ **GitHub Pages deploy** — live at
    https://khawkins98.github.io/classic-vibe-mac/. First fork's deploy
    is one Pages enable + one push.
 6. ✅ **Template polish** — README, CONTRIBUTING (Conventional Commits +
    squash policy), LEARNINGS, LICENSE, NOTICE, PR template, Dependabot,
-   `.claude/agents/` profiles, three-layer test scaffold.
+   `src/app/README.md` (per-app docs), `docs/DEVELOPMENT.md` (iteration
+   loops), three-layer test scaffold.
+7. ✅ **Mouse + keyboard input** (resolved 2026-05-08) — input layer
+   ported to participate in BasiliskII's four-state cyclical SAB lock
+   (mirrors `mihaip/infinite-mac@30112da0db`'s
+   `SharedMemoryEmulatorInput`). Cursor tracks, clicks register, menus
+   pull down. Verified locally and live.
 
 ### Open work
 
-- **Mouse input** doesn't reach the canvas in the deployed page. Pointer
-  events in `src/web/src/emulator-input.ts` aren't being translated to
-  the SAB input ring — under investigation on `fix/mouse-input`.
+- **Markdown viewer + basic editor** as a second demo app —
+  [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9). Reuses
+  the `:Shared:` pattern, adds TextEdit for editing, demonstrates
+  two-way file flow.
 - **Period chrome polish:** Chicago/Geneva web font vendoring, real
   rainbow Apple in the menu bar, optional startup chime.
-- **Stretch:** Mac OS 9 / PPC via SheepShaver (requires non-redistributable
-  ROM — out of POC scope).
+- **Full `.claude/agents/` history rewrite:** files were untracked
+  going forward, but old commits still contain them. Run
+  `git filter-repo --path .claude --invert-paths` once the open
+  Dependabot PRs are resolved.
+- **Stretch:** Mac OS 9 / PPC via SheepShaver (requires
+  non-redistributable ROM — out of POC scope).
 
 ---
 
