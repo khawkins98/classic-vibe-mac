@@ -31,6 +31,7 @@ import {
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
 import { wireInput, setInputBuffer } from "./emulator-input";
+import { startWeatherPoller } from "./weather-poller";
 export { wireInput } from "./emulator-input";
 
 type LoaderPhase =
@@ -307,6 +308,24 @@ async function boot(
     })),
   };
   worker.postMessage(startMsg);
+
+  // Start the live weather poll on the main thread. We can't run it inside
+  // the worker because BasiliskII's WASM event loop blocks the worker's
+  // microtask queue (its idleWait sits in `Atomics.wait` between blits) —
+  // a fetch's then() callback never gets scheduled. The poller posts the
+  // JSON bytes back to the worker via `{ type: "weather_data", bytes }`,
+  // which writes them into the Emscripten FS at /Shared/weather.json.
+  // BasiliskII's extfs surfaces /Shared/ as the Mac volume "Unix:" — so
+  // MacWeather sees the JSON at :Unix:weather.json.
+  try {
+    startWeatherPoller({
+      worker,
+      fallbackLat: config.weather.fallbackLat,
+      fallbackLon: config.weather.fallbackLon,
+    });
+  } catch (err) {
+    console.warn("[emulator] weather poller failed to start:", err);
+  }
 
   // ── Phase 4: render loop. ──
   const draw = () => {
