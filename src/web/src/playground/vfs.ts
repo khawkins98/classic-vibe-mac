@@ -14,9 +14,16 @@
  *      Apple multiversal headers (Multiverse.r umbrella + 5 named
  *      stubs) — see src/web/public/wasm-rez/RIncludes/README.
  *
- * Lookup order, intentionally:
- *   1. Same-project IDB file (lets the user override headers locally)
- *   2. RIncludes/ bundle
+ * Name routing:
+ *   - Any `#include` whose filename matches a name in `BUNDLED_RINCLUDES`
+ *     (Multiverse.r, Menus.r, …) is routed to the RIncludes bundle.
+ *   - Every other name is routed to the project's IDB bucket.
+ *
+ * The two buckets live in separate namespaces (`r:<name>` vs `p:<name>`)
+ * so a project file that happens to be called `MacTypes.r` would NOT
+ * shadow the system header — it'd live under `p:MacTypes.r` but lookups
+ * for `MacTypes.r` always resolve to `r:MacTypes.r`. Per-project overrides
+ * of the bundled headers are intentionally not supported today.
  *
  * If neither resolves, the preprocessor reports `cannot find #include
  * file 'X'`.
@@ -85,9 +92,10 @@ export function createVfs(baseUrl: string, _projectId: string): CachedVfs {
     projectFiles: readonly string[],
   ): Promise<void> => {
     // 1. RInclude headers — fetched once, kept for the lifetime of the
-    //    Vfs. If a user edits `Multiverse.r` themselves they'll add a
-    //    same-named project file (see step 2 — wins on lookup). Since the
-    //    bucket prefix is "r", project files don't collide.
+    //    Vfs. The bucket prefix is "r:", separate from project files'
+    //    "p:" — so the two namespaces never collide. (See header comment:
+    //    project-file overrides of bundled headers are intentionally not
+    //    supported today.)
     await Promise.all(
       BUNDLED_RINCLUDES.map(async (name) => {
         const key = `r:${name}`;

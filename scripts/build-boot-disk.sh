@@ -9,10 +9,11 @@
 #      so we don't need to bless one ourselves.
 #   3. Ensure ":System Folder:Startup Items:" exists.
 #   4. Copy our compiled app MacBinary into Startup Items.
-#   5. Optionally re-chunk the result into the manifest format the
-#      Infinite Mac BasiliskII WASM consumes (see write-chunked-manifest.py
-#      for the algorithm; this is a no-op stub today and runs only when
-#      --chunk is passed).
+#   5. Re-chunk the result into the manifest format the Infinite Mac
+#      BasiliskII WASM consumes (see write-chunked-manifest.py for the
+#      algorithm). Chunking runs unconditionally — pass `--chunk <dir>`
+#      to override the chunk-output directory; otherwise the script
+#      defaults to a sibling `<output>-chunks/` next to <output.dsk>.
 #   6. Output the modified .dsk to the dist path the web build expects.
 #
 # Usage:

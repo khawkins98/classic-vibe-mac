@@ -31,7 +31,6 @@ test-results/
 test-results-visual/
 playwright-report/
 playwright/.cache/
-tests/unit/test_minesweeper
 tests/unit/test_html_parse
 tests/unit/test_weather_parse
 tests/unit/*.dSYM/

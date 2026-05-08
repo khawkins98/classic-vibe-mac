@@ -9,7 +9,7 @@
  *   or a slightly-different boot sequence will flake the test.
  *
  *   A vision LLM is the right tool for this job: it can answer semantic
- *   questions like "is there a window titled 'Minesweeper' in this image?"
+ *   questions like "is there a window titled 'Reader' in this image?"
  *   without caring about exact pixel positions.
  *
  * Cost / speed note:
@@ -62,7 +62,7 @@ function mediaTypeFor(filePath: string): "image/png" | "image/jpeg" | "image/web
  * Example:
  *   const r = await visionAssert(
  *     "test-results/boot.png",
- *     "the screen shows a System 7 desktop with a window titled 'Minesweeper'"
+ *     "the screen shows a System 7 desktop with a window titled 'Reader'"
  *   );
  *   expect(r.pass, r.reasoning).toBe(true);
  *
