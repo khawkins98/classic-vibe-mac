@@ -626,6 +626,31 @@ body.cvm-paused .emulator-canvas {
   margin: 0 0 10px;
 }
 
+/* "This file isn't compiled in your browser" warning. Period-styled with
+ * the classic Mac alert pattern: thicker double border like an Alert's
+ * outer ridge, slightly emphatic background. Stays inline with the editor
+ * — not a modal, so visitors can still read the file. */
+.cvm-pg-banner--warn {
+  border: 2px solid var(--ink);
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+  background: #ffffe0; /* faintly tinted, like a System 7 NoteAlert paper */
+  margin-bottom: 14px;
+}
+
+.cvm-pg-banner--warn code {
+  background: #fff;
+  border: 1px solid var(--shadow);
+  padding: 0 2px;
+  font-family: var(--font-mono, "Monaco", "Andale Mono", monospace);
+  font-size: 10px;
+}
+
+.cvm-pg-banner--warn a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
 .cvm-pg-toolbar {
   display: flex;
   align-items: flex-end;
