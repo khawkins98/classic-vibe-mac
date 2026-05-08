@@ -4,6 +4,10 @@ dist/
 *.dsk
 *.img
 *.bin
+# ...except the empty HFS template the playground patches in-browser.
+# It's tiny (1.4 MB), produced once by `hfformat -l Apps`, and ships as
+# a static asset so the page can hot-load apps without any backend.
+!src/web/public/playground/empty-secondary.dsk
 
 # Node
 node_modules/

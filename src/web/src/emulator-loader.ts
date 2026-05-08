@@ -27,6 +27,7 @@ import type { EmulatorConfig } from "./emulator-config";
 import {
   PauseFlagState,
   type EmulatorChunkedFileSpec,
+  type EmulatorInMemoryDiskSpec,
   type EmulatorWorkerMessage,
   type EmulatorWorkerStartMessage,
   type EmulatorWorkerVideoBlitRect,
@@ -59,41 +60,118 @@ interface LoaderHandles {
   setPhase(phase: LoaderPhase): void;
 }
 
+/** Public surface returned by startEmulator(). Reboot() tears down the
+ *  current worker + render loop, spawns a fresh worker, and re-runs boot
+ *  with the user-supplied secondary disk inserted. The boot disk URL is
+ *  reused unchanged (System 7.5.5 doesn't change between reboots).
+ *
+ *  reboot() returns a Promise that resolves when the new worker is
+ *  fully booted (`emulator_ready` received). Callers can chain UI
+ *  updates against that.
+ */
+export interface EmulatorHandle {
+  dispose(): void;
+  /** Reboot with a new in-memory secondary disk. Used by the playground's
+   *  Build & Run button. Resolves after first frame paints. */
+  reboot(spec: EmulatorInMemoryDiskSpec): Promise<void>;
+}
+
+interface ActiveSession {
+  ac: AbortController;
+  worker: Worker | undefined;
+  rafId: number;
+  unwireInput: (() => void) | undefined;
+  teardownVisibility: (() => void) | undefined;
+  stopWeather: (() => void) | undefined;
+  /** Resolves on `emulator_ready`. Tracking this lets reboot() await it. */
+  readyPromise: Promise<void>;
+  resolveReady: () => void;
+  rejectReady: (err: Error) => void;
+}
+
+function makeSession(): ActiveSession {
+  const ac = new AbortController();
+  let resolveReady!: () => void;
+  let rejectReady!: (err: Error) => void;
+  const readyPromise = new Promise<void>((res, rej) => {
+    resolveReady = res;
+    rejectReady = rej;
+  });
+  return {
+    ac,
+    worker: undefined,
+    rafId: 0,
+    unwireInput: undefined,
+    teardownVisibility: undefined,
+    stopWeather: undefined,
+    readyPromise,
+    resolveReady,
+    rejectReady,
+  };
+}
+
+function disposeSession(s: ActiveSession): void {
+  s.ac.abort();
+  if (s.rafId) cancelAnimationFrame(s.rafId);
+  s.unwireInput?.();
+  s.teardownVisibility?.();
+  // Issue #29: stop the weather poller so it doesn't postMessage() into a
+  // terminated worker on the next interval/visibilitychange. Previously
+  // this leak was silent — the message hit a dead port.
+  s.stopWeather?.();
+  s.worker?.terminate();
+  // If readyPromise is still pending (dispose during boot), reject it so
+  // any outstanding reboot() awaits don't dangle forever.
+  s.rejectReady(new Error("emulator session disposed"));
+}
+
 export function startEmulator(
   config: EmulatorConfig,
   mount: HTMLElement,
-): { dispose(): void } {
-  const handles = renderShell(mount);
-  const ac = new AbortController();
-  let worker: Worker | undefined;
-  let rafId = 0;
-  let unwireInput: (() => void) | undefined;
-  let teardownVisibility: (() => void) | undefined;
+): EmulatorHandle {
+  let handles = renderShell(mount);
+  let session = makeSession();
+  // List of in-memory disks added via reboot(). Survives across reboots
+  // so multiple build cycles keep stacking new disks (though v1 only
+  // ever passes ONE — v2 may permit reader + macweather coexisting).
+  let extraDisks: EmulatorInMemoryDiskSpec[] = [];
 
-  void boot(config, handles, ac.signal, (w) => {
-    worker = w;
-  }, (raf) => {
-    rafId = raf;
-  }, (un) => {
-    unwireInput = un;
-  }, (td) => {
-    teardownVisibility = td;
-  }).catch((err) => {
-    if ((err as Error).name === "AbortError") return;
-    console.error("[emulator] boot failed:", err);
-    handles.setPhase({
-      kind: "error",
-      message: err instanceof Error ? err.message : String(err),
+  const startSession = (extras: EmulatorInMemoryDiskSpec[]) => {
+    void boot(config, handles, session, extras).catch((err) => {
+      if ((err as Error).name === "AbortError") return;
+      console.error("[emulator] boot failed:", err);
+      handles.setPhase({
+        kind: "error",
+        message: err instanceof Error ? err.message : String(err),
+      });
+      session.rejectReady(err as Error);
     });
-  });
+  };
+
+  startSession(extraDisks);
 
   return {
     dispose: () => {
-      ac.abort();
-      if (rafId) cancelAnimationFrame(rafId);
-      unwireInput?.();
-      teardownVisibility?.();
-      worker?.terminate();
+      disposeSession(session);
+    },
+    async reboot(spec: EmulatorInMemoryDiskSpec): Promise<void> {
+      // Tear down the live session first. We DO NOT wait for the worker
+      // to gracefully exit — terminate() is immediate, the SAB views
+      // get released, and the next session allocates fresh ones. There
+      // is a subtle race where the rAF loop might fire one more time
+      // during teardown; the AbortController guards that path.
+      disposeSession(session);
+      // Reset the mount so renderShell can paint a fresh progress block.
+      // (The previous session's canvas is still in there.)
+      mount.innerHTML = "";
+      handles = renderShell(mount);
+      session = makeSession();
+      // Replace the extras list — v1 is one app per disk. If we want to
+      // support multiple coexisting hot-loaded disks later, change this
+      // to `extraDisks.push(spec)`.
+      extraDisks = [spec];
+      startSession(extraDisks);
+      await session.readyPromise;
     },
   };
 }
@@ -185,12 +263,17 @@ function makeVisibilityController(opts: {
 async function boot(
   config: EmulatorConfig,
   handles: LoaderHandles,
-  signal: AbortSignal,
-  setWorker: (w: Worker) => void,
-  setRaf: (id: number) => void,
-  setUnwire: (un: () => void) => void,
-  setTeardownVisibility: (td: () => void) => void,
+  session: ActiveSession,
+  extraDisks: EmulatorInMemoryDiskSpec[],
 ): Promise<void> {
+  const signal = session.ac.signal;
+  const setWorker = (w: Worker) => { session.worker = w; };
+  const setRaf = (id: number) => { session.rafId = id; };
+  const setUnwire = (un: () => void) => { session.unwireInput = un; };
+  const setTeardownVisibility = (td: () => void) => {
+    session.teardownVisibility = td;
+  };
+  const setStopWeather = (s: () => void) => { session.stopWeather = s; };
   // ── Phase 0: cross-origin isolation gate. ──
   // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
   // Vite dev sets COOP/COEP, and on GH Pages we install coi-serviceworker
@@ -385,6 +468,8 @@ async function boot(
         // the worker stuck on Atomics.wait inside a code path that
         // hasn't yet finished bringing the emulator up.
         visibility.enable();
+        // Notify reboot() awaiters.
+        session.resolveReady();
         break;
 
       case "emulator_error":
@@ -406,13 +491,15 @@ async function boot(
     });
   });
 
-  // Fire off the start message.
+  // Fire off the start message. Boot disk first (always chunked), then
+  // any in-memory secondary disks added via reboot() — passed verbatim,
+  // the worker discriminates by `spec.kind`.
   const startMsg: EmulatorWorkerStartMessage = {
     type: "start",
     coreUrl: absoluteUrl(config.coreUrl),
     wasmUrl: absoluteUrl(config.wasmUrl),
     romUrl: absoluteUrl(romUrl),
-    diskSpecs: [manifest],
+    diskSpecs: [manifest, ...extraDisks],
     screenWidth: config.screen.width,
     screenHeight: config.screen.height,
     ramSizeMB: 16, // 16MB is plenty for System 7.5.5 + Minesweeper.
@@ -437,11 +524,12 @@ async function boot(
   // BasiliskII's extfs surfaces /Shared/ as the Mac volume "Unix:" — so
   // MacWeather sees the JSON at :Unix:weather.json.
   try {
-    startWeatherPoller({
+    const stopWeather = startWeatherPoller({
       worker,
       fallbackLat: config.weather.fallbackLat,
       fallbackLon: config.weather.fallbackLon,
     });
+    setStopWeather(stopWeather);
   } catch (err) {
     console.warn("[emulator] weather poller failed to start:", err);
   }

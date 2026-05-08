@@ -64,6 +64,29 @@ export type EmulatorChunkedFileSpec = {
   prefetchChunks: number[];
 };
 
+/** A disk whose bytes are sent to the worker as a single in-memory blob.
+ *  Used by the playground's hot-load path: the patched HFS image is
+ *  produced in the browser, never persisted, and handed to a fresh worker
+ *  via the `start` message. The worker reads/writes a Uint8Array directly,
+ *  no chunked HTTP fetching. */
+export type EmulatorInMemoryDiskSpec = {
+  /** Discriminator. Lets the worker tell apart the two spec shapes. */
+  kind: "inMemory";
+  /** Volume name as the Mac will see it on the desktop (HFS volume label).
+   *  Note: this is also the open() argument the BasiliskII core passes. */
+  name: string;
+  /** Raw disk image bytes. Transferable: callers may transfer the buffer
+   *  to avoid a copy; the main thread doesn't need it back. */
+  bytes: Uint8Array;
+};
+
+/** Tagged union the worker accepts in `diskSpecs`. The boot disk is always
+ *  a chunked spec (System 7.5.5 image fetched from CDN); secondary disks
+ *  may be either chunked or in-memory. */
+export type EmulatorDiskSpec =
+  | (EmulatorChunkedFileSpec & { kind?: "chunked" })
+  | EmulatorInMemoryDiskSpec;
+
 /**
  * Pause flag SharedArrayBuffer layout. A single Int32 at offset 0:
  *   0 = running (worker proceeds normally)
@@ -90,8 +113,10 @@ export type EmulatorWorkerStartMessage = {
   wasmUrl: string;
   /** URL to Quadra-650.rom. */
   romUrl: string;
-  /** Disks to mount. The first entry is the boot disk. */
-  diskSpecs: EmulatorChunkedFileSpec[];
+  /** Disks to mount. The first entry is the boot disk (always chunked).
+   *  Subsequent entries may be chunked or in-memory (e.g. a playground
+   *  Build & Run output). */
+  diskSpecs: EmulatorDiskSpec[];
   screenWidth: number;
   screenHeight: number;
   /** RAM size in megabytes. Quadra 650 supports up to 128M. */

@@ -731,6 +731,22 @@ body.cvm-paused .emulator-canvas {
 }
 
 /*
+ * "Rebooting" indicator. While the playground is mid-Build-&-Run we set
+ * data-rebooting on the playground root; this styles the buttons as
+ * unmistakably busy (and doubles as a CSS hook for any future spinners).
+ * The dashed outline is a 1990s-era "marching ants" cue without any
+ * actual animation — keeps the look discreet on the period chrome.
+ */
+.window--playground[data-rebooting] .cvm-pg-button {
+  outline: 1px dashed var(--ink);
+  outline-offset: 2px;
+  cursor: progress;
+}
+.window--playground[data-rebooting] .cvm-pg-status {
+  font-style: italic;
+}
+
+/*
  * The CodeMirror mount. We give it a fixed-ish height so the page layout
  * stays stable; the editor itself scrolls internally. Period-styled inset
  * border using the same paper-on-platinum bevel as the rest of the chrome.

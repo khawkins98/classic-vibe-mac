@@ -76,6 +76,55 @@ a real freshness signal once the JS poller pipeline reliably surfaces
 one. Big-picture lesson: a UI element that depends on a fragile
 cross-process signal should fail invisibly, not display "everything is
 broken" by default — render-nothing > render-wrong.
+### 2026-05-08 — Playground Phase 3: HFS template-splice beats writing an encoder
+**Context:** Phase 3 (Issue #21/#27) needed an in-browser way to take a
+freshly-compiled MacBinary and turn it into a mountable HFS disk image
+without any backend. The reviewer's load-bearing call: don't write a
+real HFS encoder (1.5–2.5k lines, B-tree splits, extent overflow file,
+catalog leaf rebalancing). Instead, ship a known-good empty volume as a
+static asset and PATCH it.
+**Finding:** The patcher came in at ~370 lines of TS
+(`src/web/src/playground/hfs-patcher.ts`), of which ~120 are comments.
+Three localized edits are sufficient for the "one app per disk" v1:
+(1) append a cdrType=2 file record to catalog leaf node 1, (2) mark
+N alloc-blocks used in the volume bitmap, (3) bump drFreeBks/drFilCnt/
+drNxtCNID/drLsMod/drWrCnt in the MDB and copy to the alternate MDB.
+Test infrastructure verifies byte-level round-trip equivalence with
+hfsutils: the patched disk's file `hcopy -m`s back to a MacBinary with
+the same resource fork bytes as we put in.
+**Gotcha:** HFS catalog `keyLength` includes the trailing pad byte
+(when present), not just the unpadded payload. IM:Files is ambiguous
+on this; hfsutils' `libhfs/btree.c` is the authoritative reference.
+Concrete: for "Reader" (6-char name) keyLength is 13, NOT 12. Got
+this wrong on the first pass and `hcopy` failed with "unexpected
+catalog record". Diff against an hfsutils-produced ground-truth disk
+caught it instantly.
+**Gotcha:** Adding a file requires bumping the ROOT DIRECTORY's
+valence counter, not just appending the file record. Otherwise the
+disk mounts but the Finder shows the volume as empty (the Finder
+walks `dirVal` not the catalog leaf directly).
+**Action:** Vendored `empty-secondary.dsk` (1.4 MB) as a static asset
+under `src/web/public/playground/`. The patcher reads it, patches in
+memory, and hands the bytes to the worker via a new `InMemoryDisk`
+class that lives next to `ChunkedDisk`.
+
+### 2026-05-08 — Worker reboot lifecycle: tear down the weather poller too
+**Context:** Phase 3's `reboot(diskBytes)` path tears down the running
+emulator session and spawns a fresh worker with the new secondary
+disk. The existing `dispose()` killed the worker, the rAF loop, the
+input wiring, and the visibility-pause controller — but missed one
+thing.
+**Finding:** `startWeatherPoller` returned a stop function from day
+one (Phase 2), but `emulator-loader.ts` discarded it. After dispose,
+the poller's setInterval kept firing into a terminated worker —
+`worker.postMessage()` to a terminated port is silently dropped, but
+the periodic fetch keeps hitting open-meteo every 15 minutes for the
+lifetime of the page. Issue #29 was the trigger; the fix is to
+return-and-track the stop function alongside the other teardown
+steps.
+**Action:** `ActiveSession` now owns `stopWeather` and `disposeSession`
+calls it before `worker.terminate()`. New session re-arms the poller
+in `boot()` so reboot keeps the live-weather flow working.
 
 ### 2026-05-08 — Playground Phase 2: do the C preprocessor in TypeScript, not in WASM
 **Context:** Phase 2 of Issue #21 needed `#include` / `#define` / `#if` /

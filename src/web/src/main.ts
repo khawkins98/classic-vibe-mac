@@ -241,10 +241,13 @@ window.addEventListener("cvm:paused-change", (ev) => {
 // Hand the emulator slot to the loader. It owns rendering inside this
 // element from this point on (progress UI, then canvas). If anything goes
 // wrong it switches to its own error/stub state — main.ts does not need
-// to handle failures.
+// to handle failures. We retain the handle so the playground's "Build &
+// Run" button can call `reboot()` to swap the secondary disk.
 const emulatorMount = document.getElementById("emulator-canvas-mount");
+type EmulatorHandle = ReturnType<typeof startEmulator>;
+let emulatorHandle: EmulatorHandle | null = null;
 if (emulatorMount) {
-  startEmulator(emulatorConfig, emulatorMount);
+  emulatorHandle = startEmulator(emulatorConfig, emulatorMount);
 }
 
 // ── Playground (Phase 1: read-only-leaning viewer + IDB-backed editor) ──
@@ -282,5 +285,20 @@ if (showEditorCheckbox) {
 
 if (playgroundEl) {
   applyEditorVisibility(isShowEditorEnabled());
-  void mountPlayground(playgroundEl, import.meta.env.BASE_URL);
+  // Hot-load callback: hands the patched HFS image to the loader, which
+  // tears down the worker, spawns a fresh one with the new disk in the
+  // secondary slot, and resolves once the second boot is complete.
+  void mountPlayground(
+    playgroundEl,
+    import.meta.env.BASE_URL,
+    emulatorHandle
+      ? async ({ bytes, volumeName }) => {
+          await emulatorHandle!.reboot({
+            kind: "inMemory",
+            name: volumeName,
+            bytes,
+          });
+        }
+      : undefined,
+  );
 }
