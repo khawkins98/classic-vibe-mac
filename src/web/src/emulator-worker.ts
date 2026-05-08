@@ -458,9 +458,13 @@ function resetInput(view: Int32Array) {
   view[InputBufferAddresses.mousePositionXAddr] = 0;
   view[InputBufferAddresses.mousePositionYAddr] = 0;
   view[InputBufferAddresses.mouseButtonStateAddr] = 0;
+  view[InputBufferAddresses.mouseButton2StateAddr] = -1; // upstream sentinel: -1 = no change
   view[InputBufferAddresses.keyEventFlagAddr] = 0;
   view[InputBufferAddresses.keyCodeAddr] = 0;
   view[InputBufferAddresses.keyStateAddr] = 0;
+  view[InputBufferAddresses.keyModifiersAddr] = 0;
+  view[InputBufferAddresses.useMouseDeltasAddr] = 0;
+  view[InputBufferAddresses.pausedAddr] = 0;
 }
 
 // ── start() — set up shared memory, prefetch, fire up the Module ─────
@@ -726,7 +730,8 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     blit(bufPtr: number, bufSize: number, rect?: EmulatorWorkerVideoBlitRect) {
       this.#lastBlitFrameId++;
       if (bufPtr) {
-        const HEAPU8: Uint8Array = (moduleOverrides as any).HEAPU8;
+        const HEAPU8: Uint8Array | undefined = (moduleOverrides as any).HEAPU8;
+        if (!HEAPU8) return;
         const data = HEAPU8.subarray(bufPtr, bufPtr + bufSize);
         this.#videoModeView[0] = data.length;
         this.#videoBufferView.set(data);

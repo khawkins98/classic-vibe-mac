@@ -23,6 +23,9 @@
   --ink: #000000;
   --paper: #ffffff;
   --selection: #0000aa;
+  /* Chrome/border aliases used by the tab bar and other widget chrome. */
+  --chrome: #cccccc;   /* same as --platinum; window-chrome fill */
+  --border: #808080;   /* medium-gray border for widget outlines */
 
   /* Chicago for headers/chrome if the user happens to have it; everyone
      else gets Geneva, then a generic Mac-friendly sans. */
@@ -1002,13 +1005,12 @@ body.cvm-paused .emulator-canvas {
   background: var(--chrome);
   border: 1px solid var(--border);
   border-bottom: none;
-  border-radius: 3px 3px 0 0;
+  border-radius: 0; /* System 7 tabs are square, not rounded */
   cursor: pointer;
   color: var(--ink);
   white-space: nowrap;
   /* Visually inactive tabs sit a pixel lower so the active one "connects". */
   margin-top: 2px;
-  transition: background 0.1s;
 }
 
 .cvm-pg-tab[aria-selected="true"] {
@@ -1022,11 +1024,11 @@ body.cvm-paused .emulator-canvas {
 }
 
 .cvm-pg-tab[aria-selected="false"]:hover {
-  background: color-mix(in srgb, var(--chrome) 60%, var(--paper) 40%);
+  background: #e0e0e0; /* lightened chrome; replaces color-mix() for broad browser support */
 }
 
 .cvm-pg-tab:focus-visible {
-  outline: 2px solid var(--accent, #0062cc);
+  outline: 1px dotted var(--ink); /* period-correct dotted black, matches other interactive elements */
   outline-offset: -2px;
 }
 
