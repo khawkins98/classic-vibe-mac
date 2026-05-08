@@ -75,10 +75,6 @@ interface PlaygroundContext {
  *   3. CodeMirror mount (role="tabpanel")
  *   4. status row + explanatory paragraph
  */
-export interface PlaygroundHandle {
-  setVisible(visible: boolean): void;
-}
-
 /** Callback the playground invokes after a successful Build & Run to swap
  *  the secondary disk and reboot the Mac. main.ts wires this to the
  *  EmulatorHandle's `reboot` method. Returning a Promise lets the
@@ -93,7 +89,7 @@ export async function mountPlayground(
   rootEl: HTMLElement,
   baseUrl: string,
   hotLoad?: HotLoadCallback,
-): Promise<PlaygroundHandle> {
+): Promise<void> {
   const { persistent, preservedCount } = await initPersistence(baseUrl);
   const ctx: PlaygroundContext = { rootEl, baseUrl, persistent };
 
@@ -301,24 +297,6 @@ export async function mountPlayground(
     state: editorState,
     parent: editorMount,
   });
-
-  // Test hook: expose the current doc + active file via a window global so
-  // Playwright (or other automation) can verify state without depending on
-  // CodeMirror's virtualized DOM. Inert in normal use; nothing reads this
-  // from page code.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (window as any).__cvm_playground = {
-    getDoc: () => view.state.doc.toString(),
-    getCurrent: () => ({ ...current }),
-    /** Test hook: insert text at the start of the doc, fires the same path
-     *  as a user keystroke (debounced save runs). */
-    insertAtStart: (text: string) => {
-      view.dispatch({
-        changes: { from: 0, to: 0, insert: text },
-        selection: { anchor: text.length, head: text.length },
-      });
-    },
-  };
 
   // Restore cursor if it matches the open file.
   const savedCursor = await readUiState<{
@@ -658,14 +636,6 @@ export async function mountPlayground(
   whatBtn.addEventListener("click", () => {
     if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
-
-  // Visibility toggle. We hide the entire section, not just the editor,
-  // so the caption + dropdowns disappear too.
-  return {
-    setVisible(visible: boolean) {
-      ctx.rootEl.style.display = visible ? "" : "none";
-    },
-  };
 }
 
 /**
