@@ -596,6 +596,180 @@ body.cvm-paused .emulator-canvas {
   transform: translate(-1px, -1px);
 }
 
+/* --- Playground (in-browser source viewer + editor) ----------------- */
+
+/*
+ * The playground sits in its own `<section class="window window--wide">`
+ * directly below the Macintosh window. It uses `window--wide` (max-width
+ * 880px) to match the emulator above it. Side-by-side layout at >=1200px
+ * is intentionally deferred to Phase 2 — the current chrome's centered
+ * stack reads well in mobile + desktop and we don't want to regress that.
+ */
+
+.window--playground[hidden] {
+  display: none !important;
+}
+
+.cvm-pg-intro {
+  font-family: var(--font-body);
+  font-size: 12px;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+
+.cvm-pg-banner {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  padding: 6px 8px;
+  margin: 0 0 10px;
+}
+
+.cvm-pg-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--shadow);
+}
+
+.cvm-pg-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.cvm-pg-field__label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--shadow);
+  text-transform: uppercase;
+}
+
+/*
+ * Period-styled <select>: 1px black border, hard inner bevel (highlight
+ * top/left, shadow bottom/right — sticking out), Chicago-fallback font.
+ * `appearance:none` strips the platform chrome; we paint a tiny black
+ * triangle on the right via a background gradient so it still reads as
+ * a dropdown. Crisp edges, no border-radius.
+ */
+.cvm-pg-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  color: var(--ink);
+  padding: 2px 22px 2px 6px;
+  height: 22px;
+  min-width: 140px;
+  cursor: default;
+  /* Triangle glyph — drawn with a CSS conic so we don't ship an asset. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+    linear-gradient(-45deg, transparent 50%, var(--ink) 50%);
+  background-position:
+    calc(100% - 11px) 10px,
+    calc(100% - 6px) 10px;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+
+.cvm-pg-select:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
+}
+
+/*
+ * Period-styled button. Same bevel logic as the select but inverts on
+ * :active to read as "pressed in".
+ */
+.cvm-pg-button {
+  margin-left: auto;
+  background: var(--platinum);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    1px 1px 0 0 rgba(0, 0, 0, 0.25);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  color: var(--ink);
+  padding: 4px 14px;
+  height: 24px;
+  cursor: default;
+  user-select: none;
+}
+
+.cvm-pg-button:active:not(:disabled) {
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  transform: translate(1px, 1px);
+}
+
+.cvm-pg-button:disabled {
+  color: var(--shadow);
+  cursor: default;
+}
+
+.cvm-pg-button:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
+}
+
+/*
+ * The CodeMirror mount. We give it a fixed-ish height so the page layout
+ * stays stable; the editor itself scrolls internally. Period-styled inset
+ * border using the same paper-on-platinum bevel as the rest of the chrome.
+ */
+.cvm-pg-editor {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  height: 420px;
+  min-height: 240px;
+  overflow: hidden;
+}
+
+.cvm-pg-editor .cm-editor {
+  height: 100%;
+}
+
+.cvm-pg-mobile-note {
+  display: none;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  color: var(--shadow);
+  margin: 8px 0 0;
+}
+
+/* On narrow viewports, hide the editor entirely (per editor reviewer's
+   "don't regress mobile" guidance) and show a one-line caption instead. */
+@media (max-width: 720px) {
+  .cvm-pg-toolbar,
+  .cvm-pg-editor {
+    display: none;
+  }
+  .cvm-pg-mobile-note {
+    display: block;
+  }
+}
+
 /* --- Responsive ----------------------------------------------------- */
 
 @media (max-width: 540px) {
