@@ -99,6 +99,26 @@ in part for trying to cover both cases with a single mechanism and
 arriving at "needs an HFS writer we don't have, plus OAuth, plus a
 hardened compile sandbox." 2F walks away from that.
 
+## Status
+
+_Canonical shipped-state record. README.md and PRD.md point here;
+don't duplicate this in either file._
+
+| Phase | What | State |
+|-------|------|-------|
+| Boot loop + multi-app demo | System 7.5.5 boots in browser, Reader + MacWeather auto-launch, two-way data flow live, mouse + keyboard input | ✅ shipped |
+| Playground Phase 1 — editor + persistence | CodeMirror 6, C syntax, single-file editor, IndexedDB persistence, download-as-zip, sample projects seeded at build time, strict CSP | ✅ shipped (PR #32) |
+| Playground Phase 2 — in-browser Rez compilation | WASM-Rez source vendored under `tools/wasm-rez/`; Build button preprocesses → WASM-Rez → resource fork splice → `.bin` download; output bytes SHA-256-identical to native Retro68 Rez at 103KB gzipped | ✅ shipped on `main` |
+| Playground Phase 3 — hot-load into the running Mac | Template-splice HFS patcher + `InMemoryDisk` + worker re-spawn; Build & Run round-trips ~820ms warm in production | ✅ shipped on `main` |
+| Rez syntax highlighting | CodeMirror 6 StreamLanguage grammar for `.r` files | ✅ shipped (#23) |
+| Build & Run first-run modal | "What just happened?" orientation dialog after first hot-load | ✅ shipped (#46) |
+| Epic #12 — Real Mac TCP/IP via relay | Closed after review (architecture wrong + ToS violation) | ❌ closed |
+| Epic #19 — Full in-browser IDE with C compilation | Closed after review (needs OAuth + backend + 4-9 engineer-month GCC port) | ❌ closed |
+
+For the full issue tracker (open Epics, child issues, roadmap) see
+<https://github.com/khawkins98/classic-vibe-mac/issues>.
+See [Closed-Epic graveyard](#closed-epic-graveyard) for the full post-mortems.
+
 ## Phase 1 / Phase 2 / Phase 3 sketches
 
 Three phases, mostly independent. Numbers are post-review, post-

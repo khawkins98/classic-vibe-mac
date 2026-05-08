@@ -270,42 +270,16 @@ content here.
 
 ## Goals
 
-### POC milestones — ✅ Done
+### Milestones — shipped
 
-POC scope is complete as of 2026-05-08.
+> See [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
+> for the full shipped-state table. Summary:
 
-1. ✅ **Hello World** — Retro68 compiles, .bin lands in HFS image (CI).
-2. ✅ **Auto-launch** — App auto-launches from
-   `:System Folder:Startup Items:` on the pre-baked boot disk.
-3. ✅ **Demo app** — *Minesweeper* shipped first to validate the
-   pipeline, replaced by *Reader* once everything was working
-   end-to-end. *MacWeather* added alongside Reader as a
-   live-data multi-app proof.
-4. ✅ **GitHub Actions pipeline** — Retro68 build, hfsutils HFS
-   pack, bootable System 7.5.5 disk download + chunked manifest,
-   HTML content baked into `:Shared:`, web build, Pages deploy.
-5. ✅ **GitHub Pages deploy** — live at
-   <https://khawkins98.github.io/classic-vibe-mac/>.
-6. ✅ **Template polish** — README, CONTRIBUTING (Conventional
-   Commits + squash policy), LEARNINGS, LICENSE, NOTICE, PR
-   template, Dependabot, `src/app/README.md`,
-   `docs/DEVELOPMENT.md`, `docs/ARCHITECTURE.md`,
-   `docs/PLAYGROUND.md`, `docs/AGENT-PROCESS.md`, three-layer
-   test scaffold.
-7. ✅ **Mouse + keyboard input** — input layer ported to
-   participate in BasiliskII's four-state cyclical SAB lock.
-8. ✅ **Playground Phase 1** — editor + IDB persistence +
-   sample-project seeding + download-as-zip on `main` (PR #32).
-
-### Live milestones — ✅ shipped
-
-- ✅ **Playground Phase 2** — WASM-Rez integration shipped on `main`.
-  Source under `tools/wasm-rez/`, artefacts under
-  `src/web/public/wasm-rez/`. Build button preprocesses, compiles,
-  splices, downloads.
-- ✅ **Playground Phase 3** — hot-load via template-splice +
-  `InMemoryDisk` + worker re-spawn shipped on `main`. Build & Run
-  round-trips ~820ms warm in production.
+- ✅ Boot loop, multi-app demo, GitHub Pages deploy
+- ✅ Playground Phase 1: editor + IDB persistence + download-as-zip (PR #32)
+- ✅ Playground Phase 2: WASM-Rez in-browser compilation
+- ✅ Playground Phase 3: hot-load, ~820ms warm round-trip
+- ✅ Rez syntax highlighting, Build & Run first-run modal
 
 ### Non-Goals
 
@@ -361,6 +335,12 @@ POC scope is complete as of 2026-05-08.
 ---
 
 ## Open work
+
+> **Current shipped-state:** see [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
+> for the canonical table of what's live, what's closed, and what's next.
+> The list below is the _intent_ layer — design decisions and
+> non-goals. Don't duplicate factual shipped/not-shipped claims here;
+> update `docs/PLAYGROUND.md` instead.
 
 In rough priority order. The playground is the priority; everything
 else slots in behind it. The user has explicitly committed to that
