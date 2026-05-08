@@ -61,14 +61,20 @@ npm run fetch:emulator                   # BasiliskII.wasm + Quadra-650.rom
 
 # Pull the latest compiled Minesweeper binary from CI
 gh run download \
-  $(gh run list --branch main --workflow Build --limit 1 --json databaseId -q '.[0].databaseId') \
+  "$(gh run list --branch main --workflow Build --limit 1 --json databaseId -q '.[0].databaseId')" \
   -D /tmp/cvm-artifact
 
-# Build the boot disk + secondary disk and put them where Vite serves them
+# Resolve the artifact path (its name carries the commit SHA)
+ART="$(echo /tmp/cvm-artifact/Minesweeper-*)"
+
+# Build the bootable System 7.5.5 disk (writes the disk + chunked manifest
+# + chunks dir alongside, all under src/web/public/ where Vite serves them)
 bash scripts/build-boot-disk.sh \
-  /tmp/cvm-artifact/Minesweeper-*/dist/Minesweeper.bin \
+  "$ART/build/Minesweeper.bin" \
   src/web/public/system755-vibe.dsk
-cp /tmp/cvm-artifact/Minesweeper-*/dist/app.dsk src/web/public/app.dsk
+
+# Copy the secondary app.dsk too (the loader HEAD-checks for it)
+cp "$ART/dist/app.dsk" src/web/public/app.dsk
 
 # Serve
 npm run dev
