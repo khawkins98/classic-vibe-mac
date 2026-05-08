@@ -64,6 +64,14 @@ export interface EmulatorConfig {
     /** Default longitude (Cupertino, CA). */
     fallbackLon: number;
   };
+  /**
+   * Default for the "pause emulator when tab is hidden" setting. Users can
+   * override via the checkbox in the page chrome (persists to
+   * localStorage `cvm.pauseWhenHidden`). The actual runtime read goes
+   * through `settings.ts → isPauseWhenHiddenEnabled()`; this field is
+   * the build-time default, mostly for the JSON config preview window.
+   */
+  pauseWhenHidden: boolean;
 }
 
 // import.meta.env.BASE_URL is the Vite `base` setting at build time, e.g.
@@ -98,4 +106,8 @@ export const emulatorConfig: EmulatorConfig = {
     fallbackLat: 37.32,
     fallbackLon: -122.03,
   },
+  // Sleep the worker (Atomics.wait on a SAB pause flag) when the tab is
+  // hidden. The user can flip this via the checkbox under the Mac window;
+  // this is just the default for first-time visitors.
+  pauseWhenHidden: true,
 };
