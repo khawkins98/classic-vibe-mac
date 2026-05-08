@@ -316,9 +316,23 @@ export async function mountPlayground(
       selection: { anchor: 0, head: 0 },
       scrollIntoView: true,
     });
+    updateNonCompiledBanner(nextFile);
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
   }
+
+  // Show / hide the "this file isn't compiled in your browser" banner
+  // based on the active file. See isCompiledInBrowser() for the rule and
+  // issue #57 for the in-browser-C-compile feasibility study.
+  const nonCompiledBanner = rootEl.querySelector<HTMLDivElement>(
+    "#cvm-pg-noncompiled-banner",
+  );
+  function updateNonCompiledBanner(filename: string): void {
+    if (!nonCompiledBanner) return;
+    nonCompiledBanner.hidden = isCompiledInBrowser(filename);
+  }
+  // Initial state matches the file the editor opens with.
+  updateNonCompiledBanner(filename);
 
   projectSelect.addEventListener("change", () => {
     const newId = projectSelect.value;
@@ -504,6 +518,23 @@ function extensionsForFile(filename: string) {
   return [];
 }
 
+/**
+ * Whether edits to this file are actually compiled by the in-browser
+ * pipeline. Today only Rez resource files (`.r`) recompile here — WASM-Rez
+ * produces a fresh resource fork, the Build pipeline splices it onto the
+ * precompiled `.code.bin` (data fork) emitted by CI. Everything else (`.c`,
+ * `.h`, `CMakeLists.txt`) is read-only as far as the running binary is
+ * concerned: edits save to IndexedDB and ride along in Download .zip, but
+ * the data fork in the built `.bin` is whatever CI compiled from main.
+ *
+ * The full in-browser C compile path is tracked in issue #57 (TinyCC
+ * spike + alternatives) — until that lands, this helper drives the
+ * "this file isn't compiled in your browser" warning banner.
+ */
+function isCompiledInBrowser(filename: string): boolean {
+  return /\.r$/i.test(filename);
+}
+
 function populateFileDropdown(
   el: HTMLSelectElement,
   project: SampleProject,
@@ -553,11 +584,16 @@ function renderShell(persistent: boolean): string {
     </header>
     <div class="window__body">
       <p class="cvm-pg-intro">
-        Click into the source below and start typing &mdash; this is the real
-        C and Rez code for the apps running in the Mac above, and your edits
-        save automatically in your browser. Hit <em>Build .bin</em> to compile
-        and download a MacBinary, or <em>Build &amp; Run</em> to reboot the
-        Mac with your changes mounted as a secondary disk.
+        Click into the source below and start typing &mdash; this is the
+        real C and Rez code for the apps running in the Mac above, and your
+        edits save automatically in your browser. Hit <em>Build .bin</em>
+        to compile and download a MacBinary, or <em>Build &amp; Run</em>
+        to reboot the Mac with your changes mounted as a secondary disk.
+        <strong>Today the in-browser compile only handles
+        <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
+        <code>.h</code> edits ride along in <em>Download .zip</em> but
+        don't change the running binary (yet &mdash; see
+        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/57" target="_blank" rel="noopener">#57</a>).
       </p>
       ${banner}
       <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
@@ -580,6 +616,17 @@ function renderShell(persistent: boolean): string {
         </button>
       </div>
       <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
+      <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
+        <strong>Heads-up:</strong> this file isn't compiled in your browser.
+        Only Rez resource files (<code>.r</code>) recompile in-browser today
+        &mdash; edits to <code>.c</code> / <code>.h</code> sources save
+        locally and ride along in <em>Download .zip</em>, but the data fork
+        in your built <code>.bin</code> is whatever CI compiled from
+        <code>main</code>. Try editing a <code>.r</code> file to see live
+        changes, or see
+        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/57" target="_blank" rel="noopener">issue #57</a>
+        for the in-browser-C-compile feasibility study.
+      </div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor"></div>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
