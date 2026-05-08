@@ -1,0 +1,22 @@
+<h1>About</h1>
+
+<p><b>classic-vibe-mac</b> is a GitHub template that lets you write a
+classic Mac OS application in C, push it to a repo, and have it running
+in the browser on every commit, with zero local emulator setup.</p>
+
+<p>The pipeline:</p>
+
+<ul>
+  <li>You write C against the Mac Toolbox in <i>src/app/</i>.</li>
+  <li>GitHub Actions cross-compiles it with <b>Retro68</b> for the 68k.</li>
+  <li>The compiled app is baked into a bootable System 7.5.5 disk
+      image's <i>Startup Items</i> folder.</li>
+  <li>A stripped-down <b>BasiliskII</b> WebAssembly core boots that
+      disk on GitHub Pages.</li>
+</ul>
+
+<p>This Reader app is the on-brand demonstration: instead of building yet
+another Minesweeper clone, the template ships a small native Mac app that
+consumes content the host page provides over a virtual shared volume.</p>
+
+<p><a href="index.html">Back to the index</a></p>

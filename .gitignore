@@ -32,5 +32,12 @@ test-results-visual/
 playwright-report/
 playwright/.cache/
 tests/unit/test_minesweeper
+tests/unit/test_html_parse
 tests/unit/*.dSYM/
+
+# Local AI tooling (Claude Code agent profiles, gstack, etc.) — these
+# live in the working tree as developer aids and are not part of the
+# project's distributable surface.
+.claude/
+.gstack/
 

@@ -1,4 +1,4 @@
-# Minesweeper — classic Mac 68k application built with the Retro68 toolchain.
+# Reader — classic Mac 68k HTML viewer built with the Retro68 toolchain.
 #
 # Local build (requires Retro68 installed; see https://github.com/autc04/Retro68):
 #
@@ -14,26 +14,26 @@
 #       && cmake --build build"
 #
 # Outputs in build/:
-#   Minesweeper.bin   — MacBinary (both forks; this is the canonical artifact)
-#   Minesweeper.dsk   — mountable HFS disk image containing the app
-#   Minesweeper.APPL  — data fork only (often 0 bytes for resource-only apps)
+#   Reader.bin    — MacBinary (both forks; this is the canonical artifact)
+#   Reader.dsk    — mountable HFS disk image containing the app
+#   Reader.APPL   — data fork only (often 0 bytes for resource-only apps)
 
 cmake_minimum_required(VERSION 3.15)
-project(Minesweeper C)
+project(Reader C)
 
-add_application(Minesweeper
-    minesweeper.c
-    game_logic.c
-    minesweeper.r
+add_application(Reader
+    reader.c
+    html_parse.c
+    reader.r
 )
 
 # Strip dead code and MacsBug function names to keep the binary small. Drop
 # --mac-strip-macsbug if you need readable stack traces while debugging.
-set_target_properties(Minesweeper PROPERTIES COMPILE_OPTIONS -ffunction-sections)
+set_target_properties(Reader PROPERTIES COMPILE_OPTIONS -ffunction-sections)
 if(CMAKE_SYSTEM_NAME MATCHES Retro68)
-    set_target_properties(Minesweeper PROPERTIES
+    set_target_properties(Reader PROPERTIES
         LINK_FLAGS "-Wl,-gc-sections -Wl,--mac-strip-macsbug")
 else()
-    set_target_properties(Minesweeper PROPERTIES
+    set_target_properties(Reader PROPERTIES
         LINK_FLAGS "-Wl,-gc-sections")
 endif()

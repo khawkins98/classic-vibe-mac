@@ -79,6 +79,14 @@ export type EmulatorWorkerStartMessage = {
   screenHeight: number;
   /** RAM size in megabytes. Quadra 650 supports up to 128M. */
   ramSizeMB: number;
+  /**
+   * Files to seed into the Emscripten FS at `/Shared/<name>` before
+   * BasiliskII boots, so the `extfs /Shared/` pref can surface them as a
+   * Mac volume named "Shared". The worker fetches each URL once before
+   * launching the Emscripten Module and writes the bytes inside `preRun`.
+   * See emulator-config.ts `sharedFolder` for the source of this list.
+   */
+  sharedFolderFiles: Array<{ name: string; url: string }>;
 };
 
 /** Worker → main messages. Discriminated union by `type`. */

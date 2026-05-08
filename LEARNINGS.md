@@ -30,6 +30,33 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Seeding the Shared Mac volume from JS via Emscripten FS
+**Context:** The C-side Reader app (commit 46fe8c4) reads HTML files from
+`:Shared:index.html`. We needed to wire BasiliskII's `extfs /Shared/` pref
+(already in `BASE_PREFS`) so the host page's `src/web/public/shared/*.html`
+files actually appear inside the emulated Mac as a volume named `Shared`.
+**Finding:** No special FS mount call is needed. Confirmed against
+`mihaip/infinite-mac@30112da0db` `src/emulator/worker/worker.ts` — they do
+exactly `FS.mkdir("/Shared")` + `FS.createDataFile(parent, name, bytes,
+true, true, true)` inside the Module's `preRun` hook, and BasiliskII's
+extfs picks the contents up at boot when MacOS scans the volume. Since
+`preRun` is synchronous (cannot await), the bytes have to be fetched
+*before* the dynamic `import(coreUrl)` runs and then handed in via a
+closure variable. The HTML files seed once per page load; updates after
+boot would require ejecting/remounting the volume.
+**Action:** Added `sharedFolder.files` to `EmulatorConfig`, pass it
+through the start message, fetch the bytes alongside the ROM, and write
+them to `/Shared/<name>` in `preRun`. Failures per-file are non-fatal —
+Reader has its own "no content" fallback. End-to-end visual verification
+of the Reader UI itself is blocked: CI for `feat/html-viewer` is currently
+red (the Reader C compile fails on `Controls.h` not found in the Retro68
+container) so we can't pull a fresh `app.dsk` with the Reader binary in
+its Startup Items. The locally cached disks still contain the old
+Minesweeper boot. JS-side wiring type-checks clean and the worker logs
+the seed count; once the C-side CI is green and a Reader-bearing
+`app.dsk` lands, the volume should appear in the Mac without further
+changes.
+
 ### 2026-05-08 — Mouse/keyboard input requires the main thread to participate in the cyclical lock
 **Context:** After the modelid-30 fix the emulator boots cleanly to the
 desktop with Minesweeper open, but the in-emulator cursor refused to
