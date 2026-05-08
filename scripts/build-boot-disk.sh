@@ -8,7 +8,7 @@
 #      (it was prepared by community emulator users for MinivMac/BasiliskII),
 #      so we don't need to bless one ourselves.
 #   3. Ensure ":System Folder:Startup Items:" exists.
-#   4. Copy our compiled Minesweeper MacBinary into Startup Items.
+#   4. Copy our compiled app MacBinary into Startup Items.
 #   5. Optionally re-chunk the result into the manifest format the
 #      Infinite Mac BasiliskII WASM consumes (see write-chunked-manifest.py
 #      for the algorithm; this is a no-op stub today and runs only when
@@ -16,7 +16,7 @@
 #   6. Output the modified .dsk to the dist path the web build expects.
 #
 # Usage:
-#   ./scripts/build-boot-disk.sh <minesweeper.bin> <output.dsk> [--chunk <chunks-dir>]
+#   ./scripts/build-boot-disk.sh <app.bin> <output.dsk> [--chunk <chunks-dir>]
 #
 # Output:
 #   <output.dsk>            — the modified bootable HD image (~24 MB).
@@ -36,7 +36,7 @@
 # Auto-launch: classic Mac OS 7's Finder scans ":System Folder:Startup
 # Items:" on the *boot volume's blessed System Folder* and launches its
 # contents. Because we are modifying the boot disk itself (not a secondary
-# disk), placing Minesweeper.bin in that folder is sufficient — no
+# disk), placing the app's .bin in that folder is sufficient — no
 # blessing dance needed; the System Folder of the upstream image is
 # already blessed. Verify with `hattrib ":System Folder:"` before/after
 # if you want to sanity-check.
@@ -51,7 +51,7 @@ set -euo pipefail
 # --- Args ---------------------------------------------------------------
 
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <minesweeper.bin> <output.dsk> [--chunk <chunks-dir>]" >&2
+  echo "Usage: $0 <app.bin> <output.dsk> [--chunk <chunks-dir>]" >&2
   exit 64
 fi
 
@@ -128,7 +128,7 @@ for tool in "${REQUIRED_TOOLS[@]}"; do
 done
 
 if [[ ! -f "${BINARY}" ]]; then
-  echo "error: minesweeper binary not found: ${BINARY}" >&2
+  echo "error: app binary not found: ${BINARY}" >&2
   exit 1
 fi
 

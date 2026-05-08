@@ -39,17 +39,18 @@ Each layer is the right tool for a different scope:
 **Convention:** any function in `src/app/` that does NOT call Mac Toolbox
 APIs (QuickDraw, Window Manager, Events, etc.) is testable here.
 
-When real game logic lands, factor pure logic into something like
-`src/app/game_logic.{c,h}` and `#include` it from `tests/unit/test_*.c`.
-The `Makefile` has a commented-out `-I../../src/app` you can flip on.
+When real app logic lands, factor pure C into something like
+`src/app/html_parse.{c,h}` and `#include` it from `tests/unit/test_*.c`.
+The `Makefile` already wires `-I../../src/app`.
 
 ```bash
 npm run test:unit            # runs make -C tests/unit run
 make -C tests/unit clean     # clean up binaries
 ```
 
-Currently a placeholder (`test_minesweeper.c`) since `src/app/minesweeper.c`
-itself has no game logic yet. The harness compiles and runs as a smoke test.
+Today the unit suite covers `html_parse.c` (the pure-C HTML tokenizer
++ layout used by the Reader app). `reader.c` itself is the Toolbox
+shell and is NOT host-compilable.
 
 **Requires:** a host C compiler (`cc` / `gcc` / `clang`). Standard on macOS
 and Ubuntu CI runners. No Retro68 needed.
@@ -97,7 +98,7 @@ import { visionAssert } from "./vision-assert";
 
 const result = await visionAssert(
   "test-results/boot.png",
-  "a System 7 desktop is visible with a window titled 'Minesweeper'",
+  "a System 7 desktop is visible with a window titled 'Reader'",
 );
 expect(result.pass, result.reasoning).toBe(true);
 ```
