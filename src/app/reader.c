@@ -34,7 +34,9 @@
 #include <OSUtils.h>
 #include <Resources.h>
 #include <Files.h>
-#include <Controls.h>
+/* Controls Manager (NewControl, TrackControl, GetControlValue, ...) is
+ * declared in Windows.h in Retro68's multiversal interfaces — there is
+ * no standalone Controls.h header in this toolchain. */
 
 #include "html_parse.h"
 
