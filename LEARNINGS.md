@@ -30,6 +30,37 @@ the next person (or future-you) from rediscovering the same lessons.
 
 <!-- Newest entries on top. -->
 
+### 2026-05-08 — Mouse/keyboard input requires the main thread to participate in the cyclical lock
+**Context:** After the modelid-30 fix the emulator boots cleanly to the
+desktop with Minesweeper open, but the in-emulator cursor refused to
+track the host cursor and clicks landed nowhere. The bomb dialog from
+earlier rounds had a Restart button that wouldn't respond either.
+**Finding:** Our `emulator-input.ts` was writing event slots
+(`mousePositionFlagAddr`, `mouseButtonStateAddr`, etc.) directly into
+the SharedArrayBuffer with no synchronization. The BasiliskII worker,
+ported from Infinite Mac, expects a four-state cyclical lock at
+`globalLockAddr`: `READY_FOR_UI_THREAD (0) → UI_THREAD_LOCK (1) →
+READY_FOR_EMUL_THREAD (2) → EMUL_THREAD_LOCK (3)`. The worker's
+`acquireInputLock` is a `compareExchange(2, 3)` — it only succeeds when
+the UI side has released the lock by storing `2`. We never did. So the
+worker's lock acquisition perpetually failed, no input was ever read,
+and the cursor hardware state inside BasiliskII never updated.
+**Action:** Rewrote `emulator-input.ts` to mirror upstream
+`SharedMemoryEmulatorInput` (mihaip/infinite-mac@30112da0db
+`src/emulator/ui/input.ts`): a small queue, a coalescing drain that
+acquires the lock with `compareExchange(0, 1)`, writes events with the
+same conventions as upstream's `updateInputBufferWithEvents` (notably
+`mouseButtonState = -1` for "no change", per-cycle), then releases with
+`Atomics.store(2)` + `Atomics.notify`. Also: per-event
+`getBoundingClientRect()` (the rect can change), CSS-px → emulator-px
+scaling (canvas.width / rect.width), `setPointerCapture` so menu drags
+that wander out of the canvas still get the matching pointerup, and a
+fresh mousemove enqueued before each mousedown so the press lands at
+the live cursor position. Loader (`emulator-loader.ts`) now hands the
+SAB to the input layer via `setInputBuffer(buffer)` instead of the old
+`setBufferAdapter` callback shape. Local verification: Apple menu
+pulls down on click, cursor follows movements across the canvas.
+
 ### 2026-05-08 — `modelid` in BasiliskII prefs is `gestaltID − 6`, not the gestalt itself (was likely the bomb)
 **Context:** Round-3 of the "unimplemented trap" investigation. Prior
 rounds ruled out the C code, the resource fork, and the resource layout.
