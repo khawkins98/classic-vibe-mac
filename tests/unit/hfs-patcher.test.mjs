@@ -44,7 +44,16 @@ const { patchEmptyVolumeWithBinary, parseMacBinary, __test } = mod;
 
 let pass = 0;
 let fail = 0;
-function test(name, fn) {
+let skip = 0;
+// test(name, fn) or test(name, opts, fn) where opts may carry { skip: bool }.
+function test(name, optsOrFn, maybeFn) {
+  const opts = typeof optsOrFn === "object" ? optsOrFn : {};
+  const fn = typeof optsOrFn === "function" ? optsOrFn : maybeFn;
+  if (opts.skip) {
+    console.log(`  skip ${name}`);
+    skip++;
+    return;
+  }
   try {
     fn();
     console.log(`  ok  ${name}`);
@@ -66,8 +75,22 @@ const READER_BIN = join(
   "src/web/public/precompiled/reader.code.bin",
 );
 
+// reader.code.bin is produced by Retro68 in the cross-compile job — not
+// available on the bare unit-test runner. When it's missing, skip with
+// a clear message; the test still runs in any environment where the
+// Retro68 build has populated `src/web/public/precompiled/`.
+import { existsSync } from "node:fs";
+const codeBinAvailable = existsSync(READER_BIN);
+if (!codeBinAvailable) {
+  console.log(
+    "  skip reader.code.bin not present (run via build.yml or `cmake --build build` locally); skipping precompile-dependent tests",
+  );
+}
+
 const template = new Uint8Array(readFileSync(TEMPLATE_PATH));
-const readerBin = new Uint8Array(readFileSync(READER_BIN));
+const readerBin = codeBinAvailable
+  ? new Uint8Array(readFileSync(READER_BIN))
+  : new Uint8Array(0);
 
 test("template is the expected size (1.44 MB)", () => {
   assert.equal(template.length, 1474560);
@@ -82,7 +105,7 @@ test("template MDB has expected layout", () => {
   assert.equal(mdb.drDirCnt, 0);
 });
 
-test("MacBinary parse matches hfsutils' view of reader.code.bin", () => {
+test("MacBinary parse matches hfsutils' view of reader.code.bin", { skip: !codeBinAvailable }, () => {
   const v = parseMacBinary(readerBin);
   // "????" creator is what reader.code.bin actually has (it's the data-fork
   // stub from Retro68; the user's Build pipeline overwrites the rsrc fork
@@ -103,6 +126,10 @@ const hfsutilsAvailable = which("hmount") && which("hls") && which("humount");
 if (!hfsutilsAvailable) {
   console.log(
     "  skip hfsutils not available; skipping ground-truth round-trip",
+  );
+} else if (!codeBinAvailable) {
+  console.log(
+    "  skip reader.code.bin not present; skipping hfsutils round-trip",
   );
 } else {
   test("patched disk mounts and shows the new file with correct Type/Creator", () => {
@@ -183,5 +210,5 @@ if (!hfsutilsAvailable) {
 
 // ── Summary ─────────────────────────────────────────────────────────────
 
-console.log(`\n  ${pass} passed, ${fail} failed.`);
+console.log(`\n  ${pass} passed, ${fail} failed, ${skip} skipped.`);
 if (fail > 0) process.exit(1);
