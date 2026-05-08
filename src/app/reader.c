@@ -98,7 +98,10 @@ static long        gHtmlLen        = 0;
 static HtmlTokenList gTokens;
 static HtmlLayout    gLayout;
 
-static Str63       gCurrentDoc     = "\pindex.html";
+/* Pascal-string global initialised at runtime — Retro68's GCC won't
+ * implicitly cast a "\p..." char array literal into the unsigned char
+ * Str63 type at file scope. SetCurrentDocName() in main() seeds it. */
+static Str63       gCurrentDoc;
 static Str63       gHistory[kHistoryDepth];
 static short       gHistoryDepth   = 0;
 
@@ -206,10 +209,13 @@ static void ConfigureScrollBar(void)
 static void ApplyDrawOpFont(const DrawOp *op)
 {
     /* family→font: applFont (Geneva on default System 7) for body,
-     * monaco for monospace. monaco is font ID 4 on System 7; if for
-     * some reason it's missing the system falls back gracefully. */
+     * Monaco (font ID 4 on System 7) for monospace. Retro68's Fonts.h
+     * exposes applFont/systemFont but not per-family aliases like
+     * `monaco` or `geneva` — use the numeric ID directly. If Monaco is
+     * missing on the user's system the Font Manager falls back
+     * gracefully to the system font. */
     if (op->family == DRAW_FAMILY_MONO) {
-        TextFont(monaco);
+        TextFont(4);   /* Monaco */
     } else {
         TextFont(applFont);
     }
