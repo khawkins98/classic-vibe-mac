@@ -1,0 +1,16 @@
+name = "classic-vibe-mac-ethernet"
+main = "ethernet-zone.ts"
+compatibility_date = "2024-09-01"
+
+[durable_objects]
+bindings = [
+  { name = "ETHERNET_ZONE", class_name = "EthernetZone" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["EthernetZone"]
+
+# Deploy with: cd worker && npx wrangler deploy
+# Dev server:  cd worker && npx wrangler dev
+# Then set VITE_ETHERNET_WS_BASE=ws://localhost:8787 in your .env.local

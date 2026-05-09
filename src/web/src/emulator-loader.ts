@@ -40,6 +40,8 @@ import {
   isPauseWhenHiddenEnabled,
   onPauseWhenHiddenChange,
 } from "./settings";
+import { EthernetZoneProvider, makeZoneWsUrl } from "./ethernet-provider";
+import { ETHERNET_RX_SAB_SIZE } from "./ethernet";
 export { wireInput } from "./emulator-input";
 
 /**
@@ -95,6 +97,8 @@ interface ActiveSession {
   readyPromise: Promise<void>;
   resolveReady: () => void;
   rejectReady: (err: Error) => void;
+  /** Zone WebSocket provider for AppleTalk/Ethernet relay. Null if not used. */
+  ethernetProvider: EthernetZoneProvider | null;
 }
 
 function makeSession(): ActiveSession {
@@ -119,6 +123,7 @@ function makeSession(): ActiveSession {
     readyPromise,
     resolveReady,
     rejectReady,
+    ethernetProvider: null,
   };
 }
 
@@ -134,6 +139,8 @@ function disposeSession(s: ActiveSession): void {
   s.stopSharedPoller?.();
   s.stopDrawingWatcher?.();
   s.worker?.terminate();
+  // Tear down the Ethernet zone WebSocket connection.
+  s.ethernetProvider?.dispose();
   // Tell the audio worklet to flush its queue before closing the context —
   // prevents stale PCM chunks from the old session bleeding into the next boot.
   s.audioWorkletNode?.port.postMessage({ type: "reset" });
@@ -517,6 +524,16 @@ async function boot(
           [m.data.buffer],
         );
         break;
+
+      case "ethernet_init":
+        // BasiliskII has initialised its ethernet driver — connect to the zone.
+        session.ethernetProvider?.connect(m.macAddress);
+        break;
+
+      case "ethernet_frame":
+        // BasiliskII is sending an Ethernet frame — forward to the zone relay.
+        session.ethernetProvider?.send(m.dest, m.data);
+        break;
     }
   });
 
@@ -601,6 +618,20 @@ async function boot(
     }
   }
 
+  // ── Ethernet zone setup (optional — opt-in via ?zone= URL param). ──
+  // If both VITE_ETHERNET_WS_BASE env var and a `?zone=` query param are
+  // present, allocate the RX ring SAB, create the provider, and include
+  // the SAB in the start message. Otherwise, ethernet stays stubbed out
+  // and the emulator boots normally without networking.
+  const zoneParam = new URLSearchParams(location.search).get("zone") ?? "";
+  const zoneWsUrl = zoneParam ? makeZoneWsUrl(zoneParam) : null;
+  let ethernetRxBuffer: SharedArrayBuffer | undefined;
+  if (zoneWsUrl) {
+    ethernetRxBuffer = new SharedArrayBuffer(ETHERNET_RX_SAB_SIZE);
+    session.ethernetProvider = new EthernetZoneProvider(ethernetRxBuffer, zoneWsUrl);
+    console.log(`[ethernet] zone "${zoneParam}" → ${zoneWsUrl}`);
+  }
+
   // Fire off the start message. Boot disk first (always chunked), then
   // any in-memory secondary disks added via reboot() — passed verbatim,
   // the worker discriminates by `spec.kind`.
@@ -622,6 +653,7 @@ async function boot(
       url: absoluteUrl(f.url),
     })),
     pauseFlagBuffer: visibility.buffer,
+    ethernetRxBuffer,
   };
   worker.postMessage(startMsg);
 
