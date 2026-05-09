@@ -148,7 +148,7 @@ ls "$ART"
 # output is ready-to-deploy). The script takes a comma-separated list
 # of .bin paths so all apps land on the same boot disk.
 bash scripts/build-boot-disk.sh \
-  "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin" \
+  "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin,$ART/build/hello-mac/HelloMac.bin,$ART/build/pixelpad/PixelPad.bin,$ART/build/markdownviewer/MarkdownViewer.bin" \
   src/web/public/system755-vibe.dsk
 
 # Copy the secondary app.dsk (the loader HEAD-checks for it).
@@ -199,7 +199,7 @@ Then bake the boot disk the same way Path A does — pass all
 
 ```sh
 bash scripts/build-boot-disk.sh \
-  "build/reader/Reader.bin,build/macweather/MacWeather.bin" \
+  "build/reader/Reader.bin,build/macweather/MacWeather.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/markdownviewer/MarkdownViewer.bin" \
   src/web/public/system755-vibe.dsk
 
 # app.dsk is also produced by CI; if you don't have it locally, the
@@ -266,7 +266,7 @@ docker run --rm -v "$PWD:/work" -w /work ghcr.io/autc04/retro68:latest \
     && cmake --build build --parallel"
 # 4. Rebuild the boot disk and reload (pass every app's .bin).
 bash scripts/build-boot-disk.sh \
-  "build/reader/Reader.bin,build/macweather/MacWeather.bin" \
+  "build/reader/Reader.bin,build/macweather/MacWeather.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/markdownviewer/MarkdownViewer.bin" \
   src/web/public/system755-vibe.dsk
 # (npm run dev in another terminal — hard-reload the tab)
 ```
@@ -469,3 +469,5 @@ for the root, `hls ":System Folder:"` for a subdirectory. See
   skimming once; very worth searching when something behaves oddly.
 - [`PRD.md`](../PRD.md) — architecture intent, milestones, risks
   register.
+- [`docs/NETWORKING.md`](./NETWORKING.md) — deploying the optional
+  Cloudflare DO Ethernet relay for `?zone=` networking.

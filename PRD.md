@@ -1,6 +1,6 @@
 # PRD: classic-vibe-mac
 
-_Last updated: 2026-05-08._
+_Last updated: 2026-05-09._
 
 ## Problem Statement
 
@@ -11,7 +11,7 @@ licensing. Want to see what writing for System 7.5.5 feels like in
 
 This project closes both gaps in the same browser tab:
 
-1. A 1993 Macintosh boots at a URL with three real demo apps already
+1. A 1993 Macintosh boots at a URL with five real demo apps already
    running, so visitors can use one before deciding to build one.
 2. A source-code editor sits below the Mac with the same C and Rez
    files that produced the apps running above it. Edits persist
@@ -146,12 +146,23 @@ an emulator.
 - **Reader** (`CVMR`) — HTML viewer in C reading from `:Shared:` on
   the boot disk. Supports headings, paragraphs, lists, bold/italic,
   monospace blocks, links between bundled files, common entities.
-  Out of scope: images, tables, CSS, forms, JavaScript.
+  Has a URL bar: the Mac writes a request file to
+  `:Unix:__url-request.txt`, the host fetches the URL, writes the
+  result to `:Unix:__url-result-<id>.html`. Out of scope: images,
+  tables, CSS, forms, JavaScript.
 - **MacWeather** (`CVMW`) — live-data demo reading
   `:Unix:weather.json` (BasiliskII's extfs surfaces
   Emscripten's `/Shared/` as the Mac volume `Unix:`), parsing the
   open-meteo shape with a hand-rolled JSON parser, drawing current
   conditions + a 3-day forecast in pixel-art QuickDraw glyphs.
+- **Hello Mac** (`CVHM`) — minimal "Hello, World!" Toolbox app;
+  the default playground sample and the on-ramp for new contributors.
+- **Pixel Pad** (`CVMP`) — freehand QuickDraw drawing app that
+  exports its 64×64 1-bit canvas to `:Unix:__drawing.bin`; the host
+  watcher converts it to a live PNG preview below the emulator.
+- **Markdown Viewer** (`CVMD`) — reads `.md` files from `:Shared:`
+  and renders them with a hand-rolled C Markdown parser; supports
+  headings, paragraphs, bold, italic, code, fenced blocks, lists.
 
 Per-app architectural details and the add-your-own-app guide live
 in [`src/app/README.md`](./src/app/README.md).
@@ -275,18 +286,24 @@ content here.
 > See [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
 > for the full shipped-state table. Summary:
 
-- ✅ Boot loop, multi-app demo, GitHub Pages deploy
+- ✅ Boot loop, multi-app demo (5 apps), GitHub Pages deploy
 - ✅ Playground Phase 1: editor + IDB persistence + download-as-zip (PR #32)
 - ✅ Playground Phase 2: WASM-Rez in-browser compilation
 - ✅ Playground Phase 3: hot-load, ~820ms warm round-trip
 - ✅ Rez syntax highlighting, Build & Run first-run modal
+- ✅ Reader URL bar (#14): Mac→JS fetch bridge with request-ID correlation
+- ✅ Pixel Pad (#17): QuickDraw drawing app with JS live PNG preview
+- ✅ Markdown Viewer (#9): .md reader with hand-rolled C parser
+- ✅ Ethernet relay (#15): opt-in AppleTalk zone networking via `?zone=`
 
 ### Non-Goals
 
 - Mac OS 9 / PPC (System 7.5.5 + 68k is the target; OS 9 is a
   stretch goal).
-- Networking inside the emulated Mac. Closed via Epic #12 review;
-  see [Closed-Epic graveyard](#closed-epic-graveyard).
+- Real Mac TCP/IP via a relay. Closed via Epic #12 review (ToS
+  violation + architecture wrong). An **opt-in AppleTalk zone relay**
+  (`?zone=` + Cloudflare DO) did ship as #15; it is peer-to-peer
+  layer-2 only and does NOT give the Mac general internet access.
 - Server-side compilation or any auth flow that needs a backend.
   Closed via Epic #19 review; see graveyard.
 - Cloud sync of editor state. The user's red line: no shared

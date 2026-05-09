@@ -1,6 +1,6 @@
 # Playground
 
-_Last updated: 2026-05-08._
+_Last updated: 2026-05-09._
 
 The design rationale and rolling status of Epic #21 — the in-browser
 playground for resource-fork edits to classic Mac apps. Companion docs:
@@ -118,6 +118,10 @@ don't duplicate this in either file._
 | Smart bundle migration | Preserve user-edited files across `bundleVersion` bumps | ✅ shipped (#24) |
 | Hello, Mac! starter sample | Minimal WIND+DrawString+WNE starter project in the playground | ✅ shipped (#26) |
 | Architecture review | 5-reviewer pass; all critical findings resolved | ✅ closed (#49) |
+| Pixel Pad (#17) | QuickDraw drawing app; live PNG preview via drawing-watcher extfs bridge | ✅ shipped |
+| Reader URL bar (#14) | URL fetch via Mac→JS request/response over extfs; request-ID correlation; AbortController | ✅ shipped |
+| Markdown Viewer (#9) | Reads .md from :Shared:, renders with C Markdown parser | ✅ shipped |
+| Ethernet relay (#15) | Opt-in AppleTalk zone networking via ?zone=; SPSC ring SAB; Cloudflare DO relay in worker/ | ✅ shipped |
 | Epic #12 — Real Mac TCP/IP via relay | Closed after review (architecture wrong + ToS violation) | ❌ closed |
 | Epic #19 — Full in-browser IDE with C compilation | Closed after review (needs OAuth + backend + 4-9 engineer-month GCC port) | ❌ closed |
 
