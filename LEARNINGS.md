@@ -28,6 +28,61 @@ the next person (or future-you) from rediscovering the same lessons.
 
 ## Entries
 
+### 2026-05-09 — Reader URL bar: `:Unix:` is the correct extfs write path; worker can't fetch()
+**Context:** Implementing issue #14 (Reader URL bar). We needed Mac C code to write a
+request file, and JS code to read it, fetch the URL, and write back the result.
+**Finding:** Two distinct extfs volumes exist at runtime:
+  - `:Shared:` — baked onto the HFS boot disk at build time; **read-only from JS** once the
+    disk image is burned. Reader's `LoadDocument()` works here.
+  - `:Unix:` — BasiliskII's live `extfs /Shared/` mount; **read/write at runtime** from both
+    Mac (via HCreate/HOpen/FSWrite) and JS (via `activeFs.createDataFile()`). This is the
+    correct path for the request/result ping-pong.
+  The extfs volume name is always `Unix:` regardless of the path you pass in the `extfs`
+  Basilisk pref — confirmed in `BasiliskII/src/extfs.cpp`'s `FSItem` root entry.
+**Finding (2):** The emulator worker thread is stuck in `Atomics.wait` between blits; any
+`fetch()` call inside it would never resolve (microtask queue is starved). The weather
+poller pattern (fetch on main thread, postMessage bytes to worker) is the required approach
+for all host-side network I/O.
+**Action:** `shared-poller.ts` runs entirely on the main thread; the worker only handles
+`poll_url_request` (read file) and `url_result_write` (write file) as short synchronous
+FS operations. This is the canonical pattern for any future Mac↔JS data exchange.
+
+### 2026-05-09 — Request-ID correlation prevents stale result files
+**Context:** Reader URL bar needs to handle rapid URL submissions (user types fast, or
+retries quickly).
+**Finding:** Without a request ID, a result file from a previous fetch could be read by a
+newer request. The fix: Mac writes `<monotonic-id>\n<url>\n` to the request file; result
+files are named `__url-result-<id>.html`. The Mac only accepts a result whose ID matches
+`gUrlRequestId`. JS uses `AbortController` to cancel in-flight fetches when a new ID
+arrives.
+**Action:** Both sides implemented in `reader.c` (LongToStr + WriteUrlRequest + CheckUrlResult)
+and `shared-poller.ts` (AbortController + per-ID file naming).
+
+### 2026-05-09 — Classic Mac dialog pattern: SetDialogDefaultItem / SetDialogCancelItem
+**Context:** Implementing the "Open URL" modal dialog for Reader (DLOG 131).
+**Finding:** After `GetNewDialog()`, you must explicitly call:
+  - `SetDialogDefaultItem(dlg, 1)` to wire Return/Enter to button 1
+  - `SetDialogCancelItem(dlg, 2)` to wire Escape/Cmd-. to button 2
+  These are not automatic from the DITL layout — the Dialog Manager won't draw the
+  default-button bold ring or handle keyboard shortcuts without these calls.
+  `SelectDialogItemText(dlg, n, 0, 32767)` puts focus in an EditText item.
+**Action:** Pattern documented in `reader.c`'s `DoOpenUrlDialog()`. Use the same three
+calls for any future modal dialog with a text input field.
+
+### 2026-05-09 — HCreate/HDelete before HOpen for file-write on `:Unix:`
+**Context:** Mac side needs to write a new file (or overwrite an existing one) to `:Unix:`.
+**Finding:** `HOpen(..., fsWrPerm, &refNum)` will fail with `fnfErr` if the file doesn't
+exist. The correct sequence is:
+  1. `HDelete(0, 0, path)` — silently succeeds even if the file doesn't exist.
+  2. `HCreate(0, 0, path, creator, type)` — creates the file.
+  3. `HOpen(0, 0, path, fsWrPerm, &refNum)` — opens it for writing.
+  4. `FSWrite(refNum, &count, buf)` + `FSClose(refNum)`.
+  Attempting to call `HOpen` on a path that doesn't exist returns `fnfErr` (-43).
+  `dupFNErr` (-48) from `HCreate` is safe to ignore (file already exists from a previous
+  run — `HDelete` should have removed it, but racing concurrent writes are benign to ignore).
+**Action:** WriteUrlRequest() in `reader.c` follows this pattern. Any future Mac code that
+writes to `:Unix:` should use the same sequence.
+
 ### 2026-05-09 — Color rendering investigation: `screen win/W/H` is correct and 32bpp
 **Context:** Issue #48 asked us to verify that the BGRA→RGBA blit in `emulator-loader.ts`
 was rendering correct hues. The user noted "colors might be a bit off."

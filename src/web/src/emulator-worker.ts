@@ -58,6 +58,7 @@ import {
   type EmulatorInMemoryDiskSpec,
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
+import { rbPop, MAX_FRAME } from "./ethernet";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -527,6 +528,7 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     ramSizeMB,
     sharedFolderFiles,
     pauseFlagBuffer,
+    ethernetRxBuffer,
   } = msg;
 
   // ── Pause flag view (sleep-when-hidden). ──
@@ -749,6 +751,10 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     #lastBlitFrameId = 0;
     #lastIdleFrameId = 0;
     #nextExpectedBlitTime = 0;
+    /** SAB ring for inbound Ethernet frames. Null when zone not configured. */
+    #ethernetRxSab: SharedArrayBuffer | null = ethernetRxBuffer ?? null;
+    /** Scratch buffer for rbPop — avoids a new Uint8Array per etherRead call. */
+    #etherReadBuf = new Uint8Array(MAX_FRAME);
 
     constructor() {
       this.#videoBufferView = new Uint8Array(videoBuffer);
@@ -863,15 +869,62 @@ async function start(msg: EmulatorWorkerStartMessage): Promise<void> {
     }
     getInputValue(addr: number): number { return this.#inputView[addr]; }
 
-    // ── Ethernet: stubbed (ether js → no-op in the prefs). ──
+    // ── Ethernet: SPSC ring buffer (RX) + postMessage (TX). ──
+    // etherSeed() is always active — BasiliskII needs a random seed to
+    // generate its MAC address regardless of whether zone networking is on.
     etherSeed(): number {
       const a = new Uint32Array(1);
       crypto.getRandomValues(a);
       return a[0];
     }
-    etherInit(_macAddress: string) { /* no-op */ }
-    etherWrite(_dest: string, _ptr: number, _len: number) { /* no-op */ }
-    etherRead(_ptr: number, _max: number): number { return 0; }
+    /**
+     * Called by BasiliskII when its ethernet driver initialises.
+     * We forward the MAC address to the main thread so it can connect the
+     * zone WebSocket using the correct identity.
+     */
+    etherInit(macAddress: string): void {
+      if (!this.#ethernetRxSab) return; // zone not configured
+      self.postMessage({ type: "ethernet_init", macAddress });
+    }
+    /**
+     * Called by BasiliskII to transmit an Ethernet frame.
+     * We copy the frame out of the WASM heap and post it to the main thread,
+     * where EthernetZoneProvider forwards it via WebSocket to the zone relay.
+     */
+    etherWrite(dest: string, ptr: number, len: number): void {
+      if (!this.#ethernetRxSab || len <= 0) return;
+      const HEAPU8: Uint8Array | undefined = (moduleOverrides as any).HEAPU8;
+      if (!HEAPU8) return;
+      // Copy from WASM heap (we cannot transfer WASM memory directly — the
+      // WASM heap is a Uint8Array view over a plain ArrayBuffer, not a SAB).
+      const data = new Uint8Array(len);
+      data.set(HEAPU8.subarray(ptr, ptr + len));
+      // Transfer the ArrayBuffer to avoid a copy on the postMessage boundary.
+      self.postMessage({ type: "ethernet_frame", dest, data }, [data.buffer]);
+    }
+    /**
+     * Called by BasiliskII's ethernet driver to receive the next pending
+     * frame. Returns the number of bytes written into the WASM heap at `ptr`,
+     * or 0 if the ring is empty (no frame available).
+     *
+     * When the ring drains to empty we clear the ethernet interrupt flag so
+     * BasiliskII stops polling. The next rbPush() from the main thread will
+     * re-raise the interrupt.
+     */
+    etherRead(ptr: number, max: number): number {
+      if (!this.#ethernetRxSab) return 0;
+      const n = rbPop(this.#ethernetRxSab, this.#etherReadBuf);
+      if (n === 0) {
+        // Ring empty — clear the interrupt flag so BasiliskII backs off.
+        Atomics.store(this.#inputView, InputBufferAddresses.ethernetInterruptFlagAddr, 0);
+        return 0;
+      }
+      const HEAPU8: Uint8Array | undefined = (moduleOverrides as any).HEAPU8;
+      if (!HEAPU8) return 0;
+      const actual = Math.min(n, max);
+      HEAPU8.set(this.#etherReadBuf.subarray(0, actual), ptr);
+      return actual;
+    }
 
     // ── Clipboard / files: stubbed. ──
     setClipboardText(_text: string) { /* no-op */ }
