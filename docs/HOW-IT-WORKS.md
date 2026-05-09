@@ -1,6 +1,6 @@
 # How It Works
 
-_Last updated: 2026-05-08._
+_Last updated: 2026-05-09._
 
 A guided tour for the curious developer. What actually happens when
 you load `https://khawkins98.github.io/classic-vibe-mac/`, what you
@@ -69,23 +69,38 @@ cache.
 |       |                                               |
 |       v                                               |
 |  System 7.5.5 boot disk (HFS, chunked)                |
-|     :System Folder:Startup Items: Reader, MacWeather  |
+|     :System Folder:Startup Items: Reader, MacWeather, |
+|     Hello Mac, Pixel Pad, Markdown Viewer             |
 |     :Applications: re-launchable copies               |
 |     :Shared: HTML pages baked at build time           |
 +-------------------------------------------------------+
 ```
 
-### 5. Reader and MacWeather auto-launch
+### 5. Five apps auto-launch
 
-System 7's Startup Items folder contains real 68k binaries — `Reader`
-and `MacWeather` — cross-compiled by [Retro68](https://github.com/autc04/Retro68)
-in CI. Each one is a CMake target under `src/app/`, splitting cleanly
-into a Toolbox shell (`<app>.c`) and a pure-C engine
-(`html_parse.c`, `weather_parse.c`) that compiles with both Retro68
-and the host `cc` so unit tests run in milliseconds. The build emits
-`BNDL`/`FREF`/`ICN#` resources by hand from `<app>.r` because
-Retro68's RIncludes don't ship `Finder.r` macros. See
+System 7's Startup Items folder now contains five real 68k binaries —
+`Reader`, `MacWeather`, `Hello Mac`, `Pixel Pad`, and `Markdown Viewer`
+— all cross-compiled by [Retro68](https://github.com/autc04/Retro68)
+in CI, so all five auto-launch when the desktop comes up. Each app is a
+CMake target under `src/app/`, usually splitting cleanly into a Toolbox
+shell (`<app>.c`) and a pure-C engine that also compiles with the host
+`cc` so unit tests run in milliseconds. The build still emits
+`BNDL`/`FREF`/`ICN#` resources by hand from `<app>.r` because Retro68's
+RIncludes don't ship `Finder.r` macros. See
 [`src/app/README.md`](../src/app/README.md).
+
+`Pixel Pad` also shows the simplest Mac→host data bridge in the repo.
+The app exports its 64×64 1-bit drawing to `:Unix:__drawing.bin`, and a
+main-thread watcher notices that file change and renders a live PNG
+preview beside the emulator. It's still just a file handoff, which is
+why it feels period-correct while staying easy to reason about.
+
+`Reader` now has the matching two-way bridge for its URL bar. The Mac
+writes a request file to `:Unix:__url-request.txt`, the host fetches the
+page, then writes the result back as `:Unix:__url-result-<id>.html`.
+Each request carries an ID so stale responses don't win, and each host
+fetch gets its own `AbortController`, which keeps the flow simple even
+when the visitor changes their mind mid-load.
 
 ### 6. Below the desktop, the playground editor seeds itself
 
@@ -148,6 +163,11 @@ your idea fits one of these, you'll have fun:
   QuickDraw), a Markdown viewer, a Lisp REPL, a small game with
   arrow-key controls. The Mac is the "screen" for content the host
   page hands it via `:Shared:`.
+- **Peer-to-peer AppleTalk apps.** If you deploy the optional
+  Cloudflare zone relay (see [`docs/NETWORKING.md`](./NETWORKING.md)),
+  multiple visitors can join a shared zone for Mac-to-Mac networking.
+  That keeps the internet-facing part on the host side while still
+  letting the guest Macs talk to each other like Macs.
 - **QuickDraw period-art experiments.** 1-bit dithered glyphs,
   patterns, fills, the QuickDraw region calculus. The MacWeather
   app's `weather_glyphs.c` is exactly this — sun/cloud/rain icons
@@ -264,6 +284,8 @@ the rest of the docs:
   How to run the dev server, how to rebuild the boot disk, how to
   test against the chunked manifest, how to use the host-testable
   pure-C engines. Read this first if you're cloning the repo.
+- [`docs/NETWORKING.md`](./NETWORKING.md) — Deploying and using the
+  optional AppleTalk zone relay.
 - [`docs/AGENT-PROCESS.md`](./AGENT-PROCESS.md) — The
   agent-driven workflow this project has converged on (the
   five-reviewer pass for Epics, the CI-as-source-of-truth rule).

@@ -21,19 +21,33 @@ src/app/
 │   ├── reader.r
 │   ├── html_parse.{c,h}
 │   └── CMakeLists.txt
-└── macweather/
-    ├── macweather.c
-    ├── macweather.r
-    ├── weather_parse.{c,h}
-    ├── weather_glyphs.{c,h}
+├── macweather/
+│   ├── macweather.c
+│   ├── macweather.r
+│   ├── weather_parse.{c,h}
+│   ├── weather_glyphs.{c,h}
+│   └── CMakeLists.txt
+├── hello-mac/
+│   ├── hello-mac.c
+│   ├── hello-mac.r
+│   └── CMakeLists.txt
+├── pixelpad/
+│   ├── pixelpad.c
+│   ├── pixelpad.r
+│   └── CMakeLists.txt
+└── markdownviewer/
+    ├── markdownviewer.c
+    ├── markdownviewer.r
+    ├── md_parse.{c,h}
     └── CMakeLists.txt
 ```
 
-Each app has its own creator code (Reader=`CVMR`, MacWeather=`CVMW`),
-its own `add_application()` call, and its own resource fork. Outputs land
-in `build/<appname>/<App>.{bin,dsk,APPL}`. CI uploads everything from
-`build/` so adding a new app just means `add_subdirectory(<name>)`
-above and a directory next to the others.
+Each app has its own creator code (Reader=`CVMR`, MacWeather=`CVMW`,
+HelloMac=`CVHM`, PixelPad=`CVMP`, MarkdownViewer=`CVMD`), its own
+`add_application()` call, and its own resource fork. Outputs land in
+`build/<appname>/<App>.{bin,dsk,APPL}`. CI uploads everything from
+`build/` so adding a new app just means `add_subdirectory(<name>)` above
+and a directory next to the others.
 
 ## Apps
 
@@ -44,10 +58,16 @@ A small HTML viewer. Reads files from a Mac volume named `Shared`
 sensible subset of HTML to the screen with QuickDraw, follows links
 between files. Loads `:Shared:index.html` on launch.
 
+Also has a **URL bar**: the user types a URL (CORS-permissive sources
+only), Reader writes a request file to `:Unix:__url-request.txt`, the
+host JS fetches the URL via `fetch()` on the main thread, and writes
+the result HTML back to `:Unix:__url-result-<id>.html`. Reader polls
+for the result. Request-ID correlation prevents stale results.
+
 Supported HTML: `<p>`, `<br>`, `<h1>`-`<h3>`, `<b>`/`<strong>`,
 `<i>`/`<em>`, `<ul>`/`<li>` (one level), `<a href>`, `<pre>`, the
 common entities. Out of scope (deliberately): images, tables, CSS,
-forms, JavaScript, real network fetching.
+forms, JavaScript.
 
 ### MacWeather (`macweather/`)
 
@@ -72,6 +92,35 @@ menu, and nothing else. ~200 lines of C total.
 Start here if you're new to classic Mac Toolbox programming. It's also
 the default sample the in-browser playground opens when a user first
 visits.
+
+### Pixel Pad (`pixelpad/`)
+
+A QuickDraw freehand drawing app. The user draws with the mouse in a
+64×64 canvas area. When the user saves (Cmd-S or the Save menu item),
+Pixel Pad writes a 512-byte 1-bit bitmap (`MSB-first`, 0=white, 1=black)
+to `:Unix:__drawing.bin` via `FSWrite`.
+
+The JS host (`src/web/src/drawing-watcher.ts`) polls this file via the
+worker's `poll_drawing` postMessage, receives the raw bytes, converts
+them to a PNG using a Canvas 2D context, and renders a live preview
+below the emulator. The round-trip from Save to preview update is
+approximately one polling interval (500ms).
+
+This demonstrates the **Mac → JS** extfs data bridge in reverse compared
+to MacWeather (which is JS → Mac).
+
+### Markdown Viewer (`markdownviewer/`)
+
+Reads `.md` files from the `:Shared:` folder on the boot disk and
+renders them using a hand-rolled C Markdown parser (`md_parse.{c,h}`).
+Supports headings (`#`–`###`), paragraphs, bold, italic, inline code,
+fenced code blocks, unordered lists, and horizontal rules. Links between
+`.md` files in `:Shared:` work; external URLs are not fetched.
+
+The same `:Shared:` mechanism Reader uses — files baked onto the boot
+disk at build time by `scripts/build-boot-disk.sh`. To add your own
+`.md` files to the viewer, copy them into `src/web/public/shared/` before
+running the boot-disk build script.
 
 ## Architectural pattern: Toolbox shell + pure-C engine
 
