@@ -765,15 +765,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
     <div class="window__body">
       <p class="cvm-pg-intro">
         Click into the source below and start typing &mdash; this is the
-        real C and Rez code for the apps running in the Mac above, and your
-        edits save automatically in your browser. Hit <em>Build .bin</em>
-        to compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes mounted as a secondary disk.
-        <strong>Today the in-browser compile only handles
-        <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
-        <code>.h</code> edits ride along in <em>Download .zip</em> but
-        don't change the running binary (in-browser C compilation requires
-        a native toolchain; see the playground README for details).
+        real C and Rez code for the apps running in the Mac above. Edits
+        save automatically in your browser. Hit <em>Build .bin</em> to
+        compile and download a MacBinary, or <em>Build &amp; Run</em>
+        to reboot the Mac with your changes. Only <code>.r</code> resource
+        files recompile in-browser today; <code>.c</code> / <code>.h</code>
+        edits save locally and ride along in <em>Download .zip</em>.
       </p>
       ${banner}
       ${migrationBanner}
@@ -806,13 +803,11 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         </button>
       </div>
       <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
-        <strong>Heads-up:</strong> this file isn't compiled in your browser.
-        Only Rez resource files (<code>.r</code>) recompile in-browser today
-        &mdash; edits to <code>.c</code> / <code>.h</code> sources save
-        locally and ride along in <em>Download .zip</em>, but the data fork
-        in your built <code>.bin</code> is whatever CI compiled from
-        <code>main</code>. Try editing a <code>.r</code> file to see live
-        changes.
+        <strong>Note:</strong> <code>.c</code> / <code>.h</code> edits save
+        locally and ride along in <em>Download .zip</em>, but only
+        <code>.r</code> resource files recompile in-browser &mdash; the
+        compiled binary in the emulator reflects whatever CI built from
+        <code>main</code>. Switch to a <code>.r</code> tab to see live changes.
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
