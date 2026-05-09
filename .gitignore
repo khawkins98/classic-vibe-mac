@@ -37,6 +37,7 @@ playwright-report/
 playwright/.cache/
 tests/unit/test_html_parse
 tests/unit/test_weather_parse
+tests/unit/test_md_parse
 tests/unit/*.dSYM/
 
 # Local AI tooling (Claude Code agent profiles, gstack, etc.) — these
