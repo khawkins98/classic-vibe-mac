@@ -45,7 +45,7 @@ From fork to live page in one afternoon:
      -D /tmp/cvm-artifact
    ART="$(echo /tmp/cvm-artifact/classic-vibe-mac-*)"
    bash scripts/build-boot-disk.sh \
-     "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin" \
+     "$ART/build/reader/Reader.bin,$ART/build/macweather/MacWeather.bin,$ART/build/hello-mac/HelloMac.bin,$ART/build/pixelpad/PixelPad.bin,$ART/build/markdownviewer/MarkdownViewer.bin" \
      src/web/public/system755-vibe.dsk
    cp "$ART/dist/app.dsk" src/web/public/app.dsk
    ```
