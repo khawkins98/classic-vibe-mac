@@ -137,6 +137,15 @@ export type EmulatorWorkerStartMessage = {
    * See emulator-config.ts `sharedFolder` for the source of this list.
    */
   sharedFolderFiles: Array<{ name: string; url: string }>;
+  /**
+   * SharedArrayBuffer for the Ethernet RX ring buffer (frames arriving from
+   * the network, destined for BasiliskII). Allocated by the main thread so
+   * both threads share the same memory. If absent, Ethernet is stubbed out
+   * and `etherRead`/`etherWrite` remain no-ops.
+   *
+   * See src/web/src/ethernet.ts for the ring buffer layout and constants.
+   */
+  ethernetRxBuffer?: SharedArrayBuffer;
 };
 
 /** Worker → main messages. Discriminated union by `type`. */
@@ -187,7 +196,20 @@ export type EmulatorWorkerMessage =
    * /Shared/__drawing.bin (64×64 1-bit bitmap, MSB-first, 0=white 1=black),
    * or null if the file is absent or not exactly 512 bytes.
    */
-  | { type: "drawing_data"; bytes: Uint8Array | null };
+  | { type: "drawing_data"; bytes: Uint8Array | null }
+  /**
+   * Sent by the worker when BasiliskII calls etherInit().
+   * The main thread should call EthernetZoneProvider.connect(macAddress).
+   */
+  | { type: "ethernet_init"; macAddress: string }
+  /**
+   * Sent by the worker when BasiliskII calls etherWrite() (TX path).
+   * `dest` is the destination MAC address string (or "*"/"AT" for broadcast).
+   * `data` is the raw Ethernet frame bytes — transferred (Transferable) to
+   * avoid a copy.  The main thread forwards this to the zone relay via
+   * EthernetZoneProvider.send().
+   */
+  | { type: "ethernet_frame"; dest: string; data: Uint8Array };
 
 /**
  * Messages from the main thread to the worker that are NOT the start message.
