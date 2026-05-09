@@ -192,6 +192,26 @@ export function signalAudioContextRunning(): void {
   Atomics.store(inputView, InputBufferAddresses.audioContextRunningFlagAddr, 1);
 }
 
+/**
+ * Signal BasiliskII that one or more Ethernet frames are ready in the RX ring.
+ * Called from the main thread by EthernetZoneProvider after rbPush() succeeds.
+ *
+ * Uses Atomics.store + Atomics.notify (outside the event lock cycle) — the same
+ * pattern as signalAudioContextRunning(). The worker's etherRead() is called by
+ * BasiliskII's ethernet driver in response; it drains the ring via rbPop() and
+ * clears the flag when the ring is empty.
+ *
+ * Race: if the main thread pushes another frame just after the worker clears
+ * the flag, that frame will wait one extra BasiliskII idle tick (~17 ms).
+ * This is acceptable latency for AppleTalk traffic.
+ */
+export function signalEthernetInterrupt(): void {
+  if (!inputView) return;
+  Atomics.store(inputView, InputBufferAddresses.ethernetInterruptFlagAddr, 1);
+  // Wake the worker thread if it's waiting on the global lock.
+  Atomics.notify(inputView, InputBufferAddresses.globalLockAddr);
+}
+
 function enqueue(ev: InputEvent): void {
   queue.push(ev);
   tryDrainQueue();
