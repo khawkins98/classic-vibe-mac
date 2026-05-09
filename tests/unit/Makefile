@@ -13,13 +13,15 @@
 CC      ?= cc
 CFLAGS  ?= -std=c99 -Wall -Wextra -O0 -g -DUNIT_TEST
 
-READER_SRC      = ../../src/app/reader
-MACWEATHER_SRC  = ../../src/app/macweather
+READER_SRC         = ../../src/app/reader
+MACWEATHER_SRC     = ../../src/app/macweather
+MARKDOWNVIEWER_SRC = ../../src/app/markdownviewer
 
 HTML_PARSE      = $(READER_SRC)/html_parse.c
 WEATHER_PARSE   = $(MACWEATHER_SRC)/weather_parse.c
+MARKDOWN_PARSE  = $(MARKDOWNVIEWER_SRC)/markdown_parse.c
 
-TESTS = test_html_parse test_weather_parse
+TESTS = test_html_parse test_weather_parse test_md_parse
 
 .PHONY: all clean run
 
@@ -30,6 +32,9 @@ test_html_parse: test_html_parse.c $(HTML_PARSE) $(READER_SRC)/html_parse.h
 
 test_weather_parse: test_weather_parse.c $(WEATHER_PARSE) $(MACWEATHER_SRC)/weather_parse.h
 	$(CC) $(CFLAGS) -I. -I$(MACWEATHER_SRC) -o $@ test_weather_parse.c $(WEATHER_PARSE)
+
+test_md_parse: test_md_parse.c $(MARKDOWN_PARSE) $(MARKDOWNVIEWER_SRC)/markdown_parse.h
+	$(CC) $(CFLAGS) -I. -I$(MARKDOWNVIEWER_SRC) -o $@ test_md_parse.c $(MARKDOWN_PARSE)
 
 # Just runs the host-cc C suite. The JS unit tests (preprocessor.test.mjs
 # + hfs-patcher.test.mjs) live under `npm run test:unit:js` so this
