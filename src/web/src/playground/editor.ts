@@ -48,6 +48,11 @@ import {
   setEditorDiagnostics,
   clearEditorDiagnostics,
 } from "./error-markers";
+import {
+  compileProject,
+  isCompileServerAvailable,
+  type CompileFile,
+} from "./compile-client";
 
 /** UI-state IDB keys. */
 const UI_PROJECT = "openProject";
@@ -106,6 +111,9 @@ export async function mountPlayground(
   const buildRunBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-buildrun",
   )!;
+  const compileRunBtn = rootEl.querySelector<HTMLButtonElement>(
+    "#cvm-pg-compilerun",
+  );
   const whatBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-whatjusthappened",
   )!;
@@ -636,6 +644,125 @@ export async function mountPlayground(
   whatBtn.addEventListener("click", () => {
     if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
+
+  // ── Compile & Run (C → Retro68 server → emulator) ────────────────────────
+  // Only wired when VITE_COMPILE_SERVER_URL is configured.
+  if (compileRunBtn) {
+    compileRunBtn.addEventListener("click", async () => {
+      if (!hotLoad) {
+        setStatus(statusEl, "Compile & Run isn't wired (no emulator).", "err");
+        return;
+      }
+      await flushSave();
+      const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+      if (!proj) return;
+
+      compileRunBtn.disabled = true;
+      buildBtn.disabled = true;
+      buildRunBtn.disabled = true;
+      rootEl.setAttribute("data-rebooting", "");
+      const tStart = performance.now();
+      setStatus(statusEl, "Compiling C…", "info");
+      clearEditorDiagnostics(view);
+
+      try {
+        // Gather all source files from IDB (user edits) for this project.
+        const files: CompileFile[] = [];
+        for (const filename of proj.files) {
+          const content = await readOrSeedFile(baseUrl, proj.id, filename);
+          files.push({ name: filename, content });
+        }
+
+        const appName = proj.outputName.replace(/\.bin$/i, "");
+        const result = await compileProject(files, appName);
+
+        if (!result.ok) {
+          if (result.diagnostics.length > 0) {
+            setEditorDiagnostics(view, result.diagnostics, current.filename);
+            const first = result.diagnostics.find((d) => d.severity === "error") ?? result.diagnostics[0]!;
+            setStatus(
+              statusEl,
+              `Compile error: ${first.message} (${first.file}:${first.line})`,
+              "err",
+            );
+          } else {
+            setStatus(
+              statusEl,
+              result.rawStderr
+                ? `Compile failed: ${result.rawStderr.slice(0, 200)}`
+                : "Compile failed (no diagnostics).",
+              "err",
+            );
+          }
+          return;
+        }
+
+        const buildMs = performance.now() - tStart;
+        setStatus(
+          statusEl,
+          `Compiled in ${buildMs.toFixed(0)}ms — patching disk…`,
+          "info",
+        );
+
+        const fname = proj.outputName.replace(/\.bin$/i, "");
+        const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
+        if (!tmplResp.ok) {
+          throw new Error(
+            `empty-secondary.dsk fetch failed: HTTP ${tmplResp.status}`,
+          );
+        }
+        const tmplBytes = new Uint8Array(await tmplResp.arrayBuffer());
+        const patched = patchEmptyVolumeWithBinary({
+          templateBytes: tmplBytes,
+          macBinary: result.bytes!,
+          filename: fname,
+        });
+
+        setStatus(statusEl, "Mounting disk…", "info");
+        await hotLoad({ bytes: patched, volumeName: "Apps" });
+
+        const totalMs = performance.now() - tStart;
+        setStatus(
+          statusEl,
+          `Done in ${totalMs.toFixed(0)}ms — double-click "Apps" on the desktop.`,
+          "ok",
+        );
+
+        lastBuildCtx = {
+          appName: fname,
+          rezFile: current.filename,
+          totalMs,
+          volumeName: "Apps",
+        };
+        whatBtn.hidden = false;
+
+        const willShowModal = !(() => {
+          try {
+            return !!localStorage.getItem("cvm.buildExplainerSeen");
+          } catch {
+            return false;
+          }
+        })();
+        if (willShowModal) {
+          showBuildExplainerIfFirstTime(lastBuildCtx, compileRunBtn);
+        } else {
+          const emWin = document.getElementById("emulator");
+          if (emWin) emWin.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } catch (e) {
+        setStatus(
+          statusEl,
+          `Compile & Run error: ${(e as Error).message}`,
+          "err",
+        );
+      } finally {
+        compileRunBtn.disabled = false;
+        buildBtn.disabled = false;
+        buildRunBtn.disabled = false;
+        rootEl.removeAttribute("data-rebooting");
+      }
+    });
+  }
 }
 
 /**
@@ -667,7 +794,9 @@ function extensionsForFile(filename: string) {
  * "this file isn't compiled in your browser" warning banner.
  */
 function isCompiledInBrowser(filename: string): boolean {
-  return /\.r$/i.test(filename);
+  if (/\.r$/i.test(filename)) return true;
+  if (/\.(c|h)$/i.test(filename) && isCompileServerAvailable()) return true;
+  return false;
 }
 
 function escapeHtml(s: string): string {
@@ -696,6 +825,19 @@ function escapeHtml(s: string): string {
  * inline script and no `innerHTML` of dynamic content.
  */
 function renderShell(persistent: boolean, preservedCount: number): string {
+  const compileServerNote = isCompileServerAvailable()
+    ? `Hit <em>Compile &amp; Run</em> to compile your C sources on the server and
+       boot straight into your app, or `
+    : `<strong>Today the in-browser compile only handles
+       <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
+       <code>.h</code> edits ride along in <em>Download .zip</em> but
+       don't change the running binary (in-browser C compilation requires
+       a native toolchain; see the playground README for details). `;
+  const compileRunButton = isCompileServerAvailable()
+    ? `<button type="button" id="cvm-pg-compilerun" class="cvm-pg-button cvm-pg-button--primary">
+           Compile &amp; Run
+         </button>`
+    : "";
   const banner = persistent
     ? ""
     : `<p class="cvm-pg-banner" role="status">
@@ -717,14 +859,10 @@ function renderShell(persistent: boolean, preservedCount: number): string {
       <p class="cvm-pg-intro">
         Click into the source below and start typing &mdash; this is the
         real C and Rez code for the apps running in the Mac above, and your
-        edits save automatically in your browser. Hit <em>Build .bin</em>
-        to compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes mounted as a secondary disk.
-        <strong>Today the in-browser compile only handles
-        <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
-        <code>.h</code> edits ride along in <em>Download .zip</em> but
-        don't change the running binary (in-browser C compilation requires
-        a native toolchain; see the playground README for details).
+        edits save automatically in your browser. ${compileServerNote}hit
+        <em>Build .bin</em> to compile and download a MacBinary, or
+        <em>Build &amp; Run</em> to reboot the Mac with your changes mounted
+        as a secondary disk.
       </p>
       ${banner}
       ${migrationBanner}
@@ -739,6 +877,7 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         <button type="button" id="cvm-pg-buildrun" class="cvm-pg-button cvm-pg-button--primary">
           Build &amp; Run
         </button>
+        ${compileRunButton}
         <button type="button" id="cvm-pg-download" class="cvm-pg-button">
           Download .zip
         </button>
