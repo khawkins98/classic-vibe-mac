@@ -833,6 +833,15 @@ function renderShell(persistent: boolean, preservedCount: number): string {
        <code>.h</code> edits ride along in <em>Download .zip</em> but
        don't change the running binary (in-browser C compilation requires
        a native toolchain; see the playground README for details). `;
+  const sdkNote = isCompileServerAvailable()
+    ? `<p class="cvm-pg-banner cvm-pg-banner--info" role="note">
+         <strong>SDK tip:</strong> use System&nbsp;7 header names &mdash;
+         <code>#include &lt;Windows.h&gt;</code>, <code>&lt;Memory.h&gt;</code>,
+         <code>&lt;Types.h&gt;</code>.
+         The Carbon variants (<code>MacWindows.h</code>, etc.) don't exist
+         in the Retro68 toolchain.
+       </p>`
+    : "";
   const compileRunButton = isCompileServerAvailable()
     ? `<button type="button" id="cvm-pg-compilerun" class="cvm-pg-button cvm-pg-button--primary">
            Compile &amp; Run
@@ -866,6 +875,7 @@ function renderShell(persistent: boolean, preservedCount: number): string {
       </p>
       ${banner}
       ${migrationBanner}
+      ${sdkNote}
       <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
         <label class="cvm-pg-field">
           <span class="cvm-pg-field__label">Project</span>

@@ -49,7 +49,7 @@ Returns toolchain version, limits, and supported extensions. The browser uses th
 ```json
 {
   "files": [
-    { "name": "main.c", "content": "#include <MacWindows.h>\n..." },
+    { "name": "main.c", "content": "#include <Windows.h>\n..." },
     { "name": "utils.h", "content": "..." }
   ],
   "appName": "MyApp"
@@ -81,6 +81,21 @@ Returns toolchain version, limits, and supported extensions. The browser uses th
 ```
 
 Errors are surfaced as CodeMirror inline markers in the playground editor.
+
+## Classic Mac SDK header names
+
+The Retro68 toolchain ships the **System 7 / Universal Headers** — these use the pre-Carbon naming convention. If you're used to macOS Carbon or CFM header names, the key differences are:
+
+| Use this (Retro68 / System 7) | Not this (Carbon / macOS) |
+|---|---|
+| `#include <Windows.h>` | `MacWindows.h` |
+| `#include <Memory.h>` | `MacMemory.h` |
+| `#include <Types.h>` | `MacTypes.h` |
+| `#include <Errors.h>` | (same) |
+| `#include <Events.h>` | (same) |
+| `#include <Quickdraw.h>` | (same) |
+
+`Carbon.h` is **not** available — it's a CFM/macOS umbrella header. Include individual toolbox headers instead.
 
 ## Environment variables
 
