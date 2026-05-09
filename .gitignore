@@ -8,6 +8,9 @@ dist/
 # It's tiny (1.4 MB), produced once by `hfformat -l Apps`, and ships as
 # a static asset so the page can hot-load apps without any backend.
 !src/web/public/playground/empty-secondary.dsk
+# ...and the vendored wasm-retro-cc demo binary (committed to git so the
+# playground can load it without cross-repo CI artifact downloads).
+!src/web/public/precompiled/hello-toolbox.bin
 
 # Node
 node_modules/
@@ -55,7 +58,10 @@ src/web/public/sample-projects/
 # Playground precompiled .code.bin assets — copied at build time from the
 # CMake build output by the GH Actions web-build job. Same single-source-of-
 # truth reasoning as sample-projects above.
-src/web/public/precompiled/
+src/web/public/precompiled/*.code.bin
+# The vendored wasm-retro-cc demo binary (hello-toolbox.bin) and its
+# provenance file (VENDORED.md) are committed to git — not rebuilt by CI.
+# Everything else in precompiled/ that isn't *.code.bin is implicitly tracked.
 
 # spike/ holds research artefacts checked out from the spike/wasm-rez
 # branch for local reference. It's intentionally not part of feat/ branches.

@@ -20,7 +20,7 @@ import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import JSZip from "jszip";
 
-import { SAMPLE_PROJECTS, type SampleProject } from "./types";
+import { SAMPLE_PROJECTS, PREBUILT_DEMOS, type SampleProject } from "./types";
 import {
   initPersistence,
   isPersistent,
@@ -636,6 +636,55 @@ export async function mountPlayground(
   whatBtn.addEventListener("click", () => {
     if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
+
+  // Prebuilt demo load: event delegation for .cvm-pg-demo-load buttons.
+  // Each button carries data-demo-id matching a PREBUILT_DEMOS entry.
+  // The path: fetch binary → patch empty HFS volume → hotLoad (reboot emulator).
+  // No wasm-rez splice needed — the binary is a complete MacBinary II APPL.
+  rootEl.addEventListener("click", async (e) => {
+    if (!(e.target instanceof Element)) return;
+    const btn = e.target.closest<HTMLButtonElement>("button.cvm-pg-demo-load");
+    if (!btn) return;
+
+    const demo = PREBUILT_DEMOS.find((d) => d.id === btn.dataset.demoId);
+    if (!demo) return;
+
+    if (!hotLoad) {
+      setStatus(statusEl, "Load demo isn't wired in this build (no emulator).", "err");
+      return;
+    }
+
+    // Lock all interactive buttons during the reboot sequence.
+    const demoButtons = rootEl.querySelectorAll<HTMLButtonElement>(".cvm-pg-demo-load");
+    buildBtn.disabled = true;
+    buildRunBtn.disabled = true;
+    demoButtons.forEach((b) => (b.disabled = true));
+    rootEl.setAttribute("data-rebooting", "");
+    setStatus(statusEl, `Fetching ${demo.label}…`, "info");
+
+    try {
+      const binResp = await fetch(`${baseUrl}${demo.binPath}`);
+      if (!binResp.ok) throw new Error(`Fetch failed: HTTP ${binResp.status}`);
+      const macBinary = new Uint8Array(await binResp.arrayBuffer());
+
+      setStatus(statusEl, "Patching disk…", "info");
+      const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
+      if (!tmplResp.ok) throw new Error(`empty-secondary.dsk: HTTP ${tmplResp.status}`);
+      const templateBytes = new Uint8Array(await tmplResp.arrayBuffer());
+
+      const patched = patchEmptyVolumeWithBinary({ templateBytes, macBinary, filename: demo.filename });
+      setStatus(statusEl, "Mounting disk…", "info");
+      await hotLoad({ bytes: patched, volumeName: "Apps" });
+      setStatus(statusEl, `${demo.label} loaded — double-click "Apps" on the desktop.`, "ok");
+    } catch (err) {
+      setStatus(statusEl, `Load demo error: ${(err as Error).message}`, "err");
+    } finally {
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+      demoButtons.forEach((b) => (b.disabled = false));
+      rootEl.removeAttribute("data-rebooting");
+    }
+  });
 }
 
 /**
@@ -742,6 +791,13 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         <button type="button" id="cvm-pg-download" class="cvm-pg-button">
           Download .zip
         </button>
+      </div>
+      <div class="cvm-pg-toolbar cvm-pg-toolbar--demos" role="group" aria-label="Prebuilt demos">
+        <span class="cvm-pg-field__label">Prebuilt demos</span>
+        ${PREBUILT_DEMOS.map((d) => `<button type="button"
+            class="cvm-pg-button cvm-pg-demo-load"
+            data-demo-id="${escapeHtml(d.id)}"
+            title="${escapeHtml(d.description)}">${escapeHtml(d.label)}</button>`).join("")}
       </div>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
