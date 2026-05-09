@@ -69,6 +69,7 @@ jobs:
           ls -la build/macweather/
           ls -la build/hello-mac/
           ls -la build/pixelpad/
+          ls -la build/markdownviewer/
           test -s build/reader/Reader.bin
           test -s build/reader/Reader.dsk
           test -s build/macweather/MacWeather.bin
@@ -77,6 +78,8 @@ jobs:
           test -s build/hello-mac/HelloMac.dsk
           test -s build/pixelpad/PixelPad.bin
           test -s build/pixelpad/PixelPad.dsk
+          test -s build/markdownviewer/MarkdownViewer.bin
+          test -s build/markdownviewer/MarkdownViewer.dsk
 
       # Pack the compiled Reader MacBinary into our own HFS disk image.
       # Feeds the .bin (MacBinary, both forks intact) — NOT the .APPL
@@ -133,8 +136,9 @@ jobs:
         # :Applications:.
         run: |
           ./scripts/build-boot-disk.sh \
-            build/reader/Reader.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/macweather/MacWeather.bin \
-            dist/system755-vibe.dsk || {
+            build/reader/Reader.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/markdownviewer/MarkdownViewer.bin,build/macweather/MacWeather.bin \
+            dist/system755-vibe.dsk \
+            --shared-dir src/web/public/shared || {
             status=$?
             echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
           }
@@ -156,7 +160,8 @@ jobs:
           test -s build/reader/Reader.code.bin
           test -s build/macweather/MacWeather.code.bin
           test -s build/hello-mac/HelloMac.code.bin
-          ls -la build/reader/Reader.code.bin build/macweather/MacWeather.code.bin build/hello-mac/HelloMac.code.bin
+          test -s build/markdownviewer/MarkdownViewer.code.bin
+          ls -la build/reader/Reader.code.bin build/macweather/MacWeather.code.bin build/hello-mac/HelloMac.code.bin build/markdownviewer/MarkdownViewer.code.bin
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
@@ -175,6 +180,10 @@ jobs:
             build/hello-mac/HelloMac.code.bin
             build/hello-mac/HelloMac.dsk
             build/hello-mac/HelloMac.APPL
+            build/markdownviewer/MarkdownViewer.bin
+            build/markdownviewer/MarkdownViewer.code.bin
+            build/markdownviewer/MarkdownViewer.dsk
+            build/markdownviewer/MarkdownViewer.APPL
             dist/app.dsk
             dist/system755-vibe.dsk
             dist/system755-vibe.dsk.json

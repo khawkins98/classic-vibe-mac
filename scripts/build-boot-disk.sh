@@ -454,6 +454,22 @@ WEATHER_JSON
         || echo "[boot-disk] WARN: hattrib failed on :System Folder:Startup Items:Shared:${base}"
     done
 
+    # .md files: tagged TEXT/CVMV so MarkdownViewer auto-opens them on
+    # double-click. Same dual-copy pattern as .html files above.
+    MD_FILES=("${SHARED_DIR}"/*.md)
+    if [[ -e "${MD_FILES[0]}" ]]; then
+      for f in "${MD_FILES[@]}"; do
+        base="$(basename "${f}")"
+        echo "[boot-disk]   :Shared:${base}  (and :System Folder:Startup Items:Shared:${base})"
+        hcopy "${f}" ":Shared:${base}"
+        hcopy "${f}" ":System Folder:Startup Items:Shared:${base}"
+        hattrib -t TEXT -c CVMV ":Shared:${base}" \
+          || echo "[boot-disk] WARN: hattrib failed on :Shared:${base}"
+        hattrib -t TEXT -c CVMV ":System Folder:Startup Items:Shared:${base}" \
+          || echo "[boot-disk] WARN: hattrib failed on :System Folder:Startup Items:Shared:${base}"
+      done
+    fi
+
     # weather.json: similar copy + tag with TEXT/CVMW so MacWeather owns
     # the file type. The fallback path inside MacWeather opens
     # :Shared:weather.json, so we copy it both at the volume root (where

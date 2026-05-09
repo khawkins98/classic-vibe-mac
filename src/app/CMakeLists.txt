@@ -22,6 +22,7 @@
 #   build/macweather/MacWeather.{bin,dsk,APPL}
 #   build/hello-mac/HelloMac.{bin,dsk,APPL}
 #   build/pixelpad/PixelPad.{bin,dsk,APPL}
+#   build/markdownviewer/MarkdownViewer.{bin,dsk,APPL}
 #
 # The .bin files are MacBinary (both forks) and feed scripts/build-boot-disk.sh.
 
@@ -32,3 +33,4 @@ add_subdirectory(reader)
 add_subdirectory(macweather)
 add_subdirectory(hello-mac)
 add_subdirectory(pixelpad)
+add_subdirectory(markdownviewer)
