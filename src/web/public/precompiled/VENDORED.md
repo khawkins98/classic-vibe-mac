@@ -24,9 +24,9 @@ developer-local fallbacks; CI always overwrites them from the freshest build.
 **CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25604547373  
 **Source commit:** `82e85f15f1bffdde5541c5e045f2e997649b4a58`  
 **SHA-256:** `81ded0ec5a546e5d37f8d35783b9e7940bb69ccf982b11cc8eb2ce22e1b6fc3a`  
-**License:** MIT (PCC is BSD; Retro68 Elf2Mac is GPLv2; the combined output is
-  a compiled application binary, not a derived source work — distribution of the
-  binary app is unrestricted for personal and educational use in this project.)
+**License note:** See upstream licenses and project policy before redistribution:
+  PCC (BSD-style), Retro68/Elf2Mac (GPLv2), and this repository's LICENSE/NOTICE.
+  This file tracks provenance only and is not legal advice.
 
 This is a **complete MacBinary II APPL** (no splice step needed):
 - Type: `APPL`, Creator: `????`
