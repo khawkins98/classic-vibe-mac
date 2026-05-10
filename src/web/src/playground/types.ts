@@ -94,6 +94,44 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
   },
 ];
 
+/**
+ * A ready-to-run Mac application binary from an external compiler pipeline
+ * (e.g. wasm-retro-cc). Unlike SampleProject, there are no editable source
+ * files and no wasm-rez build step — the binary is fetched directly, patched
+ * into an empty HFS volume, and handed to the emulator.
+ */
+export interface PrebuiltDemo {
+  /** Stable identifier. Used for tracking/analytics only. */
+  id: string;
+  /** Human label shown on the Load button. */
+  label: string;
+  /** URL path relative to the site base URL (no leading slash).
+   *  E.g. "precompiled/hello-toolbox.bin". */
+  binPath: string;
+  /** HFS filename (no extension) — this is what the Finder shows. 31-char max. */
+  filename: string;
+  /** Short description shown as button tooltip. */
+  description: string;
+}
+
+/**
+ * Prebuilt demos available in the playground. Each is a complete MacBinary II
+ * APPL that loads directly without a wasm-rez splice step.
+ *
+ * Source provenance: see src/web/public/precompiled/VENDORED.md.
+ */
+export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
+  {
+    id: "hello-toolbox",
+    label: "Hello Toolbox (wasm-retro-cc)",
+    binPath: "precompiled/hello-toolbox.bin",
+    filename: "hello_toolbox",
+    description:
+      "Compiled by PCC + hand-written A-trap stubs — no Retro68 toolchain. " +
+      "Draws \\\"Hello, World!\\\" on the desktop and waits for a click.",
+  },
+];
+
 /** Build-time constant: hash of every bundled sample file's contents. */
 declare const __CVM_BUNDLE_VERSION__: string;
 export const BUNDLE_VERSION: string =

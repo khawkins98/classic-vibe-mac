@@ -93,6 +93,15 @@
 /* item 3 is the separator */
 #define kFileQuit   4
 
+/* Some Retro68 header snapshots don't expose these osEvt constants. Keep
+ * local fallbacks so suspend/resume handling compiles consistently. */
+#ifndef suspendResumeMessage
+#define suspendResumeMessage 1
+#endif
+#ifndef resumeFlag
+#define resumeFlag 1
+#endif
+
 /* ----------------------------------------------------------------- State */
 
 /* The canvas: 64×64 1-bit bitmap, rowBytes=8, MSB-first.

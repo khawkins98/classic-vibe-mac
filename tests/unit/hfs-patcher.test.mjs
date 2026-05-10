@@ -74,6 +74,10 @@ const READER_BIN = join(
   REPO,
   "src/web/public/precompiled/reader.code.bin",
 );
+const HELLO_TOOLBOX_BIN = join(
+  REPO,
+  "src/web/public/precompiled/hello-toolbox.bin",
+);
 
 // reader.code.bin is produced by Retro68 in the cross-compile job — not
 // available on the bare unit-test runner. When it's missing, skip with
@@ -86,6 +90,14 @@ if (!codeBinAvailable) {
     "  skip reader.code.bin not present (run via build.yml or `cmake --build build` locally); skipping precompile-dependent tests",
   );
 }
+
+// hello-toolbox.bin is committed to git (vendored from wasm-retro-cc) — its
+// absence is always a test failure, not a skip.
+assert.ok(
+  existsSync(HELLO_TOOLBOX_BIN),
+  `FAIL: vendored binary missing at ${HELLO_TOOLBOX_BIN} — ` +
+    "was it accidentally deleted? See src/web/public/precompiled/VENDORED.md for update instructions.",
+);
 
 const template = new Uint8Array(readFileSync(TEMPLATE_PATH));
 const readerBin = codeBinAvailable
@@ -113,6 +125,26 @@ test("MacBinary parse matches hfsutils' view of reader.code.bin", { skip: !codeB
   assert.equal(v.type, 0x4150504c, "type APPL");
   assert.ok(v.dataLen >= 0);
   assert.ok(v.rsrcLen > 0, "code.bin should have a non-empty rsrc fork");
+});
+
+// ── hello-toolbox.bin tests (vendored from wasm-retro-cc) ────────────────
+
+const helloToolboxBin = new Uint8Array(readFileSync(HELLO_TOOLBOX_BIN));
+
+test("hello-toolbox.bin: parseMacBinary returns APPL with non-empty resource fork", () => {
+  const v = parseMacBinary(helloToolboxBin);
+  assert.equal(v.type, 0x4150504c, "type must be APPL");
+  assert.ok(v.rsrcLen > 0, "resource fork must be non-empty (contains CODE resources)");
+  assert.ok(v.dataLen >= 0);
+});
+
+test("hello-toolbox.bin: patchEmptyVolumeWithBinary produces expected-size disk image", () => {
+  const patched = patchEmptyVolumeWithBinary({
+    templateBytes: template,
+    macBinary: helloToolboxBin,
+    filename: "hello_toolbox",
+  });
+  assert.equal(patched.length, template.length, "patched disk must be same size as template");
 });
 
 // ── Patch + hfsutils round-trip ─────────────────────────────────────────
@@ -202,6 +234,33 @@ if (!hfsutilsAvailable) {
         Array.from(orig.resourceFork),
         "rsrc fork bytes must be preserved",
       );
+    } finally {
+      spawnSync("humount", [tmpPath]);
+    }
+  });
+}
+
+// ── hello-toolbox.bin hfsutils round-trip ──────────────────────────────
+// Skip only if hfsutils isn't installed; the binary is always available.
+
+if (hfsutilsAvailable) {
+  test("hello-toolbox.bin: patched disk mounts and shows file with APPL type", () => {
+    const patched = patchEmptyVolumeWithBinary({
+      templateBytes: template,
+      macBinary: helloToolboxBin,
+      filename: "hello_toolbox",
+    });
+    const tmpPath = join(mkdtempSync(join(tmpdir(), "cvm-hfs-")), "ht.dsk");
+    writeFileSync(tmpPath, Buffer.from(patched));
+    const mount = spawnSync("hmount", [tmpPath]);
+    assert.equal(mount.status, 0, `hmount failed: ${mount.stderr.toString()}`);
+    try {
+      const ls = spawnSync("hls", ["-la"]);
+      assert.equal(ls.status, 0, `hls failed: ${ls.stderr.toString()}`);
+      const out = ls.stdout.toString();
+      assert.match(out, /\bhello_toolbox\b/, `hls didn't list 'hello_toolbox': ${out}`);
+      assert.match(out, /APPL/, `hls didn't show APPL type: ${out}`);
+      console.log(`     hls -la output:\n        ${out.split("\n").join("\n        ")}`);
     } finally {
       spawnSync("humount", [tmpPath]);
     }
