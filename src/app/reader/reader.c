@@ -186,6 +186,11 @@ static Boolean     gPollingForResult = false;
 /* Tick count at which we next check for the result file. */
 static long        gNextResultCheck = 0;
 
+/* Forward declarations for helpers used before their definitions. */
+static long ReadHtmlFile(ConstStr255Param fullPath);
+static void InvalidateContent(void);
+static void RebuildLayout(void);
+
 /* ----------------------------------------------------- Pascal-string utils */
 
 /* Tiny Pascal-string helpers — there's a stdlib for C-strings (string.h)
