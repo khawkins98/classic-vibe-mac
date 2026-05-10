@@ -29,11 +29,13 @@ jobs:
             --exclude-path node_modules
             --exclude-path spike
             --exclude-path src/web/dist
+            --exclude-path tools/wasm-rez/vendor/retro68
             --exclude 'https://github.com/khawkins98/classic-vibe-mac/issues'
             --exclude 'https://github.com/khawkins98/classic-vibe-mac/pull'
             --exclude 'https://github.com/khawkins98/classic-vibe-mac/commit'
             --exclude 'https://github.com/khawkins98/classic-vibe-mac/compare'
             --exclude 'https://api.open-meteo.com'
+            --exclude 'http://localhost:5173/'
             --exclude 'mailto:'
             "**/*.md"
           fail: true
