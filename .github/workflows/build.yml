@@ -308,6 +308,12 @@ jobs:
           test -s src/web/dist/precompiled/reader.code.bin
           test -s src/web/dist/precompiled/macweather.code.bin
           test -s src/web/dist/precompiled/hello-mac.code.bin
+          # hello-toolbox.bin is committed to git and copied by Vite automatically
+          # during `npm run build`. This step just guards against accidental deletion.
+          test -s src/web/dist/precompiled/hello-toolbox.bin || {
+            echo "ERROR: hello-toolbox.bin missing from dist — was it deleted from src/web/public/precompiled/?"
+            exit 1
+          }
 
       # Co-locate the disk images next to index.html so they're reachable at
       # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —

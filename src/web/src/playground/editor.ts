@@ -20,7 +20,7 @@ import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import JSZip from "jszip";
 
-import { SAMPLE_PROJECTS, type SampleProject } from "./types";
+import { SAMPLE_PROJECTS, PREBUILT_DEMOS, type SampleProject } from "./types";
 import {
   initPersistence,
   isPersistent,
@@ -636,6 +636,55 @@ export async function mountPlayground(
   whatBtn.addEventListener("click", () => {
     if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
+
+  // Prebuilt demo load: event delegation for .cvm-pg-demo-load buttons.
+  // Each button carries data-demo-id matching a PREBUILT_DEMOS entry.
+  // The path: fetch binary → patch empty HFS volume → hotLoad (reboot emulator).
+  // No wasm-rez splice needed — the binary is a complete MacBinary II APPL.
+  rootEl.addEventListener("click", async (e) => {
+    if (!(e.target instanceof Element)) return;
+    const btn = e.target.closest<HTMLButtonElement>("button.cvm-pg-demo-load");
+    if (!btn) return;
+
+    const demo = PREBUILT_DEMOS.find((d) => d.id === btn.dataset.demoId);
+    if (!demo) return;
+
+    if (!hotLoad) {
+      setStatus(statusEl, "Load demo isn't wired in this build (no emulator).", "err");
+      return;
+    }
+
+    // Lock all interactive buttons during the reboot sequence.
+    const demoButtons = rootEl.querySelectorAll<HTMLButtonElement>(".cvm-pg-demo-load");
+    buildBtn.disabled = true;
+    buildRunBtn.disabled = true;
+    demoButtons.forEach((b) => (b.disabled = true));
+    rootEl.setAttribute("data-rebooting", "");
+    setStatus(statusEl, `Fetching ${demo.label}…`, "info");
+
+    try {
+      const binResp = await fetch(`${baseUrl}${demo.binPath}`);
+      if (!binResp.ok) throw new Error(`Fetch failed: HTTP ${binResp.status}`);
+      const macBinary = new Uint8Array(await binResp.arrayBuffer());
+
+      setStatus(statusEl, "Patching disk…", "info");
+      const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
+      if (!tmplResp.ok) throw new Error(`empty-secondary.dsk: HTTP ${tmplResp.status}`);
+      const templateBytes = new Uint8Array(await tmplResp.arrayBuffer());
+
+      const patched = patchEmptyVolumeWithBinary({ templateBytes, macBinary, filename: demo.filename });
+      setStatus(statusEl, "Mounting disk…", "info");
+      await hotLoad({ bytes: patched, volumeName: "Apps" });
+      setStatus(statusEl, `${demo.label} loaded — double-click "Apps" on the desktop.`, "ok");
+    } catch (err) {
+      setStatus(statusEl, `Load demo error: ${(err as Error).message}`, "err");
+    } finally {
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+      demoButtons.forEach((b) => (b.disabled = false));
+      rootEl.removeAttribute("data-rebooting");
+    }
+  });
 }
 
 /**
@@ -716,15 +765,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
     <div class="window__body">
       <p class="cvm-pg-intro">
         Click into the source below and start typing &mdash; this is the
-        real C and Rez code for the apps running in the Mac above, and your
-        edits save automatically in your browser. Hit <em>Build .bin</em>
-        to compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes mounted as a secondary disk.
-        <strong>Today the in-browser compile only handles
-        <code>.r</code> resource files</strong> &mdash; <code>.c</code> /
-        <code>.h</code> edits ride along in <em>Download .zip</em> but
-        don't change the running binary (in-browser C compilation requires
-        a native toolchain; see the playground README for details).
+        real C and Rez code for the apps running in the Mac above. Edits
+        save automatically in your browser. Hit <em>Build .bin</em> to
+        compile and download a MacBinary, or <em>Build &amp; Run</em>
+        to reboot the Mac with your changes. Only <code>.r</code> resource
+        files recompile in-browser today; <code>.c</code> / <code>.h</code>
+        edits save locally and ride along in <em>Download .zip</em>.
       </p>
       ${banner}
       ${migrationBanner}
@@ -743,6 +789,13 @@ function renderShell(persistent: boolean, preservedCount: number): string {
           Download .zip
         </button>
       </div>
+      <div class="cvm-pg-toolbar cvm-pg-toolbar--demos" role="group" aria-label="Prebuilt demos">
+        <span class="cvm-pg-field__label">Prebuilt demos</span>
+        ${PREBUILT_DEMOS.map((d) => `<button type="button"
+            class="cvm-pg-button cvm-pg-demo-load"
+            data-demo-id="${escapeHtml(d.id)}"
+            title="${escapeHtml(d.description)}">${escapeHtml(d.label)}</button>`).join("")}
+      </div>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
         <button type="button" id="cvm-pg-whatjusthappened" class="cvm-pg-btn-what" hidden>
@@ -750,13 +803,11 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         </button>
       </div>
       <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
-        <strong>Heads-up:</strong> this file isn't compiled in your browser.
-        Only Rez resource files (<code>.r</code>) recompile in-browser today
-        &mdash; edits to <code>.c</code> / <code>.h</code> sources save
-        locally and ride along in <em>Download .zip</em>, but the data fork
-        in your built <code>.bin</code> is whatever CI compiled from
-        <code>main</code>. Try editing a <code>.r</code> file to see live
-        changes.
+        <strong>Note:</strong> <code>.c</code> / <code>.h</code> edits save
+        locally and ride along in <em>Download .zip</em>, but only
+        <code>.r</code> resource files recompile in-browser &mdash; the
+        compiled binary in the emulator reflects whatever CI built from
+        <code>main</code>. Switch to a <code>.r</code> tab to see live changes.
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
