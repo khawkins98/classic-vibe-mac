@@ -1,5 +1,18 @@
 # Vendored precompiled binaries
 
+> **2026-05-14 — Phase 2 pivot.** The `hello-*` family of binaries
+> below were produced by wasm-retro-cc's **Phase 1 PCC pipeline**, now
+> archived. They remain checked in as a historical record of the
+> debugging trail (three real bugs found and fixed; H1/H2 bisect
+> probes documented). Phase 2 will replace them with binaries built
+> from the new Retro68 GCC → WASM port — see
+> [wasm-retro-cc #11](https://github.com/khawkins98/wasm-retro-cc/issues/11)
+> and the cross-repo tracker
+> [#64](https://github.com/khawkins98/classic-vibe-mac/issues/64).
+> When Phase 2.0 lands, this file's `hello-toolbox.bin` provenance
+> block will move to "previous artefact" and a new block will document
+> the Retro68 GCC build.
+
 This directory contains precompiled Mac application binaries shipped as static
 web assets. They serve two distinct purposes:
 
