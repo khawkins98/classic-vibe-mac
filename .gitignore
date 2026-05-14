@@ -69,3 +69,7 @@ src/web/public/precompiled/*.code.bin
 # branch for local reference. It's intentionally not part of feat/ branches.
 spike/
 
+
+# Playwright test-demo automation outputs (issue #71)
+tests/e2e/screenshots/
+test-results-test-demo/
