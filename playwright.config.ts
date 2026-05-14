@@ -14,6 +14,11 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Exclude the debug-loop boot-tester spec (issue #71) — it's run via
+  // tools/test-demo.sh with its own dedicated config, not as part of
+  // the regular e2e suite.  Picking it up here would fail because the
+  // spec requires a DEMO_ID env var that the regular suite doesn't set.
+  testIgnore: ["prebuilt-demo-boot.spec.ts"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

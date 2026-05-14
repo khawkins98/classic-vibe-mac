@@ -192,43 +192,93 @@ test(`boot ${DEMO_ID}`, async ({ page }) => {
       text: `clicking demo button: ${buttonLabel.trim()}`,
       ts: Date.now() - start,
     });
+    // Track the emulator reboot.  hotLoad destroys the running BasiliskII
+    // and starts a fresh one against the patched disk; the new emulator's
+    // startup is marked by a second "[worker] BasiliskIIPrefs:" log line.
+    // We wait for that signal before grabbing the canvas locator, so we
+    // hit the NEW (live) canvas rather than the stale post-reboot one.
+    let rebootSeenAtMs = -1;
+    let prefsCount = 0;
+    const onReboot = (msg: { text: () => string }) => {
+      if (msg.text().includes("[worker] BasiliskIIPrefs")) {
+        prefsCount += 1;
+        if (prefsCount >= 2) rebootSeenAtMs = Date.now() - start;
+      }
+    };
+    page.on("console", onReboot);
+
     await demoBtn.click();
 
-    // After click, the playground:
-    //   1. Fetches binary + dsk template (~1s)
-    //   2. Hot-loads the patched disk, which triggers a fresh BasiliskII
-    //      reboot (the existing emulator is destroyed, a new one mounts).
-    //   3. The new emulator boots System 7.5.5 from the patched volume
-    //      (~15-30s on cold cache).
-    //   4. The Apps disk icon appears on the desktop and (typically) the
-    //      Finder auto-opens the Apps window.
-    // After waiting most of the boot, attempt a double-click on the
-    // canvas at the spot where the app icon usually appears.  This drives
-    // the manual "double-click the app" step that's otherwise human-only.
-    await page.waitForTimeout((BOOT_WAIT_S - 10) * 1000);
+    // Wait up to 30s for the reboot signal.
+    const rebootDeadline = Date.now() + 30_000;
+    while (Date.now() < rebootDeadline && rebootSeenAtMs < 0) {
+      await page.waitForTimeout(500);
+    }
+    page.off("console", onReboot);
 
+    if (rebootSeenAtMs < 0) {
+      consoleLogs.push({
+        type: "harness",
+        text: "WARN: reboot signal not seen within 30s post-click",
+        ts: Date.now() - start,
+      });
+    } else {
+      consoleLogs.push({
+        type: "harness",
+        text: `reboot signal seen at ${rebootSeenAtMs}ms`,
+        ts: Date.now() - start,
+      });
+    }
+
+    // After reboot signal, wait for the new emulator to finish booting
+    // System 7.5.5 from the patched disk.  Use the same "console silence
+    // for 3s" heuristic — but ONLY counting [emulator]/[basilisk]/chunk
+    // messages so unrelated logs don't reset the timer.
+    let lastEmTs = Date.now();
+    const onEm = (msg: { text: () => string }) => {
+      const t = msg.text();
+      if (
+        t.includes("[emulator]") ||
+        t.includes("[basilisk]") ||
+        t.includes("chunk ")
+      ) {
+        lastEmTs = Date.now();
+      }
+    };
+    page.on("console", onEm);
+    const newBootDeadline = Date.now() + (BOOT_WAIT_S - 10) * 1000;
+    while (Date.now() < newBootDeadline) {
+      if (Date.now() - lastEmTs > 3_000) break;
+      await page.waitForTimeout(500);
+    }
+    page.off("console", onEm);
+    consoleLogs.push({
+      type: "harness",
+      text: `new emulator quiesced; attempting canvas double-click`,
+      ts: Date.now() - start,
+    });
+
+    // NOW grab the canvas locator — the new one created by the reboot.
     // Programmatic double-click on the emulator canvas.  Coordinates
     // chosen empirically from user-supplied screenshots showing the
     // hello_toolbox app icon in the auto-opened Apps window at roughly
-    // (130, 270) of the visible canvas.  We compute that in CSS pixels
-    // by reading the canvas's bounding box.
-    //
-    // emulator-input.ts maps host pointer events to emulator-space pixel
-    // coordinates by the canvas's intrinsic width/height — so any host
-    // CSS dimensions translate correctly.
+    // (130, 270) of the visible canvas.
     try {
+      // Re-evaluate the locator AFTER reboot — old canvas is detached.
       const canvas = page.locator("#emulator-canvas-mount canvas").first();
       const box = await canvas.boundingBox();
       if (box) {
-        // ~130/512 horiz, ~270/342 vert in emulator space, mapped to CSS.
         const x = box.x + box.width * (130 / 512);
         const y = box.y + box.height * (270 / 342);
         consoleLogs.push({
           type: "harness",
-          text: `double-clicking canvas at (${x.toFixed(0)}, ${y.toFixed(0)}) — Apps icon target`,
+          text: `double-clicking canvas at (${x.toFixed(0)}, ${y.toFixed(0)})`,
           ts: Date.now() - start,
         });
-        await page.mouse.dblclick(x, y);
+        await page.mouse.move(x, y);
+        await page.mouse.click(x, y);
+        await page.waitForTimeout(150);
+        await page.mouse.click(x, y);
       } else {
         consoleLogs.push({
           type: "harness",
@@ -244,7 +294,7 @@ test(`boot ${DEMO_ID}`, async ({ page }) => {
       });
     }
 
-    // Wait remaining boot window for the app to launch + crash visibly.
+    // Final settle wait for the app to launch / crash dialog to draw.
     await page.waitForTimeout(10_000);
 
     // Capture an extra 5s of quiesce — catches the case where the app
