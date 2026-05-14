@@ -81,6 +81,29 @@ works, and the crash lives in our Toolbox stub code or in
 If `hello-bare.bin` *also* crashes → bug is in libretrocrt's startup
 or relocator. The Toolbox layer is innocent.
 
+**hello-bare.bin observed result (2026-05-14):** launches cleanly, zoom
+rects then silent exit, no error dialog, no active app. So libretrocrt
+is confirmed working; the bug is in the Toolbox layer.
+
+## `hello-initgraf.bin` (bisect probe, finer granularity)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc  
+**Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25871503342  
+**Source commit:** `8bb5747`  
+**SHA-256:** `03e337d95088f91697f4a10fff2ad26ac246b74be6dbcbb324503dda977e7a40`  
+
+Calls **just** `InitGraf(&qd.thePort)` and returns. Same link recipe as
+`hello-toolbox.bin` (linked with `libtoolbox-stubs.a` + libretrocrt +
+libc + libInterface + libgcc). Diff is solely the call sequence.
+
+Bisect outcome guide:
+- If `hello-initgraf` launches cleanly → `InitGraf` works. The bug is
+  in a later Toolbox call (`InitFonts`, ..., `MoveTo`, `DrawString`,
+  `Button`). Investigate stubs for those.
+- If `hello-initgraf` crashes → `InitGraf` itself is the source. Look
+  more carefully at the InitGraf stub or how qd is accessed.
+
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
 It was compiled with PCC (Portable C Compiler) + hand-written m68k A-trap stubs —
