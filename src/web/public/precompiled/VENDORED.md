@@ -21,9 +21,9 @@ developer-local fallbacks; CI always overwrites them from the freshest build.
 
 **Source:** https://github.com/khawkins98/wasm-retro-cc  
 **Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
-**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25862036185  
-**Source commit:** `84b9493` (PR #5 — `fix(link): invoke m68k-apple-macos-ld -elf2mac for multi-seg output`)  
-**SHA-256:** `a8c317d7ae3a130e58c42112b899f6fcb0779867176b2c13114e4af935e998aa`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25864798843  
+**Source commit:** `c9759e2` (PR #6 — `fix(shim): pragma pack(2) on QDGlobals + CI reloc-type dump diagnostic`)  
+**SHA-256:** `a373c506801fadfaebca91af4d5f064d19bc626c2a2aaa832a7d28bc77ec02f8`  
 **License note:** See upstream licenses and project policy before redistribution:
   PCC (BSD-style), Retro68/Elf2Mac (GPLv2), and this repository's LICENSE/NOTICE.
   This file tracks provenance only and is not legal advice.
@@ -33,14 +33,22 @@ This is a **complete MacBinary II APPL** (no splice step needed):
 - Data fork: 20 bytes
 - Resource fork: ~12 KB (CODE 0 jump table + 8× CODE segments + DATA + 9× RELA)
 
-> **Previous vendored binary (run 25604547373, SHA-256 `81ded0ec…`) crashed
-> with type-3 in BasiliskII** because it was built with `Elf2Mac --mac-single`,
-> which produces a binary with `below_a5=0` and no DATA / RELA — incompatible
-> with libretrocrt's startup. The current binary is built with
-> `m68k-apple-macos-ld -elf2mac` (multi-segment), matching the shape of the
-> known-working `macweather.code.bin`. See [wasm-retro-cc LEARNINGS.md "Boot
-> test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
-> for the full diagnosis.
+> **Crash history (kept for context — both are fixed now):**
+>
+> 1. **Run 25604547373 / SHA `81ded0ec…`** — type-3 crash. Built with
+>    `Elf2Mac --mac-single`; binary had `below_a5=0` and no DATA/RELA.
+>    Fixed in wasm-retro-cc PR #5 (use `m68k-apple-macos-ld -elf2mac`
+>    multi-segment mode).
+> 2. **Run 25862036185 / SHA `a8c317d7…`** — also type-3, but for a
+>    different reason. Binary structure was correct, but PCC's default
+>    struct alignment placed `qd.thePort` at offset 204; Retro68's
+>    `libretrocrt` (mac68k-packed) puts it at 202. `InitGraf` wrote into
+>    the wrong slot. Fixed in wasm-retro-cc PR #6
+>    (`#pragma pack(2)` on QDGlobals).
+>
+> The current binary (run 25864798843, SHA `a373c506…`) has both fixes
+> applied. See [wasm-retro-cc LEARNINGS.md "Boot test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
+> for the full diagnostic chain.
 
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
