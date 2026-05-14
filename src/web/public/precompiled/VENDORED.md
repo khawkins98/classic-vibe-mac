@@ -129,6 +129,36 @@ Outcome guide:
   does internally (NewPtr allocation needing MaxApplZone, or stub
   mechanics).
 
+**hello-initgraf-local.bin observed result (2026-05-14):** crashes
+type-3 same as hello-initgraf. **H1 is dead.** Plus a striking
+side-finding: SimpleText (a system Mac OS app, outside our build
+chain) also crashed type-3 in the same boot session. Two crashes in
+one session, one in a known-good system binary. Strong evidence the
+bug is in something earlier (libretrocrt startup?) that destabilises
+the System for any subsequent app launch.
+
+## `hello-initgraf-zone.bin` (H2 probe — MaxApplZone + MoreMasters)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc  
+**Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
+**CI run:** wasm-retro-cc main commit after PR #10 merge  
+**SHA-256:** `733ce1dc5e898488a7f7508f6315deddc3c501e50c9714c3dfdf7507a0ebb3b2`  
+
+Calls `MaxApplZone()` + `MoreMasters() × 3` BEFORE `InitGraf(&qd.thePort)`,
+then returns. Standard Mac OS startup incantation: expands the
+application heap to its max and pre-allocates master pointers before
+any Toolbox allocation. New stubs for `MaxApplZone` (trap `$A063`) and
+`MoreMasters` (trap `$A036`) live in `src/stubs/libtoolbox-stubs.s`
+upstream.
+
+Outcome guide:
+- Silent exit → **H2 confirmed**. The bug is heap init. Fix: call
+  these from libretrocrt's startup (or document the requirement).
+- Same crash → **H2 dead**. Leading hypothesis becomes **H4:
+  libretrocrt's startup corrupts system state.** Inspect Retro68's
+  `libretro/relocate.c`, `MultiSegApp.c` against what we actually
+  link.
+
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
 It was compiled with PCC (Portable C Compiler) + hand-written m68k A-trap stubs —
