@@ -265,6 +265,66 @@ if (hfsutilsAvailable) {
       spawnSync("humount", [tmpPath]);
     }
   });
+
+  test("extraFiles: README mounted alongside hello_toolbox with TEXT/ttxt", () => {
+    // "info.txt" — 'i' (case-folded) > 'h' (case-folded), so the catalog
+    // key order constraint is satisfied (records appended in ascending
+    // order by parentID=2 + name).
+    const readme = new TextEncoder().encode(
+      "Hello from the wasm-retro-cc demo.\r" +
+        "Open browser DevTools → Console to verify the binary's SHA-256.\r",
+    );
+    const patched = patchEmptyVolumeWithBinary({
+      templateBytes: template,
+      macBinary: helloToolboxBin,
+      filename: "hello_toolbox",
+      extraFiles: [
+        {
+          filename: "info.txt",
+          type: 0x54455854, // 'TEXT'
+          creator: 0x74747874, // 'ttxt' (SimpleText / TeachText)
+          dataFork: readme,
+        },
+      ],
+    });
+    const tmpPath = join(mkdtempSync(join(tmpdir(), "cvm-hfs-")), "extra.dsk");
+    writeFileSync(tmpPath, Buffer.from(patched));
+    const mount = spawnSync("hmount", [tmpPath]);
+    assert.equal(mount.status, 0, `hmount failed: ${mount.stderr.toString()}`);
+    try {
+      const ls = spawnSync("hls", ["-la"]);
+      assert.equal(ls.status, 0, `hls failed: ${ls.stderr.toString()}`);
+      const out = ls.stdout.toString();
+      assert.match(out, /\bhello_toolbox\b/, `hls didn't list 'hello_toolbox': ${out}`);
+      assert.match(out, /\binfo\.txt\b/, `hls didn't list 'info.txt': ${out}`);
+      assert.match(out, /TEXT\/ttxt/, `hls didn't show TEXT/ttxt type: ${out}`);
+      assert.match(out, /APPL/, `hls didn't show APPL: ${out}`);
+      console.log(`     hls -la output:\n        ${out.split("\n").join("\n        ")}`);
+
+      // Round-trip the text file content through hcopy and check it
+      // matches what we wrote — the data fork integrity check that
+      // matters here is "does TeachText see the right bytes?".
+      const copyDir = mkdtempSync(join(tmpdir(), "cvm-hfs-copy-"));
+      const copyPath = join(copyDir, "info.txt");
+      // -r = raw data fork (no MacBinary wrapping, no CR<->LF
+      // translation).  Default mode does text-mode CR translation for
+      // TEXT/ttxt files, which would munge the bytes we asserted.
+      const copy = spawnSync("hcopy", ["-r", ":info.txt", copyPath]);
+      assert.equal(
+        copy.status,
+        0,
+        `hcopy data fork failed: ${copy.stderr.toString()}`,
+      );
+      const got = new Uint8Array(readFileSync(copyPath));
+      assert.deepStrictEqual(
+        Array.from(got),
+        Array.from(readme),
+        "info.txt data fork bytes didn't round-trip through HFS",
+      );
+    } finally {
+      spawnSync("humount", [tmpPath]);
+    }
+  });
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────
