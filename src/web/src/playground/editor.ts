@@ -667,6 +667,21 @@ export async function mountPlayground(
       if (!binResp.ok) throw new Error(`Fetch failed: HTTP ${binResp.status}`);
       const macBinary = new Uint8Array(await binResp.arrayBuffer());
 
+      // Log fetched binary identity to make cached-vs-fresh debugging trivial
+      // (added 2026-05-14 after the wasm-retro-cc PR-#5 re-vendor; the
+      // previous binary type-3'd, so we want zero ambiguity about which one
+      // the browser actually got).  SHA-256 of the bytes is the canonical
+      // ID; Last-Modified is the deploy timestamp (fast cache-hit check).
+      const sha = await crypto.subtle.digest("SHA-256", macBinary);
+      const shaHex = Array.from(new Uint8Array(sha))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+      console.info(
+        `[prebuilt-demo] ${demo.id}: ${macBinary.byteLength}B  ` +
+          `sha256=${shaHex.slice(0, 16)}…  ` +
+          `last-modified=${binResp.headers.get("last-modified") ?? "(none)"}`,
+      );
+
       setStatus(statusEl, "Patching disk…", "info");
       const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
       if (!tmplResp.ok) throw new Error(`empty-secondary.dsk: HTTP ${tmplResp.status}`);
