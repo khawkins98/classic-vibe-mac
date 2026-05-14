@@ -12,6 +12,7 @@ dist/
 # playground can load them without cross-repo CI artifact downloads).
 !src/web/public/precompiled/hello-toolbox.bin
 !src/web/public/precompiled/hello-bare.bin
+!src/web/public/precompiled/hello-initgraf.bin
 
 # Node
 node_modules/
