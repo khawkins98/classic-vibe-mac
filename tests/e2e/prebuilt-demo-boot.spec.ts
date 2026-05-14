@@ -200,11 +200,52 @@ test(`boot ${DEMO_ID}`, async ({ page }) => {
     //      reboot (the existing emulator is destroyed, a new one mounts).
     //   3. The new emulator boots System 7.5.5 from the patched volume
     //      (~15-30s on cold cache).
-    //   4. The app launches; runs or crashes visibly.
-    // We wait BOOT_WAIT_S total — long enough for steps 2-4 to complete.
-    // Then optionally do a second "quiesce" wait to let any final
-    // crash dialog finish drawing.
-    await page.waitForTimeout(BOOT_WAIT_S * 1000);
+    //   4. The Apps disk icon appears on the desktop and (typically) the
+    //      Finder auto-opens the Apps window.
+    // After waiting most of the boot, attempt a double-click on the
+    // canvas at the spot where the app icon usually appears.  This drives
+    // the manual "double-click the app" step that's otherwise human-only.
+    await page.waitForTimeout((BOOT_WAIT_S - 10) * 1000);
+
+    // Programmatic double-click on the emulator canvas.  Coordinates
+    // chosen empirically from user-supplied screenshots showing the
+    // hello_toolbox app icon in the auto-opened Apps window at roughly
+    // (130, 270) of the visible canvas.  We compute that in CSS pixels
+    // by reading the canvas's bounding box.
+    //
+    // emulator-input.ts maps host pointer events to emulator-space pixel
+    // coordinates by the canvas's intrinsic width/height — so any host
+    // CSS dimensions translate correctly.
+    try {
+      const canvas = page.locator("#emulator-canvas-mount canvas").first();
+      const box = await canvas.boundingBox();
+      if (box) {
+        // ~130/512 horiz, ~270/342 vert in emulator space, mapped to CSS.
+        const x = box.x + box.width * (130 / 512);
+        const y = box.y + box.height * (270 / 342);
+        consoleLogs.push({
+          type: "harness",
+          text: `double-clicking canvas at (${x.toFixed(0)}, ${y.toFixed(0)}) — Apps icon target`,
+          ts: Date.now() - start,
+        });
+        await page.mouse.dblclick(x, y);
+      } else {
+        consoleLogs.push({
+          type: "harness",
+          text: "no canvas bounding box found — skipping double-click",
+          ts: Date.now() - start,
+        });
+      }
+    } catch (clickErr) {
+      consoleLogs.push({
+        type: "harness",
+        text: `canvas double-click failed: ${String(clickErr)}`,
+        ts: Date.now() - start,
+      });
+    }
+
+    // Wait remaining boot window for the app to launch + crash visibly.
+    await page.waitForTimeout(10_000);
 
     // Capture an extra 5s of quiesce — catches the case where the app
     // crashed late and the system error dialog is still being drawn.
