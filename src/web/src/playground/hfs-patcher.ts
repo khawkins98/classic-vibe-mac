@@ -505,15 +505,133 @@ export interface PatchOptions {
   /** Filename to give the file at the volume root. Falls back to the
    *  MacBinary header's filename if omitted. ≤31 Mac-Roman bytes. */
   filename?: string;
+  /** Additional non-MacBinary files to drop at the volume root alongside the
+   *  main app. Useful for shipping a small diagnostic README the user can
+   *  open in TeachText. Each filename MUST sort AFTER the main file's
+   *  filename in HFS catalog key order (parentID=2, then case-insensitive
+   *  name) because we append-only to the catalog leaf and HFS requires
+   *  records sorted by key. Empirically: pick a name starting with a
+   *  character that case-folds higher than the main file's first character
+   *  (e.g. main = "hello_toolbox", extra = "info.txt" — 'i' > 'h'). */
+  extraFiles?: ExtraFile[];
+}
+
+export interface ExtraFile {
+  /** ≤31 Mac-Roman bytes. Must sort after PatchOptions.filename — see note. */
+  filename: string;
+  /** OSType file type (u32, big-endian). E.g. 'TEXT' = 0x54455854. */
+  type: number;
+  /** OSType creator. E.g. 'ttxt' = 0x74747874 (SimpleText/TeachText). */
+  creator: number;
+  /** Finder flags (high byte). 0 is fine for a plain document. */
+  finderFlags?: number;
+  /** File data fork bytes. */
+  dataFork: Uint8Array;
+}
+
+/** Inject one file at the volume root. Mutates `disk` in place: allocates
+ *  blocks, copies forks, marks bitmap, appends catalog record, bumps root
+ *  valence, and patches MDB. Returns nothing — caller orchestrates ordering
+ *  of multiple injections.
+ *
+ *  NB: the catalog leaf is append-only here, so successive injections must
+ *  pass files whose keys (parentID=2 + name) sort in ascending order.
+ */
+function injectFileAtRoot(
+  disk: Uint8Array,
+  file: {
+    filename: string;
+    type: number;
+    creator: number;
+    finderFlags: number;
+    dataFork: Uint8Array;
+    resourceFork: Uint8Array;
+  },
+): void {
+  const ab = TEMPLATE_LAYOUT.allocBlockSize;
+  const mdb = readMdb(disk);
+  const cnid = mdb.drNxtCNID;
+
+  const dataLen = file.dataFork.length;
+  const rsrcLen = file.resourceFork.length;
+  const dataPy = roundUpToAllocBlocks(dataLen);
+  const rsrcPy = roundUpToAllocBlocks(rsrcLen);
+  const dataBlocks = dataPy / ab;
+  const rsrcBlocks = rsrcPy / ab;
+  const totalNeeded = dataBlocks + rsrcBlocks;
+  if (totalNeeded > mdb.drFreeBks) {
+    throw new Error(
+      `not enough free space for ${file.filename}: need ${totalNeeded} blocks, have ${mdb.drFreeBks}`,
+    );
+  }
+
+  // The empty-template allocPtr is 44; subsequent allocations need to walk
+  // past whatever's already marked used by a prior injection.  findFreeRun
+  // scans the bitmap, so starting from 44 still works for the second file.
+  const startBlock = findFreeRun(disk, /*from=*/ 44, totalNeeded);
+  if (startBlock < 0) {
+    throw new Error(
+      `cannot find ${totalNeeded} contiguous free alloc blocks for ${file.filename}`,
+    );
+  }
+  const dataStartBlock = dataLen > 0 ? startBlock : 0;
+  const rsrcStartBlock = startBlock + dataBlocks;
+
+  if (dataLen > 0) {
+    disk.set(file.dataFork, allocBlockToDiskOffset(dataStartBlock));
+  }
+  if (rsrcLen > 0) {
+    disk.set(file.resourceFork, allocBlockToDiskOffset(rsrcStartBlock));
+  }
+  markBlocksUsed(disk, startBlock, totalNeeded);
+  bumpRootDirValence(
+    disk,
+    allocBlockToDiskOffset(TEMPLATE_LAYOUT.catalogFirstAllocBlock),
+  );
+
+  const record = encodeFileRecord({
+    parentID: 2, // root directory CNID is always 2 in HFS
+    name: file.filename,
+    cnid,
+    type: file.type,
+    creator: file.creator,
+    finderFlags: file.finderFlags,
+    dataStartBlock,
+    dataLgLen: dataLen,
+    dataPyLen: dataPy,
+    rsrcStartBlock,
+    rsrcLgLen: rsrcLen,
+    rsrcPyLen: rsrcPy,
+  });
+  appendCatalogLeafRecord(
+    disk,
+    allocBlockToDiskOffset(TEMPLATE_LAYOUT.catalogFirstAllocBlock),
+    record,
+  );
+
+  patchMdb(disk, {
+    addedBlocks: totalNeeded,
+    addedFiles: 1,
+    assignedCNID: cnid,
+  });
 }
 
 /**
- * Patch the empty volume to contain one file at the root. Returns a
- * fresh Uint8Array — the input `templateBytes` is NOT mutated. Caller
- * hands the result to InMemoryDisk in the worker.
+ * Patch the empty volume to contain the main MacBinary file at the root,
+ * plus any additional plain files passed in `extraFiles`. Returns a fresh
+ * Uint8Array — the input `templateBytes` is NOT mutated. Caller hands the
+ * result to InMemoryDisk in the worker.
+ *
+ * Multi-file ordering: extras are injected after the main file in array
+ * order. HFS requires catalog records sorted by key (parentID + name); we
+ * append-only to the leaf, so callers MUST pre-sort `extraFiles` by name
+ * such that each entry's name compares >= the previous one in
+ * case-insensitive Mac Roman order, AND the first entry's name compares
+ * >= the main file's name. (Empirically: pick filenames whose first
+ * character case-folds higher than the main filename's first character.)
  */
 export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
-  const { templateBytes, macBinary } = opts;
+  const { templateBytes, macBinary, extraFiles } = opts;
 
   // Defensive copy. We're going to write into the disk extensively.
   const disk = new Uint8Array(templateBytes.length);
@@ -523,90 +641,30 @@ export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
   const mb = parseMacBinary(macBinary);
   const filename = opts.filename ?? mb.filename;
 
-  // 2. Snapshot pre-MDB state.
-  const mdb = readMdb(disk);
-  const cnid = mdb.drNxtCNID;
-
-  // 3. Allocate alloc-blocks. HFS files always store data fork before
-  //    resource fork in a contiguous-extent layout; we follow suit so
-  //    the start blocks are simple to compute.
-  const ab = TEMPLATE_LAYOUT.allocBlockSize;
-  const dataPy = roundUpToAllocBlocks(mb.dataLen);
-  const rsrcPy = roundUpToAllocBlocks(mb.rsrcLen);
-  const dataBlocks = dataPy / ab;
-  const rsrcBlocks = rsrcPy / ab;
-  const totalNeeded = dataBlocks + rsrcBlocks;
-  if (totalNeeded > mdb.drFreeBks) {
-    throw new Error(
-      `not enough free space: need ${totalNeeded} blocks, have ${mdb.drFreeBks}`,
-    );
-  }
-
-  // 4. Find a contiguous run starting from drAllocPtr (44 in the
-  //    template — first free block after the catalog). We do contiguous
-  //    even though HFS supports up to 3 extents per record, because
-  //    finding any 41-block run in 2830 free blocks is trivial in the
-  //    empty template.
-  const startBlock = findFreeRun(disk, /*from=*/ 44, totalNeeded);
-  if (startBlock < 0) {
-    throw new Error(
-      `cannot find ${totalNeeded} contiguous free alloc blocks (template fragmented?)`,
-    );
-  }
-  const dataStartBlock = mb.dataLen > 0 ? startBlock : 0;
-  const rsrcStartBlock = startBlock + dataBlocks;
-
-  // 5. Copy the data fork bytes. Start offset = allocStart + dataStartBlock*ab.
-  if (mb.dataLen > 0) {
-    const off = allocBlockToDiskOffset(dataStartBlock);
-    disk.set(mb.dataFork, off);
-    // Trailing bytes from `off + dataLen` to `off + dataPy` stay zero —
-    // they're already zero in the template (fresh format).
-  }
-  // 6. Copy the resource fork.
-  if (mb.rsrcLen > 0) {
-    const off = allocBlockToDiskOffset(rsrcStartBlock);
-    disk.set(mb.resourceFork, off);
-  }
-
-  // 7. Mark the bitmap.
-  markBlocksUsed(disk, startBlock, totalNeeded);
-
-  // 8. Bump the root directory record's valence and modtime. The root dir's
-  //    cdrDirRec lives in catalog leaf node 1 record 0 (key parentID=1
-  //    name="Apps"). dirVal (u16) and dirMdDat (u32) live at known offsets
-  //    inside the data portion of that record — offsets verified against
-  //    hfsutils ground truth.
-  bumpRootDirValence(disk, allocBlockToDiskOffset(
-    TEMPLATE_LAYOUT.catalogFirstAllocBlock,
-  ));
-
-  // 9. Encode the catalog file record and append to the leaf.
-  const record = encodeFileRecord({
-    parentID: 2, // root directory CNID is always 2 in HFS
-    name: filename,
-    cnid,
+  // 2. Inject the main file.
+  injectFileAtRoot(disk, {
+    filename,
     type: mb.type,
     creator: mb.creator,
     finderFlags: mb.finderFlags,
-    dataStartBlock,
-    dataLgLen: mb.dataLen,
-    dataPyLen: dataPy,
-    rsrcStartBlock,
-    rsrcLgLen: mb.rsrcLen,
-    rsrcPyLen: rsrcPy,
+    dataFork: mb.dataLen > 0 ? mb.dataFork : new Uint8Array(),
+    resourceFork: mb.rsrcLen > 0 ? mb.resourceFork : new Uint8Array(),
   });
-  const catalogDiskOff = allocBlockToDiskOffset(
-    TEMPLATE_LAYOUT.catalogFirstAllocBlock,
-  );
-  appendCatalogLeafRecord(disk, catalogDiskOff, record);
 
-  // 10. Update MDB + alt MDB.
-  patchMdb(disk, {
-    addedBlocks: totalNeeded,
-    addedFiles: 1,
-    assignedCNID: cnid,
-  });
+  // 3. Inject extras (e.g. README.txt).  Catalog is append-only, so caller
+  //    must have sorted extras by HFS key order.
+  if (extraFiles && extraFiles.length > 0) {
+    for (const extra of extraFiles) {
+      injectFileAtRoot(disk, {
+        filename: extra.filename,
+        type: extra.type,
+        creator: extra.creator,
+        finderFlags: extra.finderFlags ?? 0,
+        dataFork: extra.dataFork,
+        resourceFork: new Uint8Array(), // plain documents have no rsrc fork
+      });
+    }
+  }
 
   return disk;
 }

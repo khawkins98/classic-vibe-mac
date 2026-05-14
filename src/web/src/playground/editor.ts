@@ -687,10 +687,62 @@ export async function mountPlayground(
       if (!tmplResp.ok) throw new Error(`empty-secondary.dsk: HTTP ${tmplResp.status}`);
       const templateBytes = new Uint8Array(await tmplResp.arrayBuffer());
 
-      const patched = patchEmptyVolumeWithBinary({ templateBytes, macBinary, filename: demo.filename });
+      // Drop a small diagnostic README on the mounted disk alongside the
+      // demo app.  When (not if) somebody hits a crash here, this is the
+      // first thing they can open in TeachText to identify what's actually
+      // mounted — no DevTools required.  Classic Mac convention is CR line
+      // endings (\r = 0x0D) inside TEXT files; SimpleText/TeachText displays
+      // those correctly.  Filename "info.txt" sorts AFTER any demo whose
+      // name starts with a letter <= 'h'; if a future demo starts with 'j'
+      // or later we'd need a different name.
+      const lastMod = binResp.headers.get("last-modified") ?? "(none)";
+      const readmeText =
+        `${demo.label}\r` +
+        `${"=".repeat(demo.label.length)}\r\r` +
+        `Mounted from classic-vibe-mac → "Hello Toolbox (wasm-retro-cc)".\r\r` +
+        `Binary identity\r` +
+        `---------------\r` +
+        `File:         ${demo.filename}\r` +
+        `Size:         ${macBinary.byteLength} bytes\r` +
+        `SHA-256:      ${shaHex}\r` +
+        `Last-Modified: ${lastMod}\r\r` +
+        `If the app crashed with "type 3" (illegal instruction):\r` +
+        ` 1. Open browser DevTools (Cmd+Option+I) → Console.\r` +
+        ` 2. Look for the [prebuilt-demo] line — it shows the SHA above.\r` +
+        ` 3. Compare against the expected SHA in:\r` +
+        `    src/web/public/precompiled/VENDORED.md\r\r` +
+        `Cross-repo source of truth\r` +
+        `--------------------------\r` +
+        ` Tracker:  github.com/khawkins98/classic-vibe-mac/issues/64\r` +
+        ` Compiler: github.com/khawkins98/wasm-retro-cc\r` +
+        ` LEARNINGS: see LEARNINGS.md "Boot test (2026-05-14)" in wasm-retro-cc.\r\r` +
+        `Expected behaviour\r` +
+        `------------------\r` +
+        ` Double-click "${demo.filename}" → app draws "Hello, World!" at (100, 100)\r` +
+        ` on the desktop, waits for a mouse click, then exits.\r`;
+      const readmeBytes = new TextEncoder().encode(readmeText);
+
+      const patched = patchEmptyVolumeWithBinary({
+        templateBytes,
+        macBinary,
+        filename: demo.filename,
+        extraFiles: [
+          {
+            filename: "info.txt",
+            type: 0x54455854, // 'TEXT'
+            creator: 0x74747874, // 'ttxt' (SimpleText / TeachText)
+            dataFork: readmeBytes,
+          },
+        ],
+      });
       setStatus(statusEl, "Mounting disk…", "info");
       await hotLoad({ bytes: patched, volumeName: "Apps" });
-      setStatus(statusEl, `${demo.label} loaded — double-click "Apps" on the desktop.`, "ok");
+      setStatus(
+        statusEl,
+        `${demo.label} loaded — double-click "Apps" on the desktop. ` +
+          `If it crashes, open "info.txt" on that disk for diagnostics.`,
+        "ok",
+      );
     } catch (err) {
       setStatus(statusEl, `Load demo error: ${(err as Error).message}`, "err");
     } finally {
