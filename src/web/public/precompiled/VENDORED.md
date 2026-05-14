@@ -104,6 +104,31 @@ Bisect outcome guide:
 - If `hello-initgraf` crashes → `InitGraf` itself is the source. Look
   more carefully at the InitGraf stub or how qd is accessed.
 
+**hello-initgraf.bin observed result (2026-05-14):** CHK / type-3 crash —
+InitGraf is the trigger.
+
+## `hello-initgraf-local.bin` (H1 probe)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc  
+**Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25874748396  
+**Source commit:** wasm-retro-cc PR #9  
+**SHA-256:** `0ed314318ed52c663a757b98571a9bd2287d19bf713f3b4ad7a49221dfe10f81`  
+
+Calls `InitGraf(&local)` where `local` is a stack-allocated `GrafPtr`.
+PCC emits stack-relative addressing (`move.l A6,A0; sub.l #4,A0`) for the
+argument — no relocation against bss. readelf confirms the .o has only
+1 reloc (for InitGraf itself), versus hello-initgraf.o which has 2
+(InitGraf AND `qd + 0xca`).
+
+Outcome guide:
+- Silent exit → **H1 confirmed**. The qd-pointer resolution at runtime
+  is the bug. Investigate Retro68's `relocate.c` displacements[bss]
+  semantics.
+- Same crash → **H1 dead**. The bug is in something the InitGraf trap
+  does internally (NewPtr allocation needing MaxApplZone, or stub
+  mechanics).
+
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
 It was compiled with PCC (Portable C Compiler) + hand-written m68k A-trap stubs —
