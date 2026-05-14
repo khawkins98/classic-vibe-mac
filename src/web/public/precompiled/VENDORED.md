@@ -1,17 +1,21 @@
 # Vendored precompiled binaries
 
-> **2026-05-14 — Phase 2 pivot.** The `hello-*` family of binaries
-> below were produced by wasm-retro-cc's **Phase 1 PCC pipeline**, now
-> archived. They remain checked in as a historical record of the
-> debugging trail (three real bugs found and fixed; H1/H2 bisect
-> probes documented). Phase 2 will replace them with binaries built
-> from the new Retro68 GCC → WASM port — see
+> **2026-05-14 — Phase 2.0 derisk landed.** `hello-toolbox-retro68.bin`
+> (documented below) is the first vendored artefact produced by the
+> Phase 2 Retro68 GCC build path. It compiles the same `hello_toolbox.c`
+> source as the Phase 1 PCC artefact one section down, but uses
+> Retro68 GCC + Retro68's own crt + libInterface (via the pinned Docker
+> image), so the toolchain matches what every booting Retro68 sample
+> already uses on this BasiliskII Quadra-650.
+>
+> The earlier Phase 1 PCC artefacts (`hello-toolbox.bin`, `hello-bare.bin`,
+> `hello-initgraf*.bin`) remain checked in as a historical record of
+> the debugging trail (three real bugs found and fixed; H1/H2 bisect
+> probes documented). They will be removed once Phase 2 fully supersedes
+> them — see
 > [wasm-retro-cc #11](https://github.com/khawkins98/wasm-retro-cc/issues/11)
 > and the cross-repo tracker
 > [#64](https://github.com/khawkins98/classic-vibe-mac/issues/64).
-> When Phase 2.0 lands, this file's `hello-toolbox.bin` provenance
-> block will move to "previous artefact" and a new block will document
-> the Retro68 GCC build.
 
 This directory contains precompiled Mac application binaries shipped as static
 web assets. They serve two distinct purposes:
@@ -30,7 +34,32 @@ resource file and then _splices_ the result onto the appropriate `.code.bin` to
 produce a complete MacBinary APPL. These files are committed here as stale
 developer-local fallbacks; CI always overwrites them from the freshest build.
 
-## `hello-toolbox.bin` (vendored from wasm-retro-cc)
+## `hello-toolbox-retro68.bin` (Phase 2.0 — vendored from wasm-retro-cc)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc  
+**Build script:** `spike/build-retro68.sh` (Docker-driven; see the Phase 2.0 PR)  
+**Toolchain image:** `ghcr.io/autc04/retro68@sha256:e8b6cc8ac3c0cf26dcb299d5396cc7055c102b6bc46b67e2df960453af8ae92b`  
+**Source commit:** TBD (Phase 2.0 PR — will be filled in on merge)  
+**SHA-256:** `b09d732f1dfe1b81d9a6ec93decf45705e6f3099f9db9fe908d7c9ec924a6a19`  
+**License note:** See upstream licenses and project policy before redistribution:
+  Retro68 / GCC / binutils / libInterface licenses apply (GPLv2 + GPLv3 + Apple
+  Universal Interfaces redistribution terms). This file tracks provenance only
+  and is not legal advice.
+
+This is a **complete MacBinary II APPL** (no splice step needed):
+- Type: `APPL`, Creator: `????`
+- Data fork: 0 bytes
+- Resource fork: ~12 KB (CODE 0 jump table + 8× CODE segments + DATA + 9× RELA + SIZE)
+- CODE 0: `above_a5=56 below_a5=1428 jt_size=24 jt_entries=3`
+
+Built from `hello_toolbox.c` (identical source to the Phase 1 PCC artefact
+below — InitGraf + InitFonts + … + DrawString + Button wait), but compiled
+by Retro68 GCC and linked against Retro68's own crt + libInterface. This
+is the Phase 2.0 derisk: confirms a Retro68-built APPL boots cleanly in
+the deployed BasiliskII before any of the in-browser compiler-porting
+work begins.
+
+## `hello-toolbox.bin` (Phase 1 — archived, vendored from wasm-retro-cc)
 
 **Source:** https://github.com/khawkins98/wasm-retro-cc  
 **Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
