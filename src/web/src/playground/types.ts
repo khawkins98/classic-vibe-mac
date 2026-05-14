@@ -160,6 +160,25 @@ export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
       "compile + link + libtoolbox-stubs path as hello_toolbox.  No " +
       "visible output if it works (silent exit, like hello-bare).",
   },
+  {
+    // H1 probe (added 2026-05-14): same as hello-initgraf but uses a
+    // STACK-allocated GrafPtr, not &qd.thePort.  Eliminates the qd RELA
+    // fixup from the call site.  PCC emits `move.l A6,A0; sub.l #4,A0;
+    // move.l A0,-(SP); jsr InitGraf` — no relocation against bss.
+    //   - Silent exit (like hello-bare) → H1 confirmed: the qd-pointer
+    //     resolution is the bug.  Investigate Retro68Relocate's
+    //     displacements[bss] semantics.
+    //   - Crash (like hello-initgraf)   → H1 dead.  Move on to H2
+    //     (MaxApplZone) or H3 (stub mechanics).
+    id: "hello-initgraf-local",
+    label: "Hello InitGraf (local var) — H1 probe",
+    binPath: "precompiled/hello-initgraf-local.bin",
+    filename: "hello_initgraf_loc",
+    description:
+      "H1 probe: InitGraf with a stack-allocated GrafPtr instead of " +
+      "&qd.thePort.  No qd-relocation in the call site.  Silent exit " +
+      "if the qd-pointer was the bug; same crash if not.",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
