@@ -14,6 +14,7 @@ dist/
 !src/web/public/precompiled/hello-bare.bin
 !src/web/public/precompiled/hello-initgraf.bin
 !src/web/public/precompiled/hello-initgraf-local.bin
+!src/web/public/precompiled/hello-initgraf-zone.bin
 
 # Node
 node_modules/
