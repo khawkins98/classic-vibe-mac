@@ -130,6 +130,21 @@ export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
       "Compiled by PCC + hand-written A-trap stubs — no Retro68 toolchain. " +
       "Draws \\\"Hello, World!\\\" on the desktop and waits for a click.",
   },
+  {
+    // Bisect probe (added 2026-05-14): same compiler + link + CRT as
+    // hello-toolbox, but ZERO Toolbox calls — just integer arithmetic and
+    // return.  If this launches cleanly while hello-toolbox crashes, the
+    // bug is in our Toolbox stubs or shim headers, not in libretrocrt.
+    // If this also crashes, libretrocrt's startup itself is suspect.
+    id: "hello-bare",
+    label: "Hello Bare (no Toolbox) — bisect probe",
+    binPath: "precompiled/hello-bare.bin",
+    filename: "hello_bare",
+    description:
+      "wasm-retro-cc Phase-1 binary: pure integer math, no Toolbox calls. " +
+      "Same compiler + libretrocrt startup as hello_toolbox.  Diagnostic " +
+      "use only — launches and exits immediately (no visible output).",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */

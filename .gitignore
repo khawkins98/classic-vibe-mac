@@ -8,9 +8,10 @@ dist/
 # It's tiny (1.4 MB), produced once by `hfformat -l Apps`, and ships as
 # a static asset so the page can hot-load apps without any backend.
 !src/web/public/playground/empty-secondary.dsk
-# ...and the vendored wasm-retro-cc demo binary (committed to git so the
-# playground can load it without cross-repo CI artifact downloads).
+# ...and the vendored wasm-retro-cc demo binaries (committed to git so the
+# playground can load them without cross-repo CI artifact downloads).
 !src/web/public/precompiled/hello-toolbox.bin
+!src/web/public/precompiled/hello-bare.bin
 
 # Node
 node_modules/
