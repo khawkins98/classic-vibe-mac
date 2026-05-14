@@ -129,13 +129,20 @@ jobs:
         #
         # The first arg is comma-separated; build-boot-disk.sh installs
         # every binary into :Applications: (user-launchable from the
-        # desktop) and the LAST one in the list also into Startup Items
-        # (auto-launch on boot — also ends up the front-most app).
-        # Order matters: MacWeather is last so it's the front-most app
-        # after boot, with Reader, HelloMac and PixelPad available via
-        # :Applications:.
+        # desktop).  Normally the LAST one in the list also goes into
+        # Startup Items (auto-launch on boot).
+        #
+        # NO_STARTUP_ITEMS=1: skip the auto-launch step entirely.
+        # Set 2026-05-14 during the wasm-retro-cc boot-test bug hunt
+        # (tracker #64): MacWeather (or any auto-launching app) was a
+        # noisy variable in every demo test — closing it shifted crash
+        # classifications across apps, masking the actual bug signal.
+        # All apps still ship into :Applications: so a user can launch
+        # them manually from the desktop.  Once the boot test passes
+        # and we want a "demo on boot" experience back, drop this env
+        # var.
         run: |
-          ./scripts/build-boot-disk.sh \
+          NO_STARTUP_ITEMS=1 ./scripts/build-boot-disk.sh \
             build/reader/Reader.bin,build/hello-mac/HelloMac.bin,build/pixelpad/PixelPad.bin,build/markdownviewer/MarkdownViewer.bin,build/macweather/MacWeather.bin \
             dist/system755-vibe.dsk \
             --shared-dir src/web/public/shared || {

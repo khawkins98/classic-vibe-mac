@@ -310,10 +310,18 @@ fi
 # fork + resource fork + Finder Type/Creator), which is what System 7's
 # Finder needs to recognise it as launchable.
 LAST_INDEX=$(( ${#BINARIES[@]} - 1 ))
+# Allow tests / diagnostic builds to skip the Startup Items step.  When the
+# wasm-retro-cc boot-test bug hunt was active (tracker #64), having an app
+# auto-launch on every emulator reboot polluted the test environment —
+# the foreground startup app's lifecycle interacted with the test in
+# subtle ways (e.g. closing it changed crash classifications from type-3
+# to type-10 across all subsequent demos).  Setting NO_STARTUP_ITEMS=1
+# leaves :System Folder:Startup Items: empty; all apps still ship into
+# :Applications: so they can be re-launched manually from the desktop.
 for i in "${!BINARIES[@]}"; do
   BINARY="${BINARIES[$i]}"
   APP_NAME_NOEXT="$(basename "${BINARY}" .bin)"
-  if [[ $i -eq $LAST_INDEX ]]; then
+  if [[ $i -eq $LAST_INDEX && "${NO_STARTUP_ITEMS:-0}" != "1" ]]; then
     echo "[boot-disk] installing ${APP_NAME_NOEXT} (Startup Items + Applications)"
     hcopy -m "${BINARY}" ":System Folder:Startup Items:"
   else
@@ -328,7 +336,7 @@ for i in "${!BINARIES[@]}"; do
   # length. An APPL with rsrc==0 is a paperweight: no SIZE resource means
   # the Process Manager has no memory partition info and the launch path
   # bombs on an unimplemented-trap dialog before main() even runs.
-  if [[ $i -eq $LAST_INDEX ]]; then
+  if [[ $i -eq $LAST_INDEX && "${NO_STARTUP_ITEMS:-0}" != "1" ]]; then
     VERIFY_DIR=":System Folder:Startup Items:"
   else
     VERIFY_DIR=":Applications:"
