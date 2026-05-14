@@ -179,6 +179,25 @@ export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
       "&qd.thePort.  No qd-relocation in the call site.  Silent exit " +
       "if the qd-pointer was the bug; same crash if not.",
   },
+  {
+    // H2 probe (added 2026-05-14): calls MaxApplZone + MoreMasters×3
+    // BEFORE InitGraf.  Standard Mac startup incantation: expands the
+    // application heap and pre-allocates master pointers before any
+    // Toolbox allocation.  H1 was ruled out — H1 probe crashes too —
+    // so the leading hypothesis is now heap pre-state.  Also relevant
+    // to the SimpleText crash seen alongside ours: SimpleText also
+    // does NewPtr; a globally-bad heap state would kill it too.
+    //   - Silent exit → H2 confirmed: bug is heap init.
+    //   - Crash       → H2 dead.  Move to H4: libretrocrt corrupts
+    //                   system state (A5 world / heap zone / SegLoad).
+    id: "hello-initgraf-zone",
+    label: "Hello InitGraf (MaxApplZone) — H2 probe",
+    binPath: "precompiled/hello-initgraf-zone.bin",
+    filename: "hello_initgraf_z",
+    description:
+      "H2 probe: MaxApplZone + MoreMasters×3 + InitGraf.  Standard pre-" +
+      "InitGraf incantation.  Silent exit if heap init was the bug.",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
