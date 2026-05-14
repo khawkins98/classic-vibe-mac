@@ -11,6 +11,7 @@ dist/
 # ...and the vendored wasm-retro-cc demo binaries (committed to git so the
 # playground can load them without cross-repo CI artifact downloads).
 !src/web/public/precompiled/hello-toolbox.bin
+!src/web/public/precompiled/hello-toolbox-retro68.bin
 !src/web/public/precompiled/hello-bare.bin
 !src/web/public/precompiled/hello-initgraf.bin
 !src/web/public/precompiled/hello-initgraf-local.bin

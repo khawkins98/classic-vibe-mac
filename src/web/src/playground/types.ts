@@ -122,13 +122,31 @@ export interface PrebuiltDemo {
  */
 export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
   {
+    // Phase 2.0 derisk artefact (added 2026-05-14).  Same C source as
+    // hello-toolbox below, but compiled with Retro68 GCC + linked against
+    // Retro68's own crt + libInterface (via the pinned Docker image).
+    // Confirms that the project's downstream pipeline (HFS patcher,
+    // BasiliskII boot, MacBinary loader) handles a Retro68-built binary
+    // correctly — derisks Phase 2 ahead of any Emscripten porting work.
+    // Provenance: see VENDORED.md.
+    id: "hello-toolbox-retro68",
+    label: "Hello Toolbox (Retro68 GCC)",
+    binPath: "precompiled/hello-toolbox-retro68.bin",
+    filename: "hello_toolbox_r68",
+    description:
+      "Compiled by Retro68 GCC via the pinned Docker image.  Same source " +
+      "and behaviour as the PCC build below — draws \\\"Hello, World!\\\" " +
+      "on the desktop and waits for a click.  Phase 2.0 derisk.",
+  },
+  {
     id: "hello-toolbox",
-    label: "Hello Toolbox (wasm-retro-cc)",
+    label: "Hello Toolbox (wasm-retro-cc, PCC — archived)",
     binPath: "precompiled/hello-toolbox.bin",
     filename: "hello_toolbox",
     description:
-      "Compiled by PCC + hand-written A-trap stubs — no Retro68 toolchain. " +
-      "Draws \\\"Hello, World!\\\" on the desktop and waits for a click.",
+      "Phase 1 PCC build (archived 2026-05-14).  Compiled by PCC + " +
+      "hand-written A-trap stubs — no Retro68 toolchain.  Crashes on any " +
+      "Toolbox call; kept as a historical record of the Phase 2 pivot.",
   },
   {
     // Bisect probe (added 2026-05-14): same compiler + link + CRT as
