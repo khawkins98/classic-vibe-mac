@@ -21,9 +21,9 @@ developer-local fallbacks; CI always overwrites them from the freshest build.
 
 **Source:** https://github.com/khawkins98/wasm-retro-cc  
 **Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
-**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25864798843  
-**Source commit:** `c9759e2` (PR #6 — `fix(shim): pragma pack(2) on QDGlobals + CI reloc-type dump diagnostic`)  
-**SHA-256:** `a373c506801fadfaebca91af4d5f064d19bc626c2a2aaa832a7d28bc77ec02f8`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25866259967  
+**Source commit:** `7d2bb24` (PR #7 — `fix(stubs): MoveTo + FlushEvents — handle PCC's 4-byte short-arg slots`)  
+**SHA-256:** `e220540ef202e76aef3464295bee3dfc81d7c1be496e944815d57fa3e20802c0`  
 **License note:** See upstream licenses and project policy before redistribution:
   PCC (BSD-style), Retro68/Elf2Mac (GPLv2), and this repository's LICENSE/NOTICE.
   This file tracks provenance only and is not legal advice.
@@ -33,21 +33,28 @@ This is a **complete MacBinary II APPL** (no splice step needed):
 - Data fork: 20 bytes
 - Resource fork: ~12 KB (CODE 0 jump table + 8× CODE segments + DATA + 9× RELA)
 
-> **Crash history (kept for context — both are fixed now):**
+> **Crash history (kept for context — all three are fixed now):**
 >
 > 1. **Run 25604547373 / SHA `81ded0ec…`** — type-3 crash. Built with
 >    `Elf2Mac --mac-single`; binary had `below_a5=0` and no DATA/RELA.
 >    Fixed in wasm-retro-cc PR #5 (use `m68k-apple-macos-ld -elf2mac`
 >    multi-segment mode).
-> 2. **Run 25862036185 / SHA `a8c317d7…`** — also type-3, but for a
->    different reason. Binary structure was correct, but PCC's default
->    struct alignment placed `qd.thePort` at offset 204; Retro68's
->    `libretrocrt` (mac68k-packed) puts it at 202. `InitGraf` wrote into
->    the wrong slot. Fixed in wasm-retro-cc PR #6
->    (`#pragma pack(2)` on QDGlobals).
+> 2. **Run 25862036185 / SHA `a8c317d7…`** — type-3 for a different
+>    reason. Binary structure was correct, but PCC's default struct
+>    alignment placed `qd.thePort` at offset 204; Retro68's
+>    `libretrocrt` (mac68k-packed) puts it at 202. Fixed in
+>    wasm-retro-cc PR #6 (`#pragma pack(2)` on QDGlobals).
+> 3. **Run 25864798843 / SHA `a373c506…`** — type-3 OR CHK error
+>    depending on prior heap state. PCC's m68k codegen pushes `short`
+>    args as 4-byte longwords, but the MoveTo and FlushEvents stubs in
+>    `libtoolbox-stubs.s` assumed 2-byte short args. They read the
+>    wrong half of each 4-byte slot, passing wrong values to ROM.
+>    Stack arithmetic was accidentally balanced, but the wrong values
+>    left the Toolbox in inconsistent state and contributed to the
+>    state-sensitive crashes. Fixed in wasm-retro-cc PR #7.
 >
-> The current binary (run 25864798843, SHA `a373c506…`) has both fixes
-> applied. See [wasm-retro-cc LEARNINGS.md "Boot test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
+> The current binary (run 25866259967, SHA `e220540e…`) has all three
+> fixes applied. See [wasm-retro-cc LEARNINGS.md "Boot test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
 > for the full diagnostic chain.
 
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
