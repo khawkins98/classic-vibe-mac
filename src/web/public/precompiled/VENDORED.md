@@ -57,6 +57,30 @@ This is a **complete MacBinary II APPL** (no splice step needed):
 > fixes applied. See [wasm-retro-cc LEARNINGS.md "Boot test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
 > for the full diagnostic chain.
 
+## `hello-bare.bin` (bisect probe, vendored from wasm-retro-cc)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc  
+**Workflow:** `.github/workflows/spike.yml`, artifact `phase1-macbinary`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25866259967  
+**Source commit:** `7d2bb24`  
+**SHA-256:** `345258bb358e7edfe0bd3e06b7c2774b2a4ad35207c9726f8384bbada9691c16`  
+
+Phase 1 binary from `spike/hello.c` — does pure integer arithmetic
+(sum of squares 1..10), no Toolbox calls. Same link infrastructure as
+`hello-toolbox.bin`: linked against `libretrocrt + libc + libInterface
++ libgcc` with `m68k-apple-macos-ld -elf2mac`. Same multi-segment
+shape (CODE×9 + DATA + 9 RELA).
+
+**Purpose: bisect the type-3/CHK crash chain.**
+
+If `hello-bare.bin` launches and exits cleanly → libretrocrt's startup
+works, and the crash lives in our Toolbox stub code or in
+`hello_toolbox.c`'s specific Toolbox calls. Investigation narrows to
+`src/include/` shim structs and `src/stubs/libtoolbox-stubs.s`.
+
+If `hello-bare.bin` *also* crashes → bug is in libretrocrt's startup
+or relocator. The Toolbox layer is innocent.
+
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
 It was compiled with PCC (Portable C Compiler) + hand-written m68k A-trap stubs —
