@@ -21,9 +21,9 @@ developer-local fallbacks; CI always overwrites them from the freshest build.
 
 **Source:** https://github.com/khawkins98/wasm-retro-cc  
 **Workflow:** `.github/workflows/spike.yml`, artifact `phase2-macbinary-toolbox`  
-**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25604547373  
-**Source commit:** `82e85f15f1bffdde5541c5e045f2e997649b4a58`  
-**SHA-256:** `81ded0ec5a546e5d37f8d35783b9e7940bb69ccf982b11cc8eb2ce22e1b6fc3a`  
+**CI run:** https://github.com/khawkins98/wasm-retro-cc/actions/runs/25862036185  
+**Source commit:** `84b9493` (PR #5 — `fix(link): invoke m68k-apple-macos-ld -elf2mac for multi-seg output`)  
+**SHA-256:** `a8c317d7ae3a130e58c42112b899f6fcb0779867176b2c13114e4af935e998aa`  
 **License note:** See upstream licenses and project policy before redistribution:
   PCC (BSD-style), Retro68/Elf2Mac (GPLv2), and this repository's LICENSE/NOTICE.
   This file tracks provenance only and is not legal advice.
@@ -31,7 +31,16 @@ developer-local fallbacks; CI always overwrites them from the freshest build.
 This is a **complete MacBinary II APPL** (no splice step needed):
 - Type: `APPL`, Creator: `????`
 - Data fork: 20 bytes
-- Resource fork: ~11 KB (CODE 0 jump table header + CODE 1 PCC-compiled code)
+- Resource fork: ~12 KB (CODE 0 jump table + 8× CODE segments + DATA + 9× RELA)
+
+> **Previous vendored binary (run 25604547373, SHA-256 `81ded0ec…`) crashed
+> with type-3 in BasiliskII** because it was built with `Elf2Mac --mac-single`,
+> which produces a binary with `below_a5=0` and no DATA / RELA — incompatible
+> with libretrocrt's startup. The current binary is built with
+> `m68k-apple-macos-ld -elf2mac` (multi-segment), matching the shape of the
+> known-working `macweather.code.bin`. See [wasm-retro-cc LEARNINGS.md "Boot
+> test (2026-05-14)"](https://github.com/khawkins98/wasm-retro-cc/blob/main/LEARNINGS.md)
+> for the full diagnosis.
 
 The app initialises the Mac Toolbox, draws **"Hello, World!"** at screen
 coordinates (100, 100) via QuickDraw, and waits for a mouse click before exiting.
