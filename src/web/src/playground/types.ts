@@ -145,6 +145,21 @@ export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
       "Same compiler + libretrocrt startup as hello_toolbox.  Diagnostic " +
       "use only — launches and exits immediately (no visible output).",
   },
+  {
+    // Bisect probe (added 2026-05-14, second tier): finer granularity than
+    // hello-bare.  Calls JUST InitGraf and returns.  Distinguishes whether
+    // InitGraf itself is the crash source (vs. some later Toolbox call).
+    //   - Launches cleanly like hello-bare → InitGraf works; bug is later.
+    //   - Bombs like hello-toolbox        → InitGraf is the culprit.
+    id: "hello-initgraf",
+    label: "Hello InitGraf only — bisect probe",
+    binPath: "precompiled/hello-initgraf.bin",
+    filename: "hello_initgraf",
+    description:
+      "wasm-retro-cc bisect: calls InitGraf only, then returns.  Same " +
+      "compile + link + libtoolbox-stubs path as hello_toolbox.  No " +
+      "visible output if it works (silent exit, like hello-bare).",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
