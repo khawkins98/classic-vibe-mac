@@ -429,7 +429,9 @@ function getTabBar(): HTMLDivElement | null {
 }
 
 function activeProjectId(): string {
-  return getProjectDropdown()?.value ?? "reader";
+  // The first SAMPLE_PROJECTS entry is the picker default; falling back
+  // to a stale id (e.g. "reader") returns a project nothing matches.
+  return getProjectDropdown()?.value ?? SAMPLE_PROJECTS[0]!.id;
 }
 
 function activeFilename(): string | null {

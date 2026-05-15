@@ -16,13 +16,15 @@
  * survive reloads. On `bundleVersion` change we wipe those copies (silent;
  * the deferred 3-way diff lives on the Phase 2 list).
  *
- * `rezFile` names the `.r` file that's the resource-fork compile entry
- * point for this project (Phase 2). `precompiledName` is the static
- * asset under public/precompiled/ that holds the data-fork-only
- * MacBinary we splice the freshly-compiled rsrc fork onto. `outputName`
- * is the filename for the user's download. `appType`/`appCreator` are
- * Type/Creator codes — not used at compile time (the precompile already
- * has them) but documented here for traceability.
+ * `rezFile` (when non-null) names the `.r` file the playground
+ * compiles via wasm-rez; the resulting resource fork is spliced
+ * over the C-built fork by `spliceResourceFork`. When null, the
+ * project compiles a single `.c` (or a multi-file C bundle) end-to-end
+ * through the in-browser toolchain (cc1 → as → ld → Elf2Mac).
+ *
+ * `outputName` is the filename for the user's download.
+ * `appType`/`appCreator` are documented HFS Type/Creator codes — used
+ * by the signature lock-check on Path B builds.
  */
 export interface SampleProject {
   /** Stable id used as the IDB key prefix and in the URL/dropdown. */
@@ -32,27 +34,13 @@ export interface SampleProject {
   /** Filenames to expose in the file dropdown, ORDERED by intended reveal. */
   files: string[];
   /**
-   * Phase 2: the `.r` file the playground compiles via wasm-rez, and
-   * whose output splices on top of the precompiled `.code.bin`.
-   *
-   * When `null`, this project has *no* resource fork to compile —
-   * Build & Run uses the in-browser C toolchain (cc1 → as → ld →
-   * Elf2Mac via `compileToBin()`) to produce a complete MacBinary
-   * directly from the project's `.c` source. See cv-mac #64,
-   * wasm-retro-cc #15.
+   * The `.r` file the playground compiles via wasm-rez. When `null`,
+   * Build & Run uses the in-browser C toolchain directly (Path A);
+   * when non-null, both .c and .r compile in-browser and the resulting
+   * forks are spliced together (Path B).
    */
   rezFile: string | null;
-  /**
-   * Phase 2: name under `public/precompiled/` (without leading slash)
-   * for the CI-built data-fork-bearing `.code.bin`.
-   *
-   * When `null`, this project doesn't have a CI-built code blob —
-   * the in-browser toolchain emits the complete `.bin` and we hot-load
-   * it directly. Mutually exclusive with the splice path: a project
-   * with `rezFile: null` must also have `precompiledName: null`.
-   */
-  precompiledName: string | null;
-  /** Phase 2: filename used for the Build button's download. */
+  /** Filename used for the Build button's download. */
   outputName: string;
   /** Doc-only: Mac OS HFS Type code. */
   appType: string;
@@ -74,17 +62,17 @@ export interface SampleProject {
  */
 export const SAMPLE_PROJECTS: readonly SampleProject[] = [
   // Three legacy splice-path projects (reader, macweather, hello-mac)
-  // were removed from this list 2026-05-15 as part of cv-mac #100. They
-  // used CI-precompiled .code.bin data forks that the playground
-  // couldn't actually rebuild in-browser — only the .r resource fork
-  // was editable, which surprised users who edited the .c expecting
-  // their changes to show up. Their source files still live under
-  // src/app/<name>/ and the CI-built binaries still ship on the boot
-  // disk (so the Mac auto-launches them on startup as showcase apps),
-  // but the playground picker only offers projects that build
-  // end-to-end in the browser. The runBuild dispatch's path C (rezFile
-  // + precompiledName) remains in editor.ts as dead-but-functional
-  // code in case a future use case wants this shape back.
+  // were removed from this list 2026-05-15 (#117). They used CI-built
+  // .code.bin data forks that the playground couldn't actually rebuild
+  // in-browser — only the .r resource fork was editable, which
+  // surprised users who edited the .c expecting their changes to show
+  // up. Their source files still live under src/app/<name>/ and the
+  // CI-built binaries still ship on the boot disk (so the Mac
+  // auto-launches them on startup as showcase apps). The Path-C splice
+  // dispatch + precompiledName field were retired in a follow-up to
+  // #125; every project in this list now compiles end-to-end in the
+  // browser, distinguished only by whether it has an `.r` resource
+  // file (Path B) or not (Path A).
   {
     // wasm-hello — first project that compiles end-to-end in the
     // browser (cv-mac #64 / wasm-retro-cc #15). Single hello.c,
@@ -94,7 +82,6 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     label: "Wasm Hello",
     files: ["hello.c"],
     rezFile: null,
-    precompiledName: null,
     outputName: "WasmHello.bin",
     appType: "APPL",
     // Type/Creator come from Elf2Mac's defaults today (APPL / ????).
@@ -114,7 +101,6 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     label: "Wasm Hello (multi-file)",
     files: ["main.c", "greet.c", "greet.h"],
     rezFile: null,
-    precompiledName: null,
     outputName: "WasmHelloMulti.bin",
     appType: "APPL",
     appCreator: "????",
@@ -129,7 +115,6 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     label: "Wasm Hello (windowed)",
     files: ["hello.c", "hello.r"],
     rezFile: "hello.r",
-    precompiledName: null,
     outputName: "WasmHelloWindow.bin",
     appType: "APPL",
     appCreator: "CVWW",
@@ -144,7 +129,6 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     label: "Wasm Snake (game)",
     files: ["snake.c", "snake.r"],
     rezFile: "snake.r",
-    precompiledName: null,
     outputName: "WasmSnake.bin",
     appType: "APPL",
     appCreator: "CVSN",
