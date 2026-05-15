@@ -10,6 +10,7 @@
 // for the global at runtime. See projectPicker.ts for the trail.
 import "winbox/dist/winbox.bundle.min.js";
 import { enableShade } from "./winboxChrome";
+import { BUNDLE_VERSION, BUILT_AT, TOOLCHAIN_VERSION } from "./playground/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -24,11 +25,11 @@ export function openAbout(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wb: any = new WinBox({
     title: "About classic-vibe-mac",
-    width: "440px",
-    height: "440px",
+    width: "460px",
+    height: "480px",
     x: "center",
     y: "center",
-    html: ABOUT_HTML,
+    html: aboutHtml(),
     background: "#cccccc",
     class: ["no-min", "no-max", "no-full", "cvm-about-winbox", "cvm-mac-winbox"],
     onclose: () => {
@@ -40,7 +41,24 @@ export function openAbout(): void {
   active = { focus: () => wb.focus(), close: () => wb.close() };
 }
 
-const ABOUT_HTML = /* html */ `
+function fmtBuiltAt(iso: string): string {
+  // Vite stamps an ISO timestamp; trim to the minute and keep the human-
+  // readable shape (2026-05-15 22:43 UTC) rather than the raw ISO blob.
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(iso)) return iso;
+  return iso.slice(0, 16).replace("T", " ") + " UTC";
+}
+
+function aboutHtml(): string {
+  const bundle = BUNDLE_VERSION.slice(0, 12);
+  const toolchain = (TOOLCHAIN_VERSION || "(unset)").slice(0, 12);
+  const built = fmtBuiltAt(BUILT_AT);
+  return ABOUT_HTML_TMPL
+    .replace("{{BUNDLE}}", bundle)
+    .replace("{{TOOLCHAIN}}", toolchain)
+    .replace("{{BUILT}}", built);
+}
+
+const ABOUT_HTML_TMPL = /* html */ `
   <div class="cvm-about">
     <h2 class="cvm-about__title">classic-vibe-mac</h2>
     <p class="cvm-about__tagline">
@@ -55,6 +73,13 @@ const ABOUT_HTML = /* html */ `
       splices the resource fork, and reboots a System 7.5.5 emulator
       with your new binary. No server in the loop.
     </p>
+
+    <h3>Build</h3>
+    <dl class="cvm-about__build">
+      <dt>Bundle</dt><dd><code>{{BUNDLE}}</code></dd>
+      <dt>Toolchain</dt><dd><code>{{TOOLCHAIN}}</code></dd>
+      <dt>Built</dt><dd>{{BUILT}}</dd>
+    </dl>
 
     <h3>Links</h3>
     <ul class="cvm-about__links">
