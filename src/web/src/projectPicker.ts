@@ -72,6 +72,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Mouse-tracking draw demo. Click + drag in the window to draw; the inner StillDown / GetMouse / LineTo loop is the classic Mac drag-to-draw pattern from Inside Mac: Macintosh Toolbox Essentials ch. 1. Click Clear to wipe; click outside the window to quit.",
   },
+  "wasm-scrollwin": {
+    emoji: "📜",
+    description:
+      "Scrolling list with a real Mac scroll bar. NewControl(scrollBarProc) + TrackControl with a live actionProc for the arrows and page regions. Arrow keys also scroll. 50 items, fits about 13 at a time — drag the thumb to jump.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
