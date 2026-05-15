@@ -1,6 +1,17 @@
 # Playground
 
-_Last updated: 2026-05-15._
+_Last updated: 2026-05-16._
+
+> **Note on layout.** The two-pane split (#45) and the CSS-grid IDE
+> (#104 Phase 2) described below are both superseded by the WinBox
+> docked-panes layout in #122. The four work surfaces (Project /
+> Playground / Macintosh / Output) are now draggable + resizable
+> WinBox windows tiled at startup. The "Show editor" checkbox is
+> retired (drag the Playground pane off-screen if you want it out
+> of the way). The in-editor file-tab strip is also retired (#120) —
+> the Project pane is the canonical file list. See
+> [`HOW-IT-WORKS.md`](./HOW-IT-WORKS.md) §6 for the current
+> architecture, and `LEARNINGS.md` Key Story #8 for the rationale.
 
 The design rationale and rolling status of Epic #21 — the in-browser
 playground for resource-fork edits to classic Mac apps. Companion docs:
