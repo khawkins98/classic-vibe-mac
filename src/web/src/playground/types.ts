@@ -143,6 +143,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "????",
   },
+  {
+    // wasm-hello-window — mixed C + .r demo (cv-mac #100 Phase B).
+    // The .c compiles through compileToBin (wasm-cc1 chain); the .r
+    // compiles through WASM-Rez; spliceResourceFork merges the two
+    // forks (user-wins on collision). Produces an app with a real
+    // window resource loaded via GetNewWindow.
+    id: "wasm-hello-window",
+    label: "Wasm Hello (windowed)",
+    files: ["hello.c", "hello.r"],
+    rezFile: "hello.r",
+    precompiledName: null,
+    outputName: "WasmHelloWindow.bin",
+    appType: "APPL",
+    appCreator: "CVWW",
+  },
 ];
 
 /**
