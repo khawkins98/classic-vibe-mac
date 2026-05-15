@@ -87,6 +87,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Bouncing ball with no-flicker double-buffer rendering. Hand-constructs an offscreen 1-bit BitMap, draws into it each tick, then CopyBits the whole frame onto the window in one shot — the canonical animated-Mac-app pattern.",
   },
+  "wasm-dialog": {
+    emoji: "💬",
+    description:
+      "ModalDialog with an editable text field. Click the button → modal opens with a prompt, EditText field, OK + Cancel. OK reads the typed answer with GetIText and draws \"Hello, <name>!\" back to the main window.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
