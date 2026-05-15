@@ -163,7 +163,8 @@ body {
   display: none;
 }
 .cvm-menu-dropdown__item {
-  display: block;
+  display: flex;
+  align-items: baseline;
   width: 100%;
   text-align: left;
   background: transparent;
@@ -173,12 +174,27 @@ body {
   padding: 3px 18px;
   cursor: pointer;
   white-space: nowrap;
+  gap: 24px;
+}
+.cvm-menu-dropdown__label {
+  flex: 1 1 auto;
+}
+.cvm-menu-dropdown__shortcut {
+  flex: 0 0 auto;
+  color: var(--shadow);
+  font-family: var(--font-chrome);
+  font-size: 11.5px;
+  margin-left: auto;
 }
 .cvm-menu-dropdown__item:hover,
 .cvm-menu-dropdown__item:focus-visible {
   background: var(--ink);
   color: var(--paper);
   outline: none;
+}
+.cvm-menu-dropdown__item:hover .cvm-menu-dropdown__shortcut,
+.cvm-menu-dropdown__item:focus-visible .cvm-menu-dropdown__shortcut {
+  color: var(--paper);
 }
 .cvm-menu-dropdown__item--disabled {
   color: var(--shadow);
