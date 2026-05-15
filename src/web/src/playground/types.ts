@@ -158,6 +158,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVWW",
   },
+  {
+    // wasm-snake — a playable Snake clone (cv-mac #100 Phase D demo).
+    // First non-trivial in-browser-built app: arrow-key input, event
+    // loop, TickCount-driven movement, QuickDraw rendering, win/lose
+    // state, restart. Demonstrates that the playground can host real
+    // games beyond Hello World.
+    id: "wasm-snake",
+    label: "Wasm Snake (game)",
+    files: ["snake.c", "snake.r"],
+    rezFile: "snake.r",
+    precompiledName: null,
+    outputName: "WasmSnake.bin",
+    appType: "APPL",
+    appCreator: "CVSN",
+  },
 ];
 
 /**
