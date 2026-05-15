@@ -136,26 +136,34 @@ root.innerHTML = /* html */ `
   <div class="cvm-ide" id="cvm-split-layout" data-editor-visible="true">
 
     <!-- LEFT: files panel (1/5 width).
-         Phase 2 content: static list of SAMPLE_PROJECTS as a Mac OS 8
-         icon-list sidebar. The playground's project dropdown is still
-         the canonical control; this panel is preview/navigation surface
-         until Phase 3 wires the WinBox startup picker. -->
+         Top: project dropdown (proxies to the playground's hidden
+         #cvm-pg-project). Body: list of FILES in the currently-active
+         project (proxies to the playground's hidden tab bar). Footer:
+         Open project… opens the WinBox startup picker (Phase 3+). -->
     <aside class="cvm-ide__files window" aria-labelledby="title-files">
       <header class="window__titlebar">
         <span class="window__close" aria-hidden="true"></span>
-        <h2 class="window__title" id="title-files">Projects</h2>
+        <h2 class="window__title" id="title-files">Project</h2>
       </header>
       <div class="window__body cvm-files">
-        <ul class="cvm-files__list" id="cvm-files-list" role="listbox" aria-label="Projects">
-          ${SAMPLE_PROJECTS.map((p) => `
-            <li class="cvm-files__item"
-                role="option"
-                tabindex="0"
-                data-project-id="${p.id}">
-              <span class="cvm-files__icon">📄</span>
-              <span class="cvm-files__label">${p.label}</span>
-            </li>
-          `).join("")}
+        <div class="cvm-files__project">
+          <label class="cvm-files__project-label" for="cvm-files-project">
+            Project
+          </label>
+          <select id="cvm-files-project"
+                  class="cvm-files__select"
+                  aria-label="Switch project">
+            ${SAMPLE_PROJECTS.map((p) =>
+              `<option value="${p.id}">${p.label}</option>`,
+            ).join("")}
+          </select>
+        </div>
+        <div class="cvm-files__section">Files</div>
+        <ul class="cvm-files__list"
+            id="cvm-files-list"
+            role="listbox"
+            aria-label="Files in this project">
+          <!-- populated dynamically by main.ts on project switch -->
         </ul>
         <div class="cvm-files__footer">
           <button type="button"
@@ -577,29 +585,49 @@ if (playgroundEl) {
   );
 }
 
-// ── Files panel: click-to-switch + Open project… modal (cv-mac #104 Phase 3) ──
+// ── Files panel: project dropdown + file list (cv-mac #104) ────────────────
 //
-// The files panel on the left (.cvm-ide__files) lists all SAMPLE_PROJECTS
-// as items. Clicking one switches the playground to that project; clicking
-// "Open project…" opens a WinBox modal with richer project descriptions and
-// stubbed Open .zip / New empty buttons (Phase 5 territory).
+// The files panel on the left is the primary navigation surface in the
+// IDE layout. It shows two things:
 //
-// We talk to the playground via its `<select id="cvm-pg-project">` dropdown:
-// setting `select.value` + dispatching `change` re-uses the playground's
-// internal switchTo() logic without us reaching into its closure. The files
-// panel's active-item highlighting follows the dropdown via a mutation
-// observer so cross-control changes (dropdown, picker, panel, future
-// keyboard shortcut) all stay in sync without explicit wiring.
+//   1. **Project dropdown** — a proxy for the playground's hidden
+//      `#cvm-pg-project` select. Changing this dropdown sets the same
+//      value on the original and dispatches change, re-using the
+//      playground's switchTo() logic.
+//
+//   2. **File list** — the files of the currently-active project, with
+//      the open file highlighted. Clicking a file proxies to the
+//      playground's hidden tab bar by simulating a click on the
+//      matching `<button data-file>` in `#cvm-pg-tabbar`.
+//
+// Both surfaces stay in sync with the underlying playground state via
+// listeners on the source-of-truth elements (dropdown + tab bar), so
+// any switch path (panel, picker, hidden dropdown, future shortcut)
+// updates everything without explicit fan-out.
 
 const filesList = document.getElementById("cvm-files-list") as HTMLUListElement | null;
 const filesOpenBtn = document.getElementById("cvm-files-open") as HTMLButtonElement | null;
+const filesProjectSelect = document.getElementById(
+  "cvm-files-project",
+) as HTMLSelectElement | null;
 
 function getProjectDropdown(): HTMLSelectElement | null {
   return document.querySelector<HTMLSelectElement>("#cvm-pg-project");
 }
 
+function getTabBar(): HTMLDivElement | null {
+  return document.querySelector<HTMLDivElement>("#cvm-pg-tabbar");
+}
+
 function activeProjectId(): string {
   return getProjectDropdown()?.value ?? "reader";
+}
+
+function activeFilename(): string | null {
+  const tab = document.querySelector<HTMLButtonElement>(
+    '#cvm-pg-tabbar [role="tab"][aria-selected="true"]',
+  );
+  return tab?.dataset.file ?? null;
 }
 
 function switchProject(projectId: string): void {
@@ -610,41 +638,90 @@ function switchProject(projectId: string): void {
   sel.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function refreshFilesActive(): void {
+function switchFile(filename: string): void {
+  const tabBar = getTabBar();
+  if (!tabBar) return;
+  const tab = tabBar.querySelector<HTMLButtonElement>(
+    `[role="tab"][data-file="${CSS.escape(filename)}"]`,
+  );
+  if (tab && tab.getAttribute("aria-selected") !== "true") tab.click();
+}
+
+function renderFileList(): void {
   if (!filesList) return;
-  const active = activeProjectId();
-  for (const li of filesList.querySelectorAll<HTMLLIElement>(".cvm-files__item")) {
-    li.classList.toggle("cvm-files__item--active", li.dataset.projectId === active);
+  const projectId = activeProjectId();
+  const project = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+  if (!project) {
+    filesList.innerHTML = "";
+    return;
   }
+  const activeFile = activeFilename();
+  filesList.innerHTML = project.files
+    .map((f) => {
+      const active = f === activeFile ? " cvm-files__item--active" : "";
+      const icon = /\.r$/i.test(f) ? "📋" : /\.h$/i.test(f) ? "📑" : "📄";
+      return `
+        <li class="cvm-files__item${active}"
+            role="option"
+            tabindex="0"
+            data-file="${f}">
+          <span class="cvm-files__icon">${icon}</span>
+          <span class="cvm-files__label">${f}</span>
+        </li>
+      `;
+    })
+    .join("");
+}
+
+function syncFilesProjectSelect(): void {
+  if (filesProjectSelect) filesProjectSelect.value = activeProjectId();
+}
+
+if (filesProjectSelect) {
+  filesProjectSelect.addEventListener("change", () => {
+    switchProject(filesProjectSelect.value);
+  });
 }
 
 if (filesList) {
   filesList.addEventListener("click", (e) => {
     const li = (e.target as HTMLElement).closest<HTMLLIElement>(".cvm-files__item");
     if (!li) return;
-    const pid = li.dataset.projectId;
-    if (pid) switchProject(pid);
+    const f = li.dataset.file;
+    if (f) switchFile(f);
   });
   filesList.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const li = (e.target as HTMLElement).closest<HTMLLIElement>(".cvm-files__item");
     if (!li) return;
     e.preventDefault();
-    const pid = li.dataset.projectId;
-    if (pid) switchProject(pid);
+    const f = li.dataset.file;
+    if (f) switchFile(f);
   });
 
-  // Keep the active-item highlight in sync. The playground mounts async
-  // and may set the dropdown later; poll briefly then settle into a
-  // MutationObserver on the dropdown.
+  // Settle into change listeners on both the project dropdown and the
+  // tab bar. The playground mounts async; poll briefly until present.
   const settle = () => {
-    refreshFilesActive();
+    syncFilesProjectSelect();
+    renderFileList();
     const sel = getProjectDropdown();
-    if (!sel) {
+    const tabBar = getTabBar();
+    if (!sel || !tabBar) {
       window.setTimeout(settle, 80);
       return;
     }
-    sel.addEventListener("change", refreshFilesActive);
+    sel.addEventListener("change", () => {
+      syncFilesProjectSelect();
+      renderFileList();
+    });
+    // The tab bar's contents change when the user clicks a tab —
+    // editor.ts dispatches no event for this, so we observe the DOM.
+    new MutationObserver(renderFileList).observe(tabBar, {
+      attributes: true,
+      attributeFilter: ["aria-selected"],
+      subtree: true,
+      childList: true,
+    });
   };
   settle();
 }
