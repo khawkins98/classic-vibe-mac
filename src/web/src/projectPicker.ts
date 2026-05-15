@@ -21,6 +21,7 @@
 import "winbox/dist/winbox.bundle.min.js";
 
 import { SAMPLE_PROJECTS, type SampleProject } from "./playground/types";
+import { enableShade } from "./winboxChrome";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -87,8 +88,9 @@ export function openProjectPicker(opts: OpenPickerOptions): { close: () => void 
     mount: content,
     modal: true,
     background: "#cccccc",
-    class: ["no-min", "no-max", "cvm-picker-winbox"],
+    class: ["no-min", "no-max", "no-full", "cvm-picker-winbox", "cvm-mac-winbox"],
   });
+  enableShade(wb);
 
   // Card click → dispatch picked project.
   content.addEventListener("click", (e) => {

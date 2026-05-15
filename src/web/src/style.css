@@ -1407,6 +1407,22 @@ body.cvm-paused .emulator-canvas {
     display: none;
   }
 
+  /* Core IDE windows (Files / Editor / Mac / Output) don't close —
+     they're the four primary panes, always docked. Hide the
+     decorative close box that ships with `.window__titlebar`. The
+     below-the-fold Read Me + Emulator Config keep their close boxes
+     since they're more visually-decorative-paper-window than
+     "essential workspace pane". */
+  .cvm-ide .window__close {
+    display: none;
+  }
+  /* The title centering relies on the ::after spacer matching the
+     close box. With the close hidden we need to also drop the
+     spacer so the title stays centered. */
+  .cvm-ide .window__titlebar::after {
+    display: none;
+  }
+
   /* Below-fold marketing content: vertical stack, centered, with
      comfortable padding. Scrollable below the IDE grid. */
   .cvm-below-fold {
@@ -1737,6 +1753,124 @@ body.cvm-paused .emulator-canvas {
   margin: 1px auto !important;
 }
 .cvm-help-winbox .wb-body {
+  background: var(--paper) !important;
+}
+
+/* --- Shared Mac OS 8 window behaviours for WinBox palettes ---------- */
+/*
+ * All our WinBoxes (.cvm-picker-winbox, .cvm-help-winbox,
+ * .cvm-explainer-winbox) also get .cvm-mac-winbox. Shared classic-Mac
+ * behaviours live on that class:
+ *
+ *   - Shade (window-shade roll-up): double-click the titlebar to
+ *     collapse the body. The body element is .wb-body inside the
+ *     WinBox root. Hiding it leaves just the titlebar visible.
+ *   - Hover cursor on the titlebar hints \"this is interactive\".
+ *
+ * The shade toggle is wired in winboxChrome.ts; CSS handles the
+ * visual collapse.
+ */
+.cvm-mac-winbox .wb-header {
+  cursor: grab;
+}
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-body {
+  display: none !important;
+}
+.cvm-mac-winbox.cvm-mac-winbox--shaded {
+  /* Suppress the resize handles when shaded — they'd look strange
+     anchoring an invisible body. */
+  resize: none !important;
+}
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-n,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-s,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-w,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-e,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-nw,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-ne,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-sw,
+.cvm-mac-winbox.cvm-mac-winbox--shaded .wb-se {
+  display: none !important;
+}
+
+/* --- "What just happened?" build explainer (WinBox-rendered) -------- */
+
+.cvm-explainer {
+  padding: 14px 18px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.cvm-explainer__summary {
+  margin: 0 0 12px;
+  font-family: var(--font-chrome);
+  font-size: 13px;
+  font-weight: bold;
+}
+.cvm-explainer p {
+  margin: 0 0 10px;
+}
+.cvm-explainer code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--platinum-light);
+  padding: 0 3px;
+}
+.cvm-explainer__steps {
+  margin: 8px 0 14px;
+  padding-left: 22px;
+}
+.cvm-explainer__steps li {
+  margin-bottom: 6px;
+}
+.cvm-explainer__buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--shadow);
+  margin-top: 8px;
+  padding-top: 12px;
+}
+.cvm-explainer__btn--default {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+.cvm-explainer__btn--default:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* Mac OS 8 chrome overrides for the explainer WinBox — striped titlebar
+   + paper body. Same pattern as .cvm-picker-winbox / .cvm-help-winbox. */
+.cvm-explainer-winbox {
+  border: 1px solid var(--ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
+}
+.cvm-explainer-winbox .wb-header {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0, var(--ink) 1px,
+    var(--paper) 1px, var(--paper) 2px
+  ) !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--ink) !important;
+  height: 20px !important;
+}
+.cvm-explainer-winbox .wb-title {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  padding: 0 8px !important;
+  font-family: var(--font-chrome) !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+  height: 18px !important;
+  margin: 1px auto !important;
+}
+.cvm-explainer-winbox .wb-body {
   background: var(--paper) !important;
 }
 
