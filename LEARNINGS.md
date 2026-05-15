@@ -65,6 +65,16 @@ rule:** assume single-shot for C-runtime wasm binaries until proven
 re-entrant. The Emscripten wrapper makes the API *look* re-entrant; the
 underlying program almost certainly isn't.
 
+### 6. Closed-as-infeasible Epics describe a *path*, not the universal answer — survey alternative paths before locking the closure rationale in as wisdom
+
+Epic #19 ("Full in-browser IDE with C compilation") was closed in 2026-04 after a careful five-reviewer pass that estimated 4-9 engineer-months to port GCC + ld into WebAssembly. The closure rationale was filed into `docs/PLAYGROUND.md` as load-bearing project wisdom. Three weeks later we *shipped the capability* via a different path: wasm-compile Retro68's existing binaries as standalone Emscripten modules and orchestrate them from JavaScript. Total effort: ~2 weeks, not 4-9 months.
+
+The original estimate was **correct about its assumed path** (port GCC's fork/exec model into Emscripten — that genuinely is months of work). It was wrong as universal advice because it didn't survey alternative paths.
+
+**General rule.** When you close an Epic as "infeasible," write the closure rationale as **"path X is infeasible because Y,"** not as **"this capability is infeasible."** And when revisiting: the trigger is **"someone named a different path"**, not **"we have more budget."** Different paths cost an hour of brainstorming to surface; closure-as-conventional-wisdom costs years of stalled capability when the path nobody surveyed turns out to be 10× cheaper.
+
+This entry exists because the closure rationale almost cost us the playground's most exciting capability. If a future reader is staring at a closed Epic and wondering whether it's worth revisiting: **the question to ask is "did the original closure survey the alternative paths?", not "do we have the budget now?"**
+
 ### 5. The canonical-build diff is the highest-leverage diagnostic when bypassing the GCC driver — *use it first, not last*
 
 Three days of "structural-pass-but-runtime-fail" bug-hunting on the in-browser C pipeline (cv-mac #82–#92, wasm-retro-cc#22–#26) culminated in a type-3 in production with no obvious cause. After 7+ deploy-and-eyes cycles and a Musashi harness that couldn't see past Retro68Relocate's first Toolbox call, the actual fix took **45 minutes** once we did the right diagnostic: pull the Retro68 docker image, run `m68k-apple-macos-gcc -v -save-temps -Wl,--verbose hello.c -o hello` on a known-working hello.c, and diff its tool invocations against ours.
@@ -1286,6 +1296,20 @@ That trace immediately revealed: the multi-seg ld script's `PROVIDE(_start = .)`
 **Mature state.** Today's MVP has no Toolbox stubs (A-line traps are logged and skipped), no LoadSeg, no Process Manager — sufficient for startup-time diagnosis (the failure modes that motivated the build), insufficient for full behavioral checks. [cv-mac #89](https://github.com/khawkins98/classic-vibe-mac/issues/89) tracks the expansion list: LoadSeg stub, the ~12 most-used Toolbox traps, a minimal heap simulator, OCR-like assertions on captured `DrawString` calls. Each expansion is opportunistic — pulled in when a concrete bug needs it, not built speculatively.
 
 **This entry is the story of the harness because the *meta*-lesson matters more than the bug-by-bug LEARNINGS above.** If a future agent reads only one entry in this file before starting toolchain work, this one should be it: **build the harness early; structural checks lie; eyes-on is ground truth but expensive; tooling that closes the loop in seconds rewards a few hours of investment many times over.**
+
+### 2026-05-15 PM — Milestone: end-to-end in-browser C → MacBinary → BasiliskII works on production
+
+**What shipped.** A user clicks Build & Run on `wasm-hello/hello.c` in the playground, the browser compiles the C source through cc1.wasm + as.wasm + ld.wasm + Elf2Mac.wasm, splices a SIZE resource onto the result, hot-loads the `.bin` into the in-browser BasiliskII, and the app launches and renders "Hello, World!" on the desktop with `DrawString`. No CI, no server, no install, no auth. **First time anyone has done this in a tab.**
+
+This closed the multi-day debugging marathon (cv-mac #82 → #97; wasm-retro-cc#22 → #26). The final blocker was the missing `--emit-relocs` ld flag (#97), found in 45 minutes by diffing our pipeline against the canonical Retro68 docker build (#96) — see Key Story #5 for the full retrospective on why that diagnostic should have come first.
+
+**Path-choice meta-lesson worth capturing.** Epic #19 (the original "full in-browser IDE with C compilation" proposal) was closed in 2026-04 after a five-reviewer pass estimated 4-9 engineer-months to port GCC + ld into WebAssembly. The estimate was correct *about the path it assumed*: porting GCC's fork/exec model into Emscripten genuinely is months of work.
+
+**A different path existed and nobody had named it:** don't port the tools, **wasm-compile the existing Retro68 binaries** as standalone Emscripten modules and orchestrate them from JavaScript. Each tool runs as a separate `Module.callMain([…])` invocation — no fork/exec emulation needed because each tool is a separate process from the OS's perspective; JavaScript becomes the equivalent of GCC's driver. That work was ~2 weeks (wasm-retro-cc Phase 2.0 → 2.3d, May 2026), not 4-9 months.
+
+The thing that the original closure missed wasn't "we have more engineer-months now" — it was "we evaluated *one specific path* and called it infeasible, without surveying whether a different path existed." When you close an Epic as infeasible, **the closure rationale describes a particular path, not the universal answer.** A revival should be triggered when someone names a path the original post-mortem didn't consider, not when the budget grows.
+
+If that's the only line you take from this entry: **closed-as-infeasible doesn't mean closed-as-impossible.** It means "the path we evaluated was wrong." Different paths are worth surveying explicitly, especially before locking in a 4-9 engineer-month closure rationale into the docs as conventional wisdom.
 
 ### 2026-05-15 PM — The type-3 was a missing `--emit-relocs` flag, diagnosed in 45 minutes via canonical-build diff
 
