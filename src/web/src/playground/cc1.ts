@@ -690,6 +690,20 @@ export async function compileToBin(
   //   3. `libgcc.a` included — `__udivsi3` / `__mulsi3` (soft-fp/-divide
   //      helpers for m68k 32-bit math) live only here; libretrocrt's
   //      syscalls.c transitively needs them.
+  //
+  // DO NOT "simplify" this by removing the standalone `start.c.obj`,
+  // restoring `PROVIDE(_start)`, or dropping the `*(.text._start)`
+  // selector from the ld script. Verified 2026-05-15 (after #97
+  // shipped): switching to a canonical-style link command
+  // (`--start-group -lretrocrt -lInterface -lc -lgcc --end-group`
+  // with the original Retro68 script + PROVIDE intact) produces a
+  // degenerate 1920-byte binary with `_start` undefined and
+  // `.code00001` size 0x14 (just the trampoline). Our wasm-built ld
+  // has slightly different archive-scan behavior than the canonical
+  // native ld — likely around how `ENTRY(_start)` triggers archive
+  // pulls. Until that's understood or fixed upstream, these three
+  // workarounds compose to keep the binary correct. See LEARNINGS
+  // "2026-05-15 PM — canonical-style cleanup attempt failed".
   const ld = await loadLdTool(baseUrl);
   for (const p of ["/tmp/in.o", "/tmp/out.gdb"]) {
     try { ld.Module.FS.unlink(p); } catch {}
