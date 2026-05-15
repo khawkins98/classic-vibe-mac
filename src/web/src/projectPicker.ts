@@ -52,6 +52,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Playable Snake clone. Arrow keys steer, eat apples to grow, click to restart on game over. Demonstrates a real event loop, TickCount-driven movement, QuickDraw rendering — all built in your browser.",
   },
+  "wasm-textedit": {
+    emoji: "✏️",
+    description:
+      "Editable TextEdit field in a draggable window. Type to insert, click to position the caret, click the close box to quit. Built on the Toolbox's native TEHandle — the foundation a real word processor would extend.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
