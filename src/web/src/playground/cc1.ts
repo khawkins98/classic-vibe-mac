@@ -53,9 +53,32 @@ interface SysrootIndexEntry {
   l: number;
 }
 
-/** Per-instance state. We only ever build one. */
-let modulePromise: Promise<Cc1Module> | null = null;
-/** Accumulates print/printErr lines between callMain invocations. */
+/**
+ * Important: cc1 (and the other Retro68 toolchain binaries) are
+ * **not** safe to re-invoke on the same Emscripten Module. GCC's `main`
+ * mutates static globals (including `decode_options`'s "output file
+ * already set" flag), and a second `Module.callMain(["...", "-o", X])`
+ * sees the prior call's `-o` state and errors with "output filename
+ * specified twice". Emscripten can't simulate process re-creation; the
+ * heap and statics persist across exits.
+ *
+ * Our compile bridges therefore instantiate a **fresh** Module per
+ * invocation. The expensive parts have caches:
+ *   - The cc1.mjs / as.mjs / etc. ES factory modules are loaded once
+ *     (browser ES module loader handles caching).
+ *   - The wasm bytes come from the HTTP cache after the first fetch.
+ *   - The parsed sysroot blob + index (Uint8Array + JS object) live
+ *     in module scope and are shared across calls.
+ *
+ * What re-runs per call: the Emscripten Module instantiation
+ * (~100-300ms for cc1) and the MEMFS sysroot mount (~100-200ms for
+ * 220 header files). Net Show Assembly latency went from ~150ms warm
+ * to ~400-500ms warm — under the panel's 500ms debounce so the
+ * user-perceived "stop typing → asm updates" cycle is unchanged.
+ *
+ * See LEARNINGS "2026-05-15 — cc1.wasm is not re-entrant" for the
+ * root cause investigation.
+ */
 let stderrBuffer = "";
 
 /** Normalize a relative path (possibly containing `/`) into a safe sequence
@@ -103,83 +126,62 @@ function mkdirP(
 }
 
 /**
- * Lazily load cc1.mjs, instantiate the Module, and mount the sysroot
- * tarball into MEMFS at `/sysroot`. The returned promise resolves once
- * the compiler is ready to accept its first compile call.
+ * Instantiate a fresh cc1 Module with the headers sysroot mounted at
+ * `/sysroot`. Returns a brand-new Module each call — the caller must
+ * use it once and let it be garbage-collected after `callMain` exits.
+ * See the re-entrancy note at the top of this file.
  *
- * Caller is responsible for not running concurrent compileToAsm() calls;
- * they would race on /tmp/in.c. The Show Assembly UI serializes via a
- * single in-flight token, so this is fine in practice.
+ * The sysroot blob is fetched once (cached at module scope) and
+ * re-walked into the new Module's MEMFS on each call. ES factory
+ * module + wasm bytes come from the browser cache after first call.
  */
-function loadModule(baseUrl: string): Promise<Cc1Module> {
-  if (modulePromise) return modulePromise;
-  modulePromise = (async () => {
-    // Dynamic ESM import. The @vite-ignore comment opts out of Vite's
-    // static-import analysis — we don't want it trying to bundle cc1.mjs
-    // (it's an Emscripten artefact served from public/ verbatim).
-    const factoryMod = await import(/* @vite-ignore */ `${baseUrl}wasm-cc1/cc1.mjs`);
-    const factory = factoryMod.default as Cc1Factory;
-    if (typeof factory !== "function") {
-      throw new Error(
-        `wasm-cc1/cc1.mjs: expected default export to be a factory function, ` +
-          `got ${typeof factory}`,
-      );
-    }
+async function loadModule(baseUrl: string): Promise<Cc1Module> {
+  // Dynamic ESM import. The @vite-ignore comment opts out of Vite's
+  // static-import analysis — we don't want it trying to bundle cc1.mjs
+  // (it's an Emscripten artefact served from public/ verbatim).
+  const factoryMod = await import(/* @vite-ignore */ `${baseUrl}wasm-cc1/cc1.mjs`);
+  const factory = factoryMod.default as Cc1Factory;
+  if (typeof factory !== "function") {
+    throw new Error(
+      `wasm-cc1/cc1.mjs: expected default export to be a factory function, ` +
+        `got ${typeof factory}`,
+    );
+  }
 
-    const Module = await factory({
-      noInitialRun: true,
-      // Capture both stdout (cc1 normally has none) and stderr (where
-      // diagnostics live) in one buffer — parsing is the same either way.
-      print: (s) => {
-        stderrBuffer += s + "\n";
-      },
-      printErr: (s) => {
-        stderrBuffer += s + "\n";
-      },
-      // Tell Emscripten to fetch cc1.wasm from the same public/ folder.
-      // Emscripten's default behaviour using import.meta.url works in
-      // practice, but being explicit means we survive any URL-resolution
-      // quirks across build modes (dev vs prod, base path).
-      locateFile: (path) => {
-        if (path === "cc1.wasm") return `${baseUrl}wasm-cc1/cc1.wasm`;
-        return `${baseUrl}wasm-cc1/${path}`;
-      },
-    });
-
-    // Mount the sysroot. We fetch the flat blob + JSON index in parallel.
-    const [blobBuf, indexJson] = await Promise.all([
-      fetch(`${baseUrl}wasm-cc1/sysroot.bin`).then((r) => {
-        if (!r.ok) throw new Error(`sysroot.bin: HTTP ${r.status}`);
-        return r.arrayBuffer();
-      }),
-      fetch(`${baseUrl}wasm-cc1/sysroot.index.json`).then((r) => {
-        if (!r.ok) throw new Error(`sysroot.index.json: HTTP ${r.status}`);
-        return r.text();
-      }),
-    ]);
-    const index = JSON.parse(indexJson) as SysrootIndexEntry[];
-    const blob = new Uint8Array(blobBuf);
-
-    Module.FS.mkdir("/sysroot");
-    // Track directories we've already mkdir'd to avoid throwing/catching
-    // hundreds of times — significant on Safari where the throw path is slow.
-    const madeDirs = new Set<string>(["/sysroot"]);
-    for (const entry of index) {
-      const full = "/sysroot/" + entry.p;
-      mkdirP(Module, full, madeDirs);
-      Module.FS.writeFile(
-        full,
-        blob.subarray(entry.o, entry.o + entry.l),
-      );
-    }
-    return Module;
-  })();
-  // On a failed load, allow the next call to try again. Without this the
-  // playground would be stuck on a transient network failure.
-  modulePromise.catch(() => {
-    modulePromise = null;
+  const Module = await factory({
+    noInitialRun: true,
+    // Capture both stdout (cc1 normally has none) and stderr (where
+    // diagnostics live) in one buffer — parsing is the same either way.
+    print: (s) => {
+      stderrBuffer += s + "\n";
+    },
+    printErr: (s) => {
+      stderrBuffer += s + "\n";
+    },
+    // Tell Emscripten to fetch cc1.wasm from the same public/ folder.
+    // Emscripten's default behaviour using import.meta.url works in
+    // practice, but being explicit means we survive any URL-resolution
+    // quirks across build modes (dev vs prod, base path).
+    locateFile: (path) => {
+      if (path === "cc1.wasm") return `${baseUrl}wasm-cc1/cc1.wasm`;
+      return `${baseUrl}wasm-cc1/${path}`;
+    },
   });
-  return modulePromise;
+
+  const { blob, index } = await loadHeadersBlob(baseUrl);
+  Module.FS.mkdir("/sysroot");
+  // Track directories we've already mkdir'd to avoid throwing/catching
+  // hundreds of times — significant on Safari where the throw path is slow.
+  const madeDirs = new Set<string>(["/sysroot"]);
+  for (const entry of index) {
+    const full = "/sysroot/" + entry.p;
+    mkdirP(Module, full, madeDirs);
+    Module.FS.writeFile(
+      full,
+      blob.subarray(entry.o, entry.o + entry.l),
+    );
+  }
+  return Module;
 }
 
 /** Optional per-call inputs. `siblings` is the playground project's other
@@ -427,13 +429,6 @@ interface ToolHandle {
   stderr: string[];
 }
 
-/** Per-tool cached Modules. Built once on the first compileToBin call,
- *  reused on every subsequent call. */
-let cc1ToolPromise: Promise<ToolHandle> | null = null;
-let asToolPromise: Promise<ToolHandle> | null = null;
-let ldToolPromise: Promise<ToolHandle> | null = null;
-let elf2macToolPromise: Promise<ToolHandle> | null = null;
-
 /** Cached header blob (gcc-include + include — for cc1). Show Assembly
  *  already fetches this for its own Module's MEMFS mount; the
  *  compileToBin path re-uses the same URL so the browser cache hits. */
@@ -516,29 +511,23 @@ async function loadToolModule(
   return { Module, stderr };
 }
 
+// Important: these tools are NOT cached across compileToBin calls.
+// See the re-entrancy note at the top of this file — cc1 / as / ld /
+// Elf2Mac all carry state in their statics that breaks a second
+// `callMain` (output-file flag, getopt index, malloc bookkeeping).
+// Each compileToBin call uses fresh Module instances; the wasm bytes
+// come from the browser HTTP cache so the extra fetch is a no-op.
 function loadCc1Tool(baseUrl: string) {
-  if (cc1ToolPromise) return cc1ToolPromise;
-  cc1ToolPromise = loadToolModule(baseUrl, "cc1.mjs", "headers");
-  cc1ToolPromise.catch(() => { cc1ToolPromise = null; });
-  return cc1ToolPromise;
+  return loadToolModule(baseUrl, "cc1.mjs", "headers");
 }
 function loadAsTool(baseUrl: string) {
-  if (asToolPromise) return asToolPromise;
-  asToolPromise = loadToolModule(baseUrl, "as.mjs", "none");
-  asToolPromise.catch(() => { asToolPromise = null; });
-  return asToolPromise;
+  return loadToolModule(baseUrl, "as.mjs", "none");
 }
 function loadLdTool(baseUrl: string) {
-  if (ldToolPromise) return ldToolPromise;
-  ldToolPromise = loadToolModule(baseUrl, "ld.mjs", "libs");
-  ldToolPromise.catch(() => { ldToolPromise = null; });
-  return ldToolPromise;
+  return loadToolModule(baseUrl, "ld.mjs", "libs");
 }
 function loadElf2MacTool(baseUrl: string) {
-  if (elf2macToolPromise) return elf2macToolPromise;
-  elf2macToolPromise = loadToolModule(baseUrl, "Elf2Mac.mjs", "none");
-  elf2macToolPromise.catch(() => { elf2macToolPromise = null; });
-  return elf2macToolPromise;
+  return loadToolModule(baseUrl, "Elf2Mac.mjs", "none");
 }
 
 function callMainSafe(tool: ToolHandle, argv: string[]): number {
