@@ -13,6 +13,7 @@
 // Side-effect import the WinBox bundle — its main field is broken (see
 // projectPicker.ts for the trail) so we reach for the global at runtime.
 import "winbox/dist/winbox.bundle.min.js";
+import { enableShade } from "./winboxChrome";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -33,12 +34,13 @@ export function openHelp(): void {
     y: 80,
     html: HELP_HTML,
     background: "#cccccc",
-    class: ["cvm-help-winbox"],
+    class: ["no-full", "cvm-help-winbox", "cvm-mac-winbox"],
     onclose: () => {
       active = null;
       return false; // allow close
     },
   });
+  enableShade(wb);
   active = { focus: () => wb.focus(), close: () => wb.close() };
 }
 
