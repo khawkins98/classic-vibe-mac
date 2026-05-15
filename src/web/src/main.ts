@@ -207,18 +207,48 @@ root.innerHTML = /* html */ `
          Phase 2 content: placeholder. Phase 4 moves Show Assembly + the
          compile log + DebugStr capture into this slot as tabs.
          See cv-mac #104. -->
+    <!-- RIGHT BOTTOM: Output panel — Build log + Console tabs (#104 Phase 4).
+         Build log captures cc1/as/ld/Elf2Mac timings + the [cvm] identity
+         stamp via a console.info proxy in main.ts. Console is a placeholder
+         for DebugStr / DrawString capture (future). Show Assembly stays in
+         the editor pane for now — it has its own focused UX. -->
     <section class="cvm-ide__output window" aria-labelledby="title-output">
       <header class="window__titlebar">
         <span class="window__close" aria-hidden="true"></span>
         <h2 class="window__title" id="title-output">Output</h2>
       </header>
-      <div class="window__body cvm-output">
+      <div class="cvm-output__tabbar" role="tablist" aria-label="Output panel">
+        <button type="button"
+                class="cvm-output__tab cvm-output__tab--active"
+                role="tab"
+                data-pane="buildlog"
+                aria-selected="true">Build log</button>
+        <button type="button"
+                class="cvm-output__tab"
+                role="tab"
+                data-pane="console"
+                aria-selected="false">Console</button>
+        <span class="cvm-output__tabbar-spacer"></span>
+        <button type="button" class="cvm-output__btn" id="cvm-output-clear"
+                title="Clear the current tab">Clear</button>
+      </div>
+      <div class="cvm-output__pane cvm-output__pane--active"
+           data-pane="buildlog"
+           role="tabpanel"
+           aria-label="Build log">
+        <pre id="cvm-output-buildlog" class="cvm-output__log"></pre>
+      </div>
+      <div class="cvm-output__pane"
+           data-pane="console"
+           role="tabpanel"
+           aria-label="Console"
+           hidden>
         <p class="cvm-output__hint">
-          <strong>Phase 2 placeholder.</strong> Compiler log, Show
-          Assembly, console output, and DebugStr capture will move
-          into this panel as tabs in a follow-up
-          (<a href="https://github.com/khawkins98/classic-vibe-mac/issues/104">cv-mac #104</a>).
-          For now, expand the assembly section inside the editor pane.
+          <strong>Coming soon.</strong> The Console tab will capture
+          <code>DebugStr</code> and <code>DrawString</code> output from
+          your running Mac app — useful for in-tab debugging without
+          looking at the canvas. Tracked in
+          <a href="https://github.com/khawkins98/classic-vibe-mac/issues/104">#104</a>.
         </p>
       </div>
     </section>
@@ -349,6 +379,94 @@ if (pauseCheckbox) {
   onPauseWhenHiddenChange(() => {
     const v = isPauseWhenHiddenEnabled();
     if (pauseCheckbox.checked !== v) pauseCheckbox.checked = v;
+  });
+}
+
+// ── Output panel: Build log capture + tab switching (cv-mac #104 Phase 4) ──
+//
+// The Build log tab proxies console.info() — anything that looks like a
+// cvm build/identity message (prefix `[cvm]`, `[build-c]`, `[build-r]`,
+// `[asm]`) gets mirrored into a pre-element in the panel. Original
+// console.info is preserved so DevTools still sees everything.
+//
+// Tabs are click-to-switch; Clear empties the active pane's pre-element.
+
+const buildLogEl = document.getElementById(
+  "cvm-output-buildlog",
+) as HTMLPreElement | null;
+const outputTabbarEl = document.querySelector<HTMLDivElement>(".cvm-output__tabbar");
+const outputClearBtn = document.getElementById("cvm-output-clear");
+
+function timestampHHMMSS(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function appendBuildLog(line: string): void {
+  if (!buildLogEl) return;
+  const wasAtBottom =
+    buildLogEl.scrollTop + buildLogEl.clientHeight >=
+    buildLogEl.scrollHeight - 8;
+  buildLogEl.textContent += `[${timestampHHMMSS()}] ${line}\n`;
+  if (wasAtBottom) buildLogEl.scrollTop = buildLogEl.scrollHeight;
+}
+
+const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]"];
+if (buildLogEl) {
+  // Mirror our own identity stamp into the log immediately.
+  appendBuildLog(
+    `[cvm] build bundleVersion=${BUNDLE_VERSION} toolchainVersion=${TOOLCHAIN_VERSION} builtAt=${BUILT_AT}`,
+  );
+  appendBuildLog(`[cvm] loaded=${new Date().toISOString()} — click a project on the left to begin.`);
+
+  // Proxy console.info so future cvm.* lines also land here. Don't proxy
+  // every console method — info is enough for our build-pipeline output.
+  const origInfo = console.info.bind(console);
+  console.info = (...args: unknown[]) => {
+    origInfo(...args);
+    const first = args[0];
+    if (typeof first !== "string") return;
+    if (BUILD_LOG_PREFIXES.some((p) => first.startsWith(p))) {
+      // Flatten the args for the log line. console.info uses %s-style
+      // splicing on real output but mostly we have a single string.
+      const text = args
+        .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+        .join(" ");
+      appendBuildLog(text);
+    }
+  };
+}
+
+if (outputTabbarEl) {
+  outputTabbarEl.addEventListener("click", (e) => {
+    const tab = (e.target as HTMLElement).closest<HTMLButtonElement>(
+      ".cvm-output__tab",
+    );
+    if (!tab) return;
+    const pane = tab.dataset.pane;
+    if (!pane) return;
+    for (const t of outputTabbarEl.querySelectorAll<HTMLButtonElement>(".cvm-output__tab")) {
+      const active = t.dataset.pane === pane;
+      t.classList.toggle("cvm-output__tab--active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    for (const p of document.querySelectorAll<HTMLDivElement>(".cvm-output__pane")) {
+      const active = p.dataset.pane === pane;
+      p.classList.toggle("cvm-output__pane--active", active);
+      p.hidden = !active;
+    }
+  });
+}
+
+if (outputClearBtn) {
+  outputClearBtn.addEventListener("click", () => {
+    const active = document.querySelector<HTMLDivElement>(
+      ".cvm-output__pane--active",
+    );
+    if (!active) return;
+    const pre = active.querySelector<HTMLPreElement>("pre");
+    if (pre) pre.textContent = "";
   });
 }
 
