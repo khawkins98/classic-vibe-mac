@@ -296,32 +296,6 @@ jobs:
           gz_size=$(gzip -9c src/web/public/wasm-rez/wasm-rez.wasm | wc -c)
           echo "wasm-rez.wasm.gz = $gz_size B"
 
-      # Co-locate the .code.bin precompiles next to index.html so the
-      # playground's Build button can fetch them at
-      # /<repo>/precompiled/<project>.code.bin and splice the fresh
-      # resource fork on top. Done AFTER `npm run build` (analogous to
-      # how the disk images are placed below) because the artifact is
-      # downloaded into ./artifact/ AFTER `npm ci` but the previous
-      # ordering ran this step after vite had already finished — so the
-      # files never made it into dist/. See LEARNINGS.md
-      # ("Phase-2 precompiled .code.bin missing in production").
-      - name: Co-locate .code.bin precompiles into web dist
-        run: |
-          mkdir -p src/web/dist/precompiled
-          cp artifact/build/reader/Reader.code.bin src/web/dist/precompiled/reader.code.bin
-          cp artifact/build/macweather/MacWeather.code.bin src/web/dist/precompiled/macweather.code.bin
-          cp artifact/build/hello-mac/HelloMac.code.bin src/web/dist/precompiled/hello-mac.code.bin
-          ls -la src/web/dist/precompiled/
-          test -s src/web/dist/precompiled/reader.code.bin
-          test -s src/web/dist/precompiled/macweather.code.bin
-          test -s src/web/dist/precompiled/hello-mac.code.bin
-          # hello-toolbox.bin is committed to git and copied by Vite automatically
-          # during `npm run build`. This step just guards against accidental deletion.
-          test -s src/web/dist/precompiled/hello-toolbox.bin || {
-            echo "ERROR: hello-toolbox.bin missing from dist — was it deleted from src/web/public/precompiled/?"
-            exit 1
-          }
-
       # Co-locate the disk images next to index.html so they're reachable at
       # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —
       # which is where emulator-config.ts expects to find them. Done outside

@@ -74,10 +74,43 @@ const READER_BIN = join(
   REPO,
   "src/web/public/precompiled/reader.code.bin",
 );
-const HELLO_TOOLBOX_BIN = join(
-  REPO,
-  "src/web/public/precompiled/hello-toolbox.bin",
-);
+
+/**
+ * Build a minimal valid MacBinary II APPL in-memory. Used in place of a
+ * vendored .bin fixture — we don't need real CODE resources to exercise
+ * parseMacBinary + the HFS patcher; we just need a structurally valid
+ * MacBinary the patcher's parser will accept. parseMacBinary checks
+ * length, header byte 0, filename length, and the rsrc-end bound — but
+ * not the CRC — so a hand-rolled header works.
+ *
+ * Layout: 128-byte header + dataLen + pad to 128 + rsrcLen + pad to 128.
+ */
+function makeApplMacBinary({
+  filename,
+  type = 0x4150504c, // 'APPL'
+  creator = 0x3f3f3f3f, // '????'
+  rsrcLen = 64,
+}) {
+  const nameBytes = new TextEncoder().encode(filename);
+  if (nameBytes.length > 63) throw new Error(`filename too long: ${filename}`);
+  const dataLen = 0;
+  const dataPad = 0;
+  const rsrcPad = Math.ceil(rsrcLen / 128) * 128 - rsrcLen;
+  const total = 128 + dataLen + dataPad + rsrcLen + rsrcPad;
+  const bin = new Uint8Array(total);
+  const dv = new DataView(bin.buffer);
+  bin[1] = nameBytes.length;
+  bin.set(nameBytes, 2);
+  dv.setUint32(65, type, false);
+  dv.setUint32(69, creator, false);
+  dv.setUint32(83, dataLen, false);
+  dv.setUint32(87, rsrcLen, false);
+  // Fill rsrc fork with a recognisable pattern so any future round-trip
+  // assertions on bytes can verify integrity. Not strictly needed today.
+  const rsrcStart = 128 + dataLen + dataPad;
+  for (let i = 0; i < rsrcLen; i++) bin[rsrcStart + i] = 0xa0 | (i & 0x0f);
+  return bin;
+}
 
 // reader.code.bin is produced by Retro68 in the cross-compile job — not
 // available on the bare unit-test runner. When it's missing, skip with
@@ -90,14 +123,6 @@ if (!codeBinAvailable) {
     "  skip reader.code.bin not present (run via build.yml or `cmake --build build` locally); skipping precompile-dependent tests",
   );
 }
-
-// hello-toolbox.bin is committed to git (vendored from wasm-retro-cc) — its
-// absence is always a test failure, not a skip.
-assert.ok(
-  existsSync(HELLO_TOOLBOX_BIN),
-  `FAIL: vendored binary missing at ${HELLO_TOOLBOX_BIN} — ` +
-    "was it accidentally deleted? See src/web/public/precompiled/VENDORED.md for update instructions.",
-);
 
 const template = new Uint8Array(readFileSync(TEMPLATE_PATH));
 const readerBin = codeBinAvailable
@@ -127,21 +152,31 @@ test("MacBinary parse matches hfsutils' view of reader.code.bin", { skip: !codeB
   assert.ok(v.rsrcLen > 0, "code.bin should have a non-empty rsrc fork");
 });
 
-// ── hello-toolbox.bin tests (vendored from wasm-retro-cc) ────────────────
+// ── Synthesised-APPL tests ──────────────────────────────────────────────
+//
+// These tests used to load `precompiled/hello-toolbox.bin` (a real
+// Retro68-built MacBinary II APPL vendored from wasm-retro-cc). Since
+// that splice-path / prebuilt-demo workflow was retired in #117 / #120,
+// keeping a 12 KB .bin solely as a test fixture was redundant — the
+// patcher only cares about MacBinary structure, not real CODE
+// resources. The fixture is now built in-memory by makeApplMacBinary.
 
-const helloToolboxBin = new Uint8Array(readFileSync(HELLO_TOOLBOX_BIN));
+const syntheticAppl = makeApplMacBinary({
+  filename: "hello_toolbox",
+  rsrcLen: 64,
+});
 
-test("hello-toolbox.bin: parseMacBinary returns APPL with non-empty resource fork", () => {
-  const v = parseMacBinary(helloToolboxBin);
+test("synthesised APPL: parseMacBinary returns APPL with non-empty resource fork", () => {
+  const v = parseMacBinary(syntheticAppl);
   assert.equal(v.type, 0x4150504c, "type must be APPL");
-  assert.ok(v.rsrcLen > 0, "resource fork must be non-empty (contains CODE resources)");
+  assert.ok(v.rsrcLen > 0, "resource fork must be non-empty");
   assert.ok(v.dataLen >= 0);
 });
 
-test("hello-toolbox.bin: patchEmptyVolumeWithBinary produces expected-size disk image", () => {
+test("synthesised APPL: patchEmptyVolumeWithBinary produces expected-size disk image", () => {
   const patched = patchEmptyVolumeWithBinary({
     templateBytes: template,
-    macBinary: helloToolboxBin,
+    macBinary: syntheticAppl,
     filename: "hello_toolbox",
   });
   assert.equal(patched.length, template.length, "patched disk must be same size as template");
@@ -240,14 +275,15 @@ if (!hfsutilsAvailable) {
   });
 }
 
-// ── hello-toolbox.bin hfsutils round-trip ──────────────────────────────
-// Skip only if hfsutils isn't installed; the binary is always available.
+// ── Synthesised APPL hfsutils round-trip ──────────────────────────────
+// Skip only if hfsutils isn't installed; the synthesised binary is
+// always available (built in-process).
 
 if (hfsutilsAvailable) {
-  test("hello-toolbox.bin: patched disk mounts and shows file with APPL type", () => {
+  test("synthesised APPL: patched disk mounts and shows file with APPL type", () => {
     const patched = patchEmptyVolumeWithBinary({
       templateBytes: template,
-      macBinary: helloToolboxBin,
+      macBinary: syntheticAppl,
       filename: "hello_toolbox",
     });
     const tmpPath = join(mkdtempSync(join(tmpdir(), "cvm-hfs-")), "ht.dsk");
@@ -276,7 +312,7 @@ if (hfsutilsAvailable) {
     );
     const patched = patchEmptyVolumeWithBinary({
       templateBytes: template,
-      macBinary: helloToolboxBin,
+      macBinary: syntheticAppl,
       filename: "hello_toolbox",
       extraFiles: [
         {

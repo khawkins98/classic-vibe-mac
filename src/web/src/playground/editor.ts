@@ -970,14 +970,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
     <div class="window__body">
       <p class="cvm-pg-intro">
         Click into the source below and start typing &mdash; this is the
-        real C and Rez code for the apps running in the Mac above. Edits
+        real C and Rez code for the app running in the Mac above. Edits
         save automatically in your browser. Hit <em>Build .bin</em> to
         compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes. Some projects compile their
-        <code>.c</code> sources fully in your browser (<em>Wasm Hello</em>);
-        others splice your edited resource fork onto a CI-precompiled
-        code fork (<em>Reader</em>, <em>MacWeather</em>, etc.). The
-        banner below tells you which mode is active.
+        to reboot the Mac with your changes. Everything compiles in your
+        browser: <code>.c</code> through <code>cc1</code> + <code>as</code>
+        + <code>ld</code>, and any <code>.r</code> through WASM-Rez.
       </p>
       ${banner}
       ${migrationBanner}
