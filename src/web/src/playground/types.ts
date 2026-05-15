@@ -238,6 +238,11 @@ export const BUNDLE_VERSION: string =
   // we don't crash; the IDB invalidation just won't trigger.
   typeof __CVM_BUNDLE_VERSION__ === "string" ? __CVM_BUNDLE_VERSION__ : "dev";
 
+/** Build-time constant: ISO timestamp of when Vite built this bundle. */
+declare const __CVM_BUILT_AT__: string;
+export const BUILT_AT: string =
+  typeof __CVM_BUILT_AT__ === "string" ? __CVM_BUILT_AT__ : "dev";
+
 /** IDB key for a per-project, per-file content blob. */
 export function fileKey(projectId: string, filename: string): string {
   return `${projectId}/${filename}`;

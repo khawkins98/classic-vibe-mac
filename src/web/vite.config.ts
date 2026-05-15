@@ -167,6 +167,7 @@ function playgroundSeedPlugin(): Plugin {
       return {
         define: {
           __CVM_BUNDLE_VERSION__: JSON.stringify(hash),
+          __CVM_BUILT_AT__: JSON.stringify(new Date().toISOString()),
         },
       };
     },
