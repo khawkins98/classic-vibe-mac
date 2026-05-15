@@ -144,7 +144,6 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     label: "Wasm TextEdit",
     files: ["textedit.c", "textedit.r"],
     rezFile: "textedit.r",
-    precompiledName: null,
     outputName: "WasmTextEdit.bin",
     appType: "APPL",
     appCreator: "CVTE",
