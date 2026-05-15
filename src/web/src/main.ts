@@ -616,8 +616,8 @@ mountMenubar({
   resetLayout: () => idePanes.reset(),
   rebootEmulator: () => {
     // Re-mount the most recently built secondary disk and re-launch the
-    // app. If no Build & Run has happened yet there's nothing to relaunch;
-    // SysBeep-equivalent: surface a console hint and bail.
+    // app. The menubar dynamic-disabled state should keep this from
+    // firing without a cached spec, but defend anyway.
     if (!emulatorHandle || !lastBootSpec) {
       console.info(
         "[cvm] Reboot Mac: no app built yet — run Build & Run first.",
@@ -626,6 +626,7 @@ mountMenubar({
     }
     void emulatorHandle.reboot(lastBootSpec);
   },
+  canRebootEmulator: () => emulatorHandle !== null && lastBootSpec !== null,
   listOpenWindows: () => {
     // Read the WinBox stack from globalThis.WinBox.stack(); each entry
     // exposes the title element + focus(). The four docked panes are
