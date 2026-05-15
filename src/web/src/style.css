@@ -1534,11 +1534,85 @@ body.cvm-paused .emulator-canvas {
 
 /* --- Output panel (bottom-right column) ----------------------------- */
 
-.cvm-output {
-  padding: 14px;
+/* The Output window is a flex column inside the grid cell; the tab bar
+   stays fixed at the top and each pane scrolls its own content. */
+.cvm-ide__output {
+  display: flex;
+  flex-direction: column;
+}
+.cvm-ide__output > .window__body {
+  /* The pane elements are direct children of the window section; no
+     scrolling window__body wrapper. */
+  display: none;
+}
+.cvm-output__tabbar {
+  display: flex;
+  align-items: stretch;
+  background: var(--platinum);
+  border-bottom: 1px solid var(--shadow);
+  padding: 4px 6px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.cvm-output__tab {
+  border: 1px solid var(--shadow);
+  border-bottom: none;
+  background: var(--platinum-light);
+  padding: 3px 12px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  top: 1px;
+  color: inherit;
+}
+.cvm-output__tab--active {
+  background: var(--paper);
+  border-bottom: 1px solid var(--paper);
+}
+.cvm-output__tabbar-spacer {
+  flex: 1 1 auto;
+}
+.cvm-output__btn {
+  align-self: center;
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  background: var(--platinum-light);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.cvm-output__pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--paper);
+  overflow: hidden;
+  display: none;
+}
+.cvm-output__pane--active {
+  display: flex;
+  flex-direction: column;
+}
+.cvm-output__log {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--paper);
 }
 .cvm-output__hint {
-  margin: 0;
+  margin: 12px;
   padding: 12px;
   border: 1px dashed var(--shadow);
   background: var(--platinum-light);
@@ -1548,6 +1622,9 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-output__hint strong {
   color: var(--ink);
+}
+.cvm-output__hint a {
+  color: var(--accent, #336699);
 }
 
 /* --- Responsive ----------------------------------------------------- */
