@@ -82,6 +82,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-multi", f),
   })),
+  // wasm-hello-window — mixed C + .r in-browser-compile demo (cv-mac
+  // #100 Phase B). .c compiles via wasm-cc1; .r compiles via WASM-Rez;
+  // spliceResourceFork merges the two forks.
+  ...["hello.c", "hello.r"].map((f) => ({
+    project: "wasm-hello-window",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-window", f),
+  })),
 ];
 
 /**

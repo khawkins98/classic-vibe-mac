@@ -1256,8 +1256,20 @@ async function runBuild(
   view: EditorView,
   activeFile: string,
 ): Promise<BuildOutcome> {
+  // Three build paths, dispatched by the project's rezFile +
+  // precompiledName combo:
+  //
+  //   rezFile  precompiled  → path
+  //   null     null         → A: in-browser C only (wasm-cc1 → .bin)
+  //   non-null null         → B: in-browser C + in-browser Rez,
+  //                              splice rez fork over the C-built fork
+  //   non-null non-null     → C: in-browser Rez + CI-precompiled
+  //                              .code.bin splice (original Phase 2 path)
   if (proj.rezFile === null) {
     return runBuildInBrowserC(baseUrl, proj, view, activeFile);
+  }
+  if (proj.precompiledName === null) {
+    return runBuildMixedCAndR(baseUrl, proj, view, activeFile);
   }
   const t0 = performance.now();
 
@@ -1351,6 +1363,94 @@ async function runBuild(
   return {
     ok: true,
     bytes,
+    totalMs: performance.now() - t0,
+    diagnostics: allDiags,
+  };
+}
+
+/**
+ * Build path B (cv-mac #100 Phase B): in-browser C *and* in-browser
+ * Rez. Used by projects with `rezFile !== null` and `precompiledName ===
+ * null` — the user authors both the .c sources AND the .r resources,
+ * and everything compiles client-side. Composes two existing pipelines:
+ *
+ *   1. {@link runBuildInBrowserC} compiles all .c files and splices a
+ *      default SIZE resource — this gives us a complete MacBinary with
+ *      libretrocrt's runtime resources (RELA, SIZE, CODE 0..N) intact.
+ *   2. The Rez stage (same as the C-path) compiles the user's .r
+ *      against the bundled RIncludes, producing a resource fork.
+ *   3. spliceResourceFork merges the rez fork OVER the C-built fork —
+ *      user-authored resources (WIND, MENU, DLOG, STR#, BNDL, ...) win
+ *      on (type, id) collision; libretrocrt's RELA/SIZE/CODE survive
+ *      unless the user explicitly redeclares them.
+ *
+ * The user's .r MAY include its own `data 'SIZE' (-1, ...)` to override
+ * the default heap allocation; Rez user-wins semantics let it through.
+ */
+async function runBuildMixedCAndR(
+  baseUrl: string,
+  proj: SampleProject,
+  view: EditorView,
+  activeFile: string,
+): Promise<BuildOutcome> {
+  const t0 = performance.now();
+
+  // Step 1: compile the C side via Phase A's pipeline. This returns a
+  // complete MacBinary with default-SIZE-spliced resource fork — what
+  // we want as the base for further splicing.
+  const cResult = await runBuildInBrowserC(baseUrl, proj, view, activeFile);
+  if (!cResult.ok || !cResult.bytes) return cResult;
+
+  // Step 2: compile the user's .r. Same flow as the precompiled-data-
+  // fork splice path (createVfs → preprocess → compile → resourceFork).
+  if (!proj.rezFile) {
+    return cResult; // unreachable: caller guards rezFile !== null
+  }
+  const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
+  const vfs = createVfs(baseUrl, proj.id);
+  await vfs.prefetch(proj.id, proj.files);
+  const pp = preprocess(topSource, proj.rezFile, vfs, {
+    Rez: "1", DeRez: "0", true: "1", false: "0", TRUE: "1", FALSE: "0",
+  });
+  setEditorDiagnostics(view, pp.diagnostics, activeFile);
+  if (pp.diagnostics.some((d) => d.severity === "error")) {
+    return {
+      ok: false,
+      totalMs: performance.now() - t0,
+      diagnostics: pp.diagnostics,
+    };
+  }
+  const rez = await compile(baseUrl, pp.output, proj.rezFile);
+  const allDiags = [...pp.diagnostics, ...rez.diagnostics];
+  setEditorDiagnostics(view, allDiags, activeFile);
+  if (!rez.ok || !rez.resourceFork) {
+    return { ok: false, totalMs: performance.now() - t0, diagnostics: allDiags };
+  }
+
+  // Step 3: splice the user's rez fork onto the C-built MacBinary.
+  // spliceResourceFork merges (user-wins on collision), so RELA / SIZE /
+  // CODE from libretrocrt survive unless the user explicitly overrode
+  // them in their .r.
+  const finalBin = spliceResourceFork({
+    dataForkBin: cResult.bytes,
+    resourceFork: rez.resourceFork,
+  });
+
+  // Identity stamp for the mixed build, mirroring runBuildInBrowserC.
+  const copy = new Uint8Array(finalBin.byteLength);
+  copy.set(finalBin);
+  const sha = await crypto.subtle.digest("SHA-256", copy);
+  const shaHex = Array.from(new Uint8Array(sha))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  console.info(
+    `[build-c+r] ${proj.id}: ${finalBin.byteLength}B  sha256=${shaHex.slice(0, 16)}…  ` +
+      `(c=${cResult.totalMs.toFixed(0)}ms, total=${(performance.now() - t0).toFixed(0)}ms)`,
+  );
+
+  return {
+    ok: true,
+    bytes: finalBin,
     totalMs: performance.now() - t0,
     diagnostics: allDiags,
   };
