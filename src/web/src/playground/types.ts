@@ -133,6 +133,22 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVSN",
   },
+  {
+    // wasm-textedit — TextEdit demo, foundation for a future word
+    // processor (cv-mac #125). Uses Toolbox TEHandle for the actual
+    // text editing — TEKey for keyboard, TEClick for mouse selection,
+    // TEUpdate on update events, TEIdle for caret blinking, all the
+    // built-in Mac OS 7/8 plumbing. Same Path B shape as Snake +
+    // Hello-Window: in-browser C + WASM-Rez splice.
+    id: "wasm-textedit",
+    label: "Wasm TextEdit",
+    files: ["textedit.c", "textedit.r"],
+    rezFile: "textedit.r",
+    precompiledName: null,
+    outputName: "WasmTextEdit.bin",
+    appType: "APPL",
+    appCreator: "CVTE",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
