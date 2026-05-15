@@ -62,6 +62,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "TextEdit + a real Mac menu bar. Apple / File / Edit menus, Cmd-key shortcuts (⌘N, ⌘Q, ⌘X, ⌘C, ⌘V), and a working About dialog. The ladder rung between an edit field and a mini word processor.",
   },
+  "wasm-calculator": {
+    emoji: "🔢",
+    description:
+      "4-function calculator. 16 buttons drawn directly to the window port, hit-tested via PtInRect, display formatted with NumToString. Demonstrates the playground can ship classic Mac apps without any TextEdit / scrap entanglement.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
