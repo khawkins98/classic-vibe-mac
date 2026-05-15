@@ -42,7 +42,24 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, "..");
 
-const FILES = ["cc1.mjs", "cc1.wasm", "sysroot.bin", "sysroot.index.json"];
+const FILES = [
+  // Compiler (Show Assembly + Build .c).
+  "cc1.mjs",
+  "cc1.wasm",
+  // Assembler / linker / ELF→MacBinary converter (Build .c only).
+  "as.mjs",
+  "as.wasm",
+  "ld.mjs",
+  "ld.wasm",
+  "Elf2Mac.mjs",
+  "Elf2Mac.wasm",
+  // Headers blob (cc1 needs).
+  "sysroot.bin",
+  "sysroot.index.json",
+  // Libraries + ld-script blob (ld needs).
+  "sysroot-libs.bin",
+  "sysroot-libs.index.json",
+];
 
 const srcArg = process.argv[2];
 const SRC = resolve(

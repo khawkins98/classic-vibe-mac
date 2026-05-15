@@ -398,3 +398,382 @@ function parseCc1Stderr(stderr: string, defaultFile: string): Diagnostic[] {
   }
   return out;
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// Full pipeline: C → MacBinary II APPL via cc1 → as → ld → Elf2Mac
+// (wasm-retro-cc #15 / cv-mac #64)
+// ═════════════════════════════════════════════════════════════════════
+//
+// This is the "Build .c" path the playground will eventually wire to the
+// Build & Run button for .c-driven projects. The Show Assembly path
+// (compileToAsm above) is unchanged — it shares the same vendored
+// cc1.mjs + sysroot.bin URLs, so the asset cache hits on the first byte.
+//
+// What's NOT shared between paths:
+//   - Module instances: each compileToBin call uses a *fresh* chain of
+//     four Modules. They're created on the first call and cached. Show
+//     Assembly's cc1 Module is independent (different MEMFS state) so
+//     the two paths can run concurrently without racing on /tmp/in.c.
+//     Cost: ~12 MB extra heap once compileToBin has been called.
+//   - Sysroot mount: cc1 needs the headers blob (already shared with
+//     Show Assembly path's blob fetch), ld needs the libs blob (new
+//     this PR, ~1.1 MB brotli). as and Elf2Mac don't read /sysroot/
+//     so we skip the mount for them.
+
+interface ToolHandle {
+  Module: Cc1Module;
+  /** Captured stderr lines from the latest callMain. Cleared at the
+   *  start of each invocation. */
+  stderr: string[];
+}
+
+/** Per-tool cached Modules. Built once on the first compileToBin call,
+ *  reused on every subsequent call. */
+let cc1ToolPromise: Promise<ToolHandle> | null = null;
+let asToolPromise: Promise<ToolHandle> | null = null;
+let ldToolPromise: Promise<ToolHandle> | null = null;
+let elf2macToolPromise: Promise<ToolHandle> | null = null;
+
+/** Cached header blob (gcc-include + include — for cc1). Show Assembly
+ *  already fetches this for its own Module's MEMFS mount; the
+ *  compileToBin path re-uses the same URL so the browser cache hits. */
+let headersBlobPromise: Promise<{ blob: Uint8Array; index: SysrootIndexEntry[] }> | null = null;
+
+/** Cached libs blob (lib/* + retro68-flat.ld — for ld). */
+let libsBlobPromise: Promise<{ blob: Uint8Array; index: SysrootIndexEntry[] }> | null = null;
+
+async function fetchSysrootBlob(
+  baseUrl: string,
+  binPath: string,
+  indexPath: string,
+): Promise<{ blob: Uint8Array; index: SysrootIndexEntry[] }> {
+  const [blobBuf, indexText] = await Promise.all([
+    fetch(`${baseUrl}wasm-cc1/${binPath}`).then((r) => {
+      if (!r.ok) throw new Error(`${binPath}: HTTP ${r.status}`);
+      return r.arrayBuffer();
+    }),
+    fetch(`${baseUrl}wasm-cc1/${indexPath}`).then((r) => {
+      if (!r.ok) throw new Error(`${indexPath}: HTTP ${r.status}`);
+      return r.text();
+    }),
+  ]);
+  return {
+    blob: new Uint8Array(blobBuf),
+    index: JSON.parse(indexText) as SysrootIndexEntry[],
+  };
+}
+
+function loadHeadersBlob(baseUrl: string) {
+  if (headersBlobPromise) return headersBlobPromise;
+  headersBlobPromise = fetchSysrootBlob(baseUrl, "sysroot.bin", "sysroot.index.json");
+  headersBlobPromise.catch(() => { headersBlobPromise = null; });
+  return headersBlobPromise;
+}
+
+function loadLibsBlob(baseUrl: string) {
+  if (libsBlobPromise) return libsBlobPromise;
+  libsBlobPromise = fetchSysrootBlob(baseUrl, "sysroot-libs.bin", "sysroot-libs.index.json");
+  libsBlobPromise.catch(() => { libsBlobPromise = null; });
+  return libsBlobPromise;
+}
+
+/** Generic Emscripten ES-module factory loader for as/ld/Elf2Mac.
+ *  Each tool gets its own stderr accumulator that the caller drains
+ *  between callMain invocations. */
+async function loadToolModule(
+  baseUrl: string,
+  mjsName: string,
+  mount: "none" | "headers" | "libs",
+): Promise<ToolHandle> {
+  const factoryMod = await import(/* @vite-ignore */ `${baseUrl}wasm-cc1/${mjsName}`);
+  const factory = factoryMod.default as Cc1Factory;
+  if (typeof factory !== "function") {
+    throw new Error(
+      `wasm-cc1/${mjsName}: expected default export to be a factory function`,
+    );
+  }
+  const stderr: string[] = [];
+  const Module = await factory({
+    noInitialRun: true,
+    print: (s) => stderr.push(s),
+    printErr: (s) => stderr.push(s),
+    locateFile: (path) => `${baseUrl}wasm-cc1/${path}`,
+  });
+
+  if (mount !== "none") {
+    const { blob, index } =
+      mount === "headers"
+        ? await loadHeadersBlob(baseUrl)
+        : await loadLibsBlob(baseUrl);
+    try { Module.FS.mkdir("/sysroot"); } catch {}
+    const made = new Set<string>(["/sysroot"]);
+    for (const entry of index) {
+      const full = "/sysroot/" + entry.p;
+      mkdirP(Module, full, made);
+      Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
+    }
+  }
+  return { Module, stderr };
+}
+
+function loadCc1Tool(baseUrl: string) {
+  if (cc1ToolPromise) return cc1ToolPromise;
+  cc1ToolPromise = loadToolModule(baseUrl, "cc1.mjs", "headers");
+  cc1ToolPromise.catch(() => { cc1ToolPromise = null; });
+  return cc1ToolPromise;
+}
+function loadAsTool(baseUrl: string) {
+  if (asToolPromise) return asToolPromise;
+  asToolPromise = loadToolModule(baseUrl, "as.mjs", "none");
+  asToolPromise.catch(() => { asToolPromise = null; });
+  return asToolPromise;
+}
+function loadLdTool(baseUrl: string) {
+  if (ldToolPromise) return ldToolPromise;
+  ldToolPromise = loadToolModule(baseUrl, "ld.mjs", "libs");
+  ldToolPromise.catch(() => { ldToolPromise = null; });
+  return ldToolPromise;
+}
+function loadElf2MacTool(baseUrl: string) {
+  if (elf2macToolPromise) return elf2macToolPromise;
+  elf2macToolPromise = loadToolModule(baseUrl, "Elf2Mac.mjs", "none");
+  elf2macToolPromise.catch(() => { elf2macToolPromise = null; });
+  return elf2macToolPromise;
+}
+
+function callMainSafe(tool: ToolHandle, argv: string[]): number {
+  tool.stderr.length = 0;
+  try {
+    return tool.Module.callMain(argv);
+  } catch (e) {
+    const err = e as { name?: string; status?: number };
+    if (err?.name === "ExitStatus") return err.status ?? 1;
+    throw e;
+  }
+}
+
+/** Per-stage telemetry, useful for the Build UI's status line. */
+export interface CompileToBinStages {
+  cc1Ms: number;
+  asMs: number;
+  ldMs: number;
+  elf2macMs: number;
+}
+
+export interface CompileToBinResult {
+  /** True iff all four stages exited 0 and Elf2Mac emitted a `.bin`. */
+  ok: boolean;
+  /** MacBinary II APPL bytes on success. */
+  bin?: Uint8Array;
+  /** Intermediate m68k assembly text — handy for debugging or wiring
+   *  Show Assembly off the same compile. */
+  asm?: string;
+  /** Parsed diagnostics from any stage. cc1's lookahead is the most
+   *  common source; as/ld can produce warnings too. */
+  diagnostics: Diagnostic[];
+  /** Verbatim stderr concatenated across stages with stage-prefix
+   *  separators. The Build UI's "details" disclosure renders this. */
+  rawStderr: string;
+  /** Which stage failed (1=cc1, 2=as, 3=ld, 4=Elf2Mac). Undefined on
+   *  success. Helps the UI write "Linker error" vs "Compile error". */
+  failedStage?: 1 | 2 | 3 | 4;
+  /** Total wall time across all four stages, ms. */
+  totalMs: number;
+  stages?: CompileToBinStages;
+}
+
+/**
+ * Compile a single C translation unit all the way to a structurally-valid
+ * single-fork MacBinary II APPL — same pipeline `spike/wasm-cc1/test/full-pipeline.mjs`
+ * proves Node-side.
+ *
+ * The four wasm tools are loaded lazily on first call. Subsequent calls
+ * reuse the cached Modules and overwrite their MEMFS scratch files. Each
+ * tool gets its own MEMFS; we shuttle files via `FS.readFile` → `FS.writeFile`
+ * between stages.
+ *
+ * `sourceName` flows into cc1's `.file` directive and into the names of
+ * temporary MEMFS files. The sibling-file plumbing (project `.c`/`.h`
+ * companions) mirrors `compileToAsm`'s contract — see CompileToAsmOptions.
+ */
+export async function compileToBin(
+  baseUrl: string,
+  source: string,
+  sourceName: string,
+  options?: CompileToAsmOptions,
+): Promise<CompileToBinResult> {
+  const t0 = performance.now();
+  const stages: CompileToBinStages = { cc1Ms: 0, asMs: 0, ldMs: 0, elf2macMs: 0 };
+  const allDiags: Diagnostic[] = [];
+  const stderrParts: string[] = [];
+
+  // Normalize the source filename. Same rules as compileToAsm.
+  const safeName = safeRelativePath(sourceName) ?? "in.c";
+
+  // ── Stage 1: cc1 ────────────────────────────────────────────────────
+  const cc1 = await loadCc1Tool(baseUrl);
+  const cc1In = `/tmp/${safeName}`;
+  const cc1Out = `/tmp/out.s`;
+  for (const p of [cc1In, cc1Out]) {
+    try { cc1.Module.FS.unlink(p); } catch {}
+  }
+  // Sibling files (project .c/.h) — mirror compileToAsm's logic.
+  const tmpDirs = new Set<string>(["/tmp"]);
+  if (options?.siblings) {
+    for (const sib of options.siblings) {
+      const sibSafe = safeRelativePath(sib.name);
+      if (!sibSafe || sibSafe === safeName) continue;
+      const sibPath = `/tmp/${sibSafe}`;
+      mkdirP(cc1.Module, sibPath, tmpDirs);
+      cc1.Module.FS.writeFile(sibPath, sib.content);
+    }
+  }
+  mkdirP(cc1.Module, cc1In, tmpDirs);
+  cc1.Module.FS.writeFile(cc1In, source);
+  const cc1Start = performance.now();
+  const cc1Rc = callMainSafe(cc1, [
+    "-quiet",
+    "-isystem", "/sysroot/gcc-include",
+    "-isystem", "/sysroot/include",
+    "-mcpu=68020",
+    cc1In,
+    "-o", cc1Out,
+  ]);
+  stages.cc1Ms = performance.now() - cc1Start;
+  const cc1Stderr = cc1.stderr.join("\n");
+  if (cc1Stderr) stderrParts.push(`[cc1]\n${cc1Stderr}`);
+  allDiags.push(...parseCc1Stderr(cc1Stderr, sourceName));
+  if (cc1Rc !== 0) {
+    return {
+      ok: false,
+      diagnostics: allDiags.length ? allDiags : [{
+        file: sourceName, line: 1, column: 1, severity: "error",
+        message: `cc1 exited rc=${cc1Rc}`,
+      }],
+      rawStderr: stderrParts.join("\n\n"),
+      failedStage: 1,
+      totalMs: performance.now() - t0,
+      stages,
+    };
+  }
+  const sBytes = cc1.Module.FS.readFile(cc1Out);
+  const asmText = new TextDecoder().decode(sBytes);
+
+  // ── Stage 2: as ─────────────────────────────────────────────────────
+  const as = await loadAsTool(baseUrl);
+  for (const p of ["/tmp/in.s", "/tmp/out.o"]) {
+    try { as.Module.FS.unlink(p); } catch {}
+  }
+  as.Module.FS.writeFile("/tmp/in.s", sBytes);
+  const asStart = performance.now();
+  const asRc = callMainSafe(as, ["-march=68020", "/tmp/in.s", "-o", "/tmp/out.o"]);
+  stages.asMs = performance.now() - asStart;
+  const asStderr = as.stderr.join("\n");
+  if (asStderr) stderrParts.push(`[as]\n${asStderr}`);
+  if (asRc !== 0) {
+    return {
+      ok: false, asm: asmText,
+      diagnostics: [...allDiags, {
+        file: sourceName, line: 1, column: 1, severity: "error",
+        message: `as exited rc=${asRc}: ${asStderr.split("\n")[0] ?? "(no message)"}`,
+      }],
+      rawStderr: stderrParts.join("\n\n"),
+      failedStage: 2,
+      totalMs: performance.now() - t0,
+      stages,
+    };
+  }
+  const oBytes = as.Module.FS.readFile("/tmp/out.o");
+
+  // ── Stage 3: ld ─────────────────────────────────────────────────────
+  const ld = await loadLdTool(baseUrl);
+  for (const p of ["/tmp/in.o", "/tmp/out.gdb"]) {
+    try { ld.Module.FS.unlink(p); } catch {}
+  }
+  ld.Module.FS.writeFile("/tmp/in.o", oBytes);
+  const ldStart = performance.now();
+  const ldRc = callMainSafe(ld, [
+    "-T", "/sysroot/ld/retro68-flat.ld",
+    "-L", "/sysroot/lib",
+    "--no-warn-rwx-segments",
+    "-o", "/tmp/out.gdb",
+    "/tmp/in.o",
+    "/sysroot/lib/libretrocrt.a",
+    "/sysroot/lib/libInterface.a",
+    "/sysroot/lib/libc.a",
+  ]);
+  stages.ldMs = performance.now() - ldStart;
+  const ldStderr = ld.stderr.join("\n");
+  if (ldStderr) stderrParts.push(`[ld]\n${ldStderr}`);
+  if (ldRc !== 0) {
+    return {
+      ok: false, asm: asmText,
+      diagnostics: [...allDiags, {
+        file: sourceName, line: 1, column: 1, severity: "error",
+        message: `ld exited rc=${ldRc}: ${ldStderr.split("\n")[0] ?? "(no message)"}`,
+      }],
+      rawStderr: stderrParts.join("\n\n"),
+      failedStage: 3,
+      totalMs: performance.now() - t0,
+      stages,
+    };
+  }
+  const elfBytes = ld.Module.FS.readFile("/tmp/out.gdb");
+
+  // ── Stage 4: Elf2Mac ────────────────────────────────────────────────
+  // Output filename MUST end in `.bin` — Elf2Mac's autodetect maps
+  // extension → format, and any non-`.bin` falls through to Linux
+  // split-fork mode (3 files, not MacBinary). See wasm-retro-cc
+  // LEARNINGS.md "Phase 2.3d".
+  // Elf2Mac reads the ELF from `<outputFile>.gdb`, legacy hangover from
+  // when it spawned real ld. Convert-only mode preserves that path.
+  const e2m = await loadElf2MacTool(baseUrl);
+  for (const p of ["/tmp/out.bin", "/tmp/out.bin.gdb"]) {
+    try { e2m.Module.FS.unlink(p); } catch {}
+  }
+  e2m.Module.FS.writeFile("/tmp/out.bin.gdb", elfBytes);
+  const e2mStart = performance.now();
+  const e2mRc = callMainSafe(e2m, ["--elf2mac", "-o", "/tmp/out.bin"]);
+  stages.elf2macMs = performance.now() - e2mStart;
+  const e2mStderr = e2m.stderr.join("\n");
+  if (e2mStderr) stderrParts.push(`[Elf2Mac]\n${e2mStderr}`);
+  if (e2mRc !== 0) {
+    return {
+      ok: false, asm: asmText,
+      diagnostics: [...allDiags, {
+        file: sourceName, line: 1, column: 1, severity: "error",
+        message: `Elf2Mac exited rc=${e2mRc}: ${e2mStderr.split("\n")[0] ?? "(no message)"}`,
+      }],
+      rawStderr: stderrParts.join("\n\n"),
+      failedStage: 4,
+      totalMs: performance.now() - t0,
+      stages,
+    };
+  }
+  let binBytes: Uint8Array;
+  try {
+    binBytes = e2m.Module.FS.readFile("/tmp/out.bin");
+  } catch (e) {
+    return {
+      ok: false, asm: asmText,
+      diagnostics: [...allDiags, {
+        file: sourceName, line: 1, column: 1, severity: "error",
+        message: `Elf2Mac returned 0 but no /tmp/out.bin: ${(e as Error).message}`,
+      }],
+      rawStderr: stderrParts.join("\n\n"),
+      failedStage: 4,
+      totalMs: performance.now() - t0,
+      stages,
+    };
+  }
+
+  return {
+    ok: true,
+    bin: binBytes,
+    asm: asmText,
+    diagnostics: allDiags,
+    rawStderr: stderrParts.join("\n\n"),
+    totalMs: performance.now() - t0,
+    stages,
+  };
+}
