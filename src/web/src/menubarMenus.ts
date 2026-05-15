@@ -198,10 +198,90 @@ export function mountMenubar(actions: MenubarActions): () => void {
     closeDropdown();
   }
 
+  function focusableItems(): HTMLButtonElement[] {
+    return Array.from(
+      overlay.querySelectorAll<HTMLButtonElement>("[data-menu-action]"),
+    );
+  }
+
+  function menubarTriggers(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>("[data-menu]"));
+  }
+
+  function focusItem(idx: number): void {
+    const items = focusableItems();
+    if (items.length === 0) return;
+    const wrapped = ((idx % items.length) + items.length) % items.length;
+    items[wrapped]!.focus();
+  }
+
+  function switchToNeighborMenu(direction: 1 | -1): void {
+    if (!openTrigger) return;
+    const triggers = menubarTriggers();
+    const i = triggers.indexOf(openTrigger);
+    if (i < 0) return;
+    const next = triggers[(i + direction + triggers.length) % triggers.length];
+    if (!next) return;
+    closeDropdown();
+    openDropdown(next.dataset.menu!, next);
+    // Focus the menubar trigger so further left/right keep working;
+    // ArrowDown then moves into the dropdown.
+    next.focus();
+  }
+
   function onKey(e: KeyboardEvent): void {
     if (e.key === "Escape" && openMenuKey) {
       closeDropdown();
       return;
+    }
+    // Arrow-key navigation while a dropdown is open. The classic Mac
+    // menubar walk: Down/Up move through items, Enter fires, Left/Right
+    // jump to neighbour menus.
+    if (openMenuKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      switch (e.key) {
+        case "ArrowDown": {
+          e.preventDefault();
+          const items = focusableItems();
+          const cur = items.indexOf(document.activeElement as HTMLButtonElement);
+          focusItem(cur + 1);
+          return;
+        }
+        case "ArrowUp": {
+          e.preventDefault();
+          const items = focusableItems();
+          const cur = items.indexOf(document.activeElement as HTMLButtonElement);
+          focusItem(cur === -1 ? items.length - 1 : cur - 1);
+          return;
+        }
+        case "Home":
+          e.preventDefault();
+          focusItem(0);
+          return;
+        case "End": {
+          e.preventDefault();
+          const items = focusableItems();
+          focusItem(items.length - 1);
+          return;
+        }
+        case "ArrowLeft":
+          e.preventDefault();
+          switchToNeighborMenu(-1);
+          return;
+        case "ArrowRight":
+          e.preventDefault();
+          switchToNeighborMenu(1);
+          return;
+        case "Enter":
+        case " ": {
+          const active = document.activeElement as HTMLButtonElement | null;
+          if (active && active.matches("[data-menu-action]")) {
+            e.preventDefault();
+            active.click();
+            return;
+          }
+          break;
+        }
+      }
     }
     // Global Cmd-key (Mac) / Ctrl-key (other) dispatch. We honour
     // shortcuts only when the modifier is held AND the key is a
