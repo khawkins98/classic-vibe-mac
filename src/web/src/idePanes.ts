@@ -113,12 +113,7 @@ function macHtml(): string {
       <div class="inset" id="emulator">
         <div id="emulator-canvas-mount" class="emulator-mount"></div>
       </div>
-      <div class="emulator-caption" role="group" aria-label="Emulator preferences">
-        <label class="cvm-check">
-          <input type="checkbox" id="cvm-pause-when-hidden" />
-          <span class="cvm-check__box" aria-hidden="true"></span>
-          <span class="cvm-check__label">Pause emulator when tab is hidden</span>
-        </label>
+      <div class="emulator-caption" role="group" aria-label="Emulator status">
         <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
       </div>
     </div>

@@ -40,7 +40,7 @@ import {
   makeRetro68DefaultSizeFork,
 } from "./build";
 import { compileToAsm, compileToBin } from "./cc1";
-import { getOptLevel, setOptLevel } from "../settings";
+import { getOptLevel, onOptLevelChange } from "../settings";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
   showBuildExplainer,
@@ -105,9 +105,6 @@ export async function mountPlayground(
   const tabBarEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-tabbar")!;
   const downloadBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-download",
-  )!;
-  const optSelect = rootEl.querySelector<HTMLSelectElement>(
-    "#cvm-pg-opt-level",
   )!;
   const buildBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-build")!;
   const buildRunBtn = rootEl.querySelector<HTMLButtonElement>(
@@ -605,15 +602,11 @@ export async function mountPlayground(
     void switchTo(newId, newProject.files[0]!);
   });
 
-  // Optimization level dropdown — read initial state from settings.ts
-  // (persisted in localStorage; default "O0") and write back on change.
-  // Changing the level triggers a debounced re-compile in the Show
-  // Assembly panel so the user sees the new codegen immediately.
-  optSelect.value = getOptLevel();
-  optSelect.addEventListener("change", () => {
-    const v = optSelect.value as "O0" | "Os" | "O2";
-    setOptLevel(v);
-    console.info(`[cvm] optimization level: -${v}`);
+  // Optimization level lives in Preferences (Edit menu) now. Subscribe
+  // here so any change — from the prefs palette or cross-tab storage —
+  // refreshes the Show Assembly panel with the new codegen.
+  onOptLevelChange(() => {
+    console.info(`[cvm] optimization level: -${getOptLevel()}`);
     scheduleAsmCompile("opt-level");
   });
 
@@ -1016,15 +1009,6 @@ function renderShell(persistent: boolean, preservedCount: number): string {
           <span class="cvm-pg-iconbtn__icon" aria-hidden="true">💾</span>
           <span class="cvm-pg-iconbtn__label">Download</span>
         </button>
-        <label class="cvm-pg-opt"
-               title="GCC optimization level — applies to both Build and Show Assembly">
-          <span class="cvm-pg-opt__label">Optimize</span>
-          <select id="cvm-pg-opt-level" class="cvm-pg-opt__select">
-            <option value="O0">-O0 (none)</option>
-            <option value="Os">-Os (size)</option>
-            <option value="O2">-O2 (speed)</option>
-          </select>
-        </label>
       </div>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
