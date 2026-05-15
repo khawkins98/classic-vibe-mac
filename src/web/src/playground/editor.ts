@@ -562,7 +562,7 @@ export async function mountPlayground(
     } finally {
       loadingFile = false;
     }
-    updateNonCompiledBanner(nextFile);
+    updateNonCompiledBanner(nextFile, nextProject);
     renderTabBar(nextProject, nextFile);
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
@@ -572,17 +572,24 @@ export async function mountPlayground(
   }
 
   // Show / hide the "this file isn't compiled in your browser" banner
-  // based on the active file. See isCompiledInBrowser() for the rule and
-  // issue #57 for the in-browser-C-compile feasibility study.
+  // based on the active file + project. The banner only fires when the
+  // user is on a .c/.h file in a splice-path project (rezFile !== null);
+  // wasm-hello and other in-browser-C projects suppress it because their
+  // .c edits *do* feed back into the running binary. See
+  // isCompiledInBrowser() for the rule and LEARNINGS Key Story #6 for
+  // the closed-as-infeasible-but-actually-possible context.
   const nonCompiledBanner = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-noncompiled-banner",
   );
-  function updateNonCompiledBanner(filename: string): void {
+  function updateNonCompiledBanner(
+    filename: string,
+    proj: SampleProject,
+  ): void {
     if (!nonCompiledBanner) return;
-    nonCompiledBanner.hidden = isCompiledInBrowser(filename);
+    nonCompiledBanner.hidden = isCompiledInBrowser(filename, proj);
   }
-  // Initial state matches the file the editor opens with.
-  updateNonCompiledBanner(filename);
+  // Initial state matches the file + project the editor opens with.
+  updateNonCompiledBanner(filename, project);
 
   projectSelect.addEventListener("change", () => {
     const newId = projectSelect.value;
@@ -985,19 +992,26 @@ function extensionsForFile(filename: string) {
 
 /**
  * Whether edits to this file are actually compiled by the in-browser
- * pipeline. Today only Rez resource files (`.r`) recompile here — WASM-Rez
- * produces a fresh resource fork, the Build pipeline splices it onto the
- * precompiled `.code.bin` (data fork) emitted by CI. Everything else (`.c`,
- * `.h`, `CMakeLists.txt`) is read-only as far as the running binary is
- * concerned: edits save to IndexedDB and ride along in Download .zip, but
- * the data fork in the built `.bin` is whatever CI compiled from main.
+ * pipeline for the given project. Two compile paths:
  *
- * The full in-browser C compile path is tracked in issue #57 (TinyCC
- * spike + alternatives) — until that lands, this helper drives the
- * "this file isn't compiled in your browser" warning banner.
+ *   - **Splice path** (project has a `rezFile`): WASM-Rez recompiles
+ *     `.r` files in-browser and splices the new resource fork onto a
+ *     CI-precompiled `.code.bin`. `.c`/`.h` edits ride along in
+ *     Download .zip but the running binary uses CI's data fork.
+ *   - **Full in-browser C path** (project has `rezFile === null`):
+ *     `cc1` + `as` + `ld` + `Elf2Mac` compile the project's `.c`
+ *     sources end-to-end via `compileToBin()`. `.c`/`.h` edits are
+ *     live. (Shipped 2026-05-15; see LEARNINGS Key Story #6.)
+ *
+ * Drives the project-aware warning banner: shown only when the user
+ * is on a file whose edits *don't* feed back into the running binary
+ * — i.e. `.c`/`.h` on a splice-path project. Wasm-hello and other
+ * `rezFile === null` projects compile `.c` in-browser, so no banner.
  */
-function isCompiledInBrowser(filename: string): boolean {
-  return /\.r$/i.test(filename);
+function isCompiledInBrowser(filename: string, project: SampleProject): boolean {
+  if (/\.r$/i.test(filename)) return true;
+  if (/\.[ch]$/i.test(filename)) return project.rezFile === null;
+  return false;
 }
 
 function escapeHtml(s: string): string {
@@ -1049,9 +1063,11 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         real C and Rez code for the apps running in the Mac above. Edits
         save automatically in your browser. Hit <em>Build .bin</em> to
         compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes. Only <code>.r</code> resource
-        files recompile in-browser today; <code>.c</code> / <code>.h</code>
-        edits save locally and ride along in <em>Download .zip</em>.
+        to reboot the Mac with your changes. Some projects compile their
+        <code>.c</code> sources fully in your browser (<em>Wasm Hello</em>);
+        others splice your edited resource fork onto a CI-precompiled
+        code fork (<em>Reader</em>, <em>MacWeather</em>, etc.). The
+        banner below tells you which mode is active.
       </p>
       ${banner}
       ${migrationBanner}
@@ -1084,11 +1100,13 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         </button>
       </div>
       <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
-        <strong>Note:</strong> <code>.c</code> / <code>.h</code> edits save
-        locally and ride along in <em>Download .zip</em>, but only
-        <code>.r</code> resource files recompile in-browser &mdash; the
-        compiled binary in the emulator reflects whatever CI built from
-        <code>main</code>. Switch to a <code>.r</code> tab to see live changes.
+        <strong>Heads-up:</strong> for this project, <code>.c</code> /
+        <code>.h</code> edits save locally and ride along in
+        <em>Download .zip</em>, but the running binary uses a
+        CI-precompiled code fork &mdash; <code>.r</code> resource-fork
+        edits are what recompile in-browser here. To see <code>.c</code>
+        edits compile live in your tab, open the <em>Wasm Hello</em>
+        project instead.
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
