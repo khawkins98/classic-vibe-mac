@@ -28,6 +28,8 @@ import { SAMPLE_PROJECTS } from "./playground/types";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
 
+export type PaneKey = "files" | "editor" | "mac" | "output";
+
 export interface IdePaneHandles {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   files: any;
@@ -37,6 +39,9 @@ export interface IdePaneHandles {
   mac: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   output: any;
+  /** Reset all four panes to their initial tiled positions (e.g. after
+   *  the user has dragged them off-screen). */
+  reset: () => void;
 }
 
 const MENUBAR_HEIGHT = 24;
@@ -162,23 +167,23 @@ function outputHtml(): string {
 }
 
 interface PaneSpec {
-  key: keyof IdePaneHandles;
+  key: PaneKey;
   title: string;
   html: string;
   cssClass: string;
 }
 
 /** Build the 4 docked WinBox panes. Returns the handles so callers can
- *  hide/show/focus individual panes (e.g. the "Show editor" toggle). */
+ *  hide/show/focus individual panes or reset the layout. */
 export function mountIdePanes(): IdePaneHandles {
-  const layout = initialLayout();
   const specs: PaneSpec[] = [
-    { key: "files",  title: "Project",   html: filesHtml(),  cssClass: "cvm-pane-files" },
+    { key: "files",  title: "Project",    html: filesHtml(),  cssClass: "cvm-pane-files" },
     { key: "editor", title: "Playground", html: editorHtml(), cssClass: "cvm-pane-editor" },
-    { key: "mac",    title: "Macintosh", html: macHtml(),    cssClass: "cvm-pane-mac" },
-    { key: "output", title: "Output",    html: outputHtml(), cssClass: "cvm-pane-output" },
+    { key: "mac",    title: "Macintosh",  html: macHtml(),    cssClass: "cvm-pane-mac" },
+    { key: "output", title: "Output",     html: outputHtml(), cssClass: "cvm-pane-output" },
   ];
 
+  const layout = initialLayout();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handles: Partial<IdePaneHandles> = {};
   for (const s of specs) {
@@ -201,6 +206,22 @@ export function mountIdePanes(): IdePaneHandles {
     enableShade(wb);
     handles[s.key] = wb;
   }
+
+  handles.reset = () => {
+    const fresh = initialLayout();
+    for (const s of specs) {
+      const wb = handles[s.key];
+      if (!wb) continue;
+      const pos = fresh[s.key];
+      try {
+        wb.move(pos.x, pos.y, true);
+        wb.resize(pos.w, pos.h, true);
+        wb.focus();
+      } catch {
+        /* WinBox shape mismatch — skip */
+      }
+    }
+  };
 
   return handles as IdePaneHandles;
 }
