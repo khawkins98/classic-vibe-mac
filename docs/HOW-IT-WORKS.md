@@ -1,6 +1,6 @@
 # How It Works
 
-_Last updated: 2026-05-09._
+_Last updated: 2026-05-15._
 
 A guided tour for the curious developer. What actually happens when
 you load `https://khawkins98.github.io/classic-vibe-mac/`, what you
@@ -133,8 +133,66 @@ Warm round trip: **~820ms in production today**, well under the
 "sub-second" goal. First click after page load is ~1.5s (WASM-Rez
 instantiation + RIncludes parse).
 
-That's the loop. Edit a string, watch the Mac re-launch with your
-change. Single tab, no install, no auth, no server.
+That's the resource-only loop. Edit a string, watch the Mac
+re-launch with your change. Single tab, no install, no auth, no
+server.
+
+### 8. Build & Run for `.c` files: the full C-compiler in the tab (shipped 2026-05-15)
+
+The `.r`-only path above splices new resources onto a *precompiled*
+data fork — the C code comes from CI. But for the `wasm-hello/`
+project (and, soon, any user-supplied `.c`-only project), the page
+goes one step further: **it compiles the C source itself in the
+browser.**
+
+When you Build & Run a `.c`-only project, the page:
+
+1. Reads all `.c` source files from IndexedDB.
+2. Loads four wasm modules — the Retro68 toolchain Emscripten-built
+   in the sibling [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc)
+   repo:
+   - `cc1.wasm` (~3.3 MB brotli) — GCC's C compiler proper
+   - `as.wasm` (~270 KB brotli) — GNU `as`, the assembler
+   - `ld.wasm` (~304 KB brotli) — GNU `ld`, the linker
+   - `Elf2Mac.wasm` (~80 KB brotli) — Retro68's ELF → MacBinary
+     converter
+   Total in-browser toolchain: **~3.9 MB brotli**, lazy-loaded on
+   first Build click; cached thereafter.
+3. Pipes each `.c` through `cc1` → `.s`, then `as` → `.o`. All
+   via MEMFS — no real filesystem.
+4. Calls `ld` with all `.o` files + the bundled archives
+   (`libretrocrt.a`, `libInterface.a`, `libc.a`, `libm.a`,
+   `libgcc.a`) + the multi-segment ld script from `wasm-retro-cc`,
+   producing an ELF.
+5. Calls `Elf2Mac` to convert the ELF into MacBinary II APPL
+   format with proper CODE-resource segmentation, jump table, A5
+   world setup, and `RELA` runtime-relocation entries (the latter
+   was the hard-won discovery — see
+   [LEARNINGS Key Story #5](../LEARNINGS.md#5-the-canonical-build-diff-is-the-highest-leverage-diagnostic-when-bypassing-the-gcc-driver--use-it-first-not-last)).
+6. Splices a default SIZE resource (libretrocrt needs the heap
+   sized properly).
+7. Hands the resulting `.bin` to the same in-memory HFS patcher
+   the `.r` path uses, calls `dispose()` + `boot()` on the worker.
+
+Warm round trip: **~1.5s** (cc1+as+ld+Elf2Mac runs in 30-50ms
+total once the modules are loaded; the rest is HFS-patch + worker
+respawn). Cold first-click: ~3-5s (lazy-load the toolchain).
+
+The orchestration layer is `src/web/src/playground/cc1.ts`'s
+`compileToBin()` function. The wasm modules themselves come from
+[`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc) and
+are vendored as binary assets under
+`src/web/public/wasm-cc1/`. The cv-mac side does not implement
+the compiler; it orchestrates four modules someone else's Retro68
+project produced, in the same way GCC's driver normally
+orchestrates them on a desktop system.
+
+This is the capability Epic #19 originally closed as "4-9
+engineer-months." It shipped in ~2 weeks once the path was
+reframed as "wasm-compile the existing tools" instead of "port
+GCC's fork/exec model." See
+[LEARNINGS Key Story #6](../LEARNINGS.md#6-closed-as-infeasible-epics-describe-a-path-not-the-universal-answer--survey-alternative-paths-before-locking-the-closure-rationale-in-as-wisdom)
+for the closed-as-infeasible retrospective.
 
 ---
 
@@ -194,8 +252,13 @@ trade.
   preferred. There is no garbage collector, no
   malloc-without-thinking-about-it.
 - **Build speed.** The 68k cross-compile in CI is ~3-4 minutes end
-  to end. The in-browser Rez loop is ~1s, but that's _resource
-  edits only_. C source changes go through CI.
+  to end. The in-browser Rez loop is ~1s for resource edits;
+  **the in-browser C compile loop is ~1.5s warm** (cold first-click
+  is ~3-5s for the lazy-load of the 3.9 MB brotli toolchain). For
+  the bundled boot-disk apps (Reader, MacWeather, etc.) C source
+  changes still go through CI — they're built into the boot disk
+  before the page boots. For in-browser projects like `wasm-hello`,
+  everything is in-tab.
 - **`console.log`.** No stdout in System 7. Debugging is
   `DebugStr`, `MoveTo` + `DrawString` to a debug window, or
   recompile-and-launch.
@@ -237,10 +300,21 @@ browser tab, with zero install. That's the differentiator.
 
 What you **can't** do here today:
 
-- **Edit C source and recompile from scratch in-browser.** Killed
-  in [Epic #19](https://github.com/khawkins98/classic-vibe-mac/issues/19).
-  Porting GCC + linker to WASM is 4-9 engineer-months. Today, C
-  source changes go through `git push` → CI (~3-4 min).
+- ~~**Edit C source and recompile from scratch in-browser.**~~
+  This used to be "killed in Epic #19" — 4-9 engineer-months
+  to port GCC + linker to WASM. **Shipped 2026-05-15** via a
+  different path (wasm-compile Retro68's existing toolchain
+  instead of porting GCC from scratch). For projects like
+  `wasm-hello` you can now edit C source and rebuild end-to-end
+  in the browser in ~1.5s. The bundled boot-disk apps still go
+  through CI (their resource forks have CMake recipes the
+  in-browser path doesn't yet handle) — see
+  [#100](https://github.com/khawkins98/classic-vibe-mac/issues/100)
+  for the mixed C + `.r` roadmap.
+- **Multi-file C projects, mixed C + `.r` in one in-browser build.**
+  Single C source file in, single MacBinary II out — the current
+  limit of the in-browser pipeline. Multi-file support is the next
+  step ([#100](https://github.com/khawkins98/classic-vibe-mac/issues/100)).
 - **Debug with breakpoints.** No source-level debugger. Add
   `DrawString` calls or run the binary under MacsBug locally.
 - **Use Inside Macintosh's full API surface interactively.** You
@@ -276,10 +350,16 @@ the rest of the docs:
 - [`docs/PLAYGROUND.md`](./PLAYGROUND.md) — The playground design
   rationale (Epic #21), the five-reviewer pass that produced
   option 2F, the open child issues, and the closed-Epic graveyard
-  (Epic #12 real-TCP, Epic #19 in-browser GCC). Read this if you
-  want to extend the editor or build pipeline, or before you
-  propose anything that smells like "what if we just added a
-  backend."
+  (Epic #12 real-TCP, Epic #19 in-browser GCC — note that #19's
+  *compilation* capability shipped 2026-05-15 via a different
+  path; see § Epic #19 follow-up). Read this if you want to
+  extend the editor or build pipeline, or before you propose
+  anything that smells like "what if we just added a backend."
+- [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc) —
+  Sister repo. The wasm-built toolchain (cc1 + as + ld + Elf2Mac)
+  consumed by the in-browser C compile path. Read this if you're
+  modifying the toolchain itself or want to understand how
+  Retro68 → WASM was approached.
 - [`docs/DEVELOPMENT.md`](./DEVELOPMENT.md) — Iterating locally.
   How to run the dev server, how to rebuild the boot disk, how to
   test against the chunked manifest, how to use the host-testable

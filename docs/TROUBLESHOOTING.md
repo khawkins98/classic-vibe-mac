@@ -20,6 +20,10 @@ Cross-links: [`DEVELOPMENT.md`](./DEVELOPMENT.md) (iteration loops),
 | Local Docker build fails with `permission denied` | Container runs as root; bind-mount FS restrictions | Build to a path inside the container and copy out (see below). |
 | `hls` says "no such file or directory" for a path that exists | Mac-style HFS paths, not UNIX paths | Use `:` or empty string for root, `:System Folder:` for subdirectory — not `/`. |
 | Build & Run succeeds but app doesn't appear | App is on the secondary "Apps" disk, not the boot disk | Open the "Apps" volume icon on the Mac desktop, then double-click the app inside. |
+| In-browser C build shows `cc1 exited rc=1` after the first successful build | cc1.wasm's static state (GCC's `decode_options`) persists across `Module.callMain` invocations — second call sees the first's `-o` flag and errors. | Fresh `Module` instance per compile call (this is what `compileToBin` already does — if you hit this in your own code, don't reuse the same cc1 Module). LEARNINGS Key Story #3. |
+| In-browser C build: WasmHello downloads but bombs with type-3 at launch | Likely the `--emit-relocs` ld flag is missing — relocations aren't preserved in the output ELF so `Retro68Relocate` walks empty RELA at runtime and pointers fault. | Already fixed on main (cv-mac #97). If you're forking, make sure `cc1.ts`'s ld argv includes `--emit-relocs`. |
+| In-browser C build fails with `unknown filename` or similar MEMFS error | The compile pipeline writes intermediate files to `/tmp/` in the Module FS; a previous failed run may have left stale files | Reload the page (each fresh page load gets fresh Modules). Or check `src/web/src/playground/cc1.ts` for `FS.unlink` calls before each write. |
+| `bundleVersion` in console doesn't change after deploying a toolchain fix | `bundleVersion` hashes the C sample sources only, not the wasm-cc1 toolchain. Toolchain updates change `toolchainVersion` instead. | Look for `toolchainVersion=<hex>` in the same `[cvm] build` console line. |
 
 ---
 
