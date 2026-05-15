@@ -138,6 +138,34 @@ function readSeedContents(): { contents: Map<string, string>; hash: string } {
   return { contents, hash: hasher.digest("hex").slice(0, 16) };
 }
 
+// Hash the wasm-cc1 toolchain bundle (cc1/as/ld/Elf2Mac + sysroot blobs).
+// BUNDLE_VERSION only covers the C sample sources, so toolchain-only
+// updates (e.g. a new ld script vendored from wasm-retro-cc) don't show
+// up there. This produces a separate stamp the user can grep for in the
+// console log: "did my browser actually get the new toolchain?"
+const TOOLCHAIN_FILES = [
+  "cc1.wasm",
+  "as.wasm",
+  "ld.wasm",
+  "Elf2Mac.wasm",
+  "sysroot.bin",
+  "sysroot.index.json",
+  "sysroot-libs.bin",
+  "sysroot-libs.index.json",
+];
+
+function readToolchainHash(): string {
+  const hasher = createHash("sha256");
+  for (const f of TOOLCHAIN_FILES) {
+    const p = join(PUBLIC_DIR, "wasm-cc1", f);
+    if (!existsSync(p)) continue;
+    hasher.update(`${f}\n`);
+    hasher.update(readFileSync(p));
+    hasher.update("\n--\n");
+  }
+  return hasher.digest("hex").slice(0, 16);
+}
+
 function writeSeedToPublic(contents: Map<string, string>): void {
   for (const [key, body] of contents) {
     const out = join(PUBLIC_DIR, "sample-projects", key);
@@ -168,6 +196,7 @@ function playgroundSeedPlugin(): Plugin {
         define: {
           __CVM_BUNDLE_VERSION__: JSON.stringify(hash),
           __CVM_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+          __CVM_TOOLCHAIN_VERSION__: JSON.stringify(readToolchainHash()),
         },
       };
     },

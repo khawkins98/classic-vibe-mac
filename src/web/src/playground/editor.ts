@@ -714,12 +714,13 @@ export async function mountPlayground(
     try {
       const result = await runBuild(baseUrl, proj, view, current.filename);
       if (result.ok) {
+        const stampedName = withBuildTimestamp(proj.outputName);
         setStatus(
           statusEl,
-          `Built ${proj.outputName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
+          `Built ${stampedName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
           "ok",
         );
-        triggerDownload(result.bytes!, proj.outputName);
+        triggerDownload(result.bytes!, stampedName);
       } else {
         const first = result.diagnostics[0];
         const msg = first
@@ -1160,6 +1161,18 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+// Insert a YYYYMMDD-HHMM stamp before the extension so successive
+// downloads of the same project don't collide in the user's Downloads
+// folder. Local time (not UTC) so the stamp matches the user's wall
+// clock — they're using it as an "is this the one I just built?" check.
+function withBuildTimestamp(name: string): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const dot = name.lastIndexOf(".");
+  return dot < 0 ? `${name}-${stamp}` : `${name.slice(0, dot)}-${stamp}${name.slice(dot)}`;
 }
 
 interface BuildOutcome {
