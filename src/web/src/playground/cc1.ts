@@ -197,6 +197,10 @@ async function loadModule(baseUrl: string): Promise<Cc1Module> {
  *  paths are rejected. Same rule applies to `sourceName`. */
 export interface CompileToAsmOptions {
   siblings?: ReadonlyArray<{ name: string; content: string }>;
+  /** Optimization level for cc1 (cv-mac #100 Phase E). Defaults to
+   *  `"O0"` — matches the existing pipeline so showing assembly without
+   *  an explicit level doesn't surprise existing users. */
+  optLevel?: "O0" | "Os" | "O2";
 }
 
 export interface CompileToAsmResult {
@@ -277,6 +281,7 @@ export async function compileToAsm(
       "-isystem", "/sysroot/gcc-include",
       "-isystem", "/sysroot/include",
       "-mcpu=68020",
+      `-${options?.optLevel ?? "O0"}`,
       inPath,
       "-o", outPath,
     ]);
@@ -587,6 +592,11 @@ export interface CompileToBinOptions {
    *  per-source stderr lookup can pinpoint the failing source. Defaults
    *  to the first `.c` file in {@link sources}. */
   primaryName?: string;
+  /** GCC optimization level flag (cv-mac #100 Phase E). One of
+   *  `"O0"` (default), `"Os"`, `"O2"`. Passed verbatim to cc1 as
+   *  `-O<level>`. The caller reads this from `getOptLevel()` so the
+   *  toolbar dropdown is the single source of truth. */
+  optLevel?: "O0" | "Os" | "O2";
 }
 
 /**
@@ -669,6 +679,7 @@ export async function compileToBin(
       "-isystem", "/sysroot/gcc-include",
       "-isystem", "/sysroot/include",
       "-mcpu=68020",
+      `-${options.optLevel ?? "O0"}`,
       cc1In,
       "-o", cc1Out,
     ]);
