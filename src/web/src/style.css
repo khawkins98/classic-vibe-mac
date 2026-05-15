@@ -1139,138 +1139,233 @@ body.cvm-paused .emulator-canvas {
   vertical-align: middle;
 }
 
-/* --- Two-pane split layout (issue #45) -------------------------------- */
+/* --- Mac OS 8 IDE grid layout (#104, supersedes #45 split-pane) ------ */
 
 /*
- * `.cvm-split-layout` is always in the DOM. Below 1200px it's a plain block
- * container — the panes and divider are invisible wrappers and the windows
- * inside stack normally. At ≥1200px we switch to an IDE-style flex layout:
- *   - left pane: Macintosh + Read Me + Config (scrolls independently)
- *   - drag divider: 6px wide, Mac-chrome styled, pointer + keyboard resize
- *   - right pane: Playground editor (scrolls independently)
+ * `.cvm-ide` is always in the DOM. Below 1200px it's a plain block
+ * container — the grid cells are wrappers and content stacks vertically.
+ * At ≥1200px we switch to a 3-column CSS grid with the right column
+ * further split top/bottom into Mac (60%) + Output (40%):
  *
- * The split percentage is stored in the --split-pct CSS custom property on
- * the element itself (set via JS), defaulting to 65%.
+ *   +----------+-------------------+---------------------+
+ *   |          |                   |   Mac (top, 60%)    |
+ *   |  Files   |   Editor (2/5)    +---------------------+
+ *   |  (1/5)   |                   |   Output (bot, 40%) |
+ *   +----------+-------------------+---------------------+
+ *
+ * No drag-divider — proportions are fixed. If we need resizable cells
+ * later, CSS subgrid + a `resize` handle would be the idiom, not the
+ * old flex+pointer drag system.
+ *
+ * Compatibility class — kept on the element so the existing `data-editor-
+ * visible` attribute logic in main.ts still applies; renamed visually
+ * to .cvm-ide but the JS keeps using #cvm-split-layout for the ID.
  */
 
-.cvm-split-layout {
-  --split-pct: 65%;
-}
-
-/* At desktop width, activate the side-by-side layout. */
 @media (min-width: 1200px) {
-  /* Make the body viewport-locked so the two panes can independently scroll. */
   body {
-    overflow: hidden;
-    height: 100dvh;
+    overflow-x: hidden;
     padding-bottom: 0;
   }
 
-  /* The split layout fills the remaining height below the body's top padding
-     (30px accounts for the fixed menubar + breathing room). */
-  .cvm-split-layout {
-    display: flex;
+  /* IDE grid fills one viewport height under the menubar. */
+  .cvm-ide {
+    display: grid;
+    grid-template-columns: 20% 1fr 1fr;
+    grid-template-rows: 1.5fr 1fr;
+    gap: 8px;
     height: calc(100dvh - 30px);
+    padding: 6px;
     overflow: hidden;
-    gap: 0;
   }
 
-  /* Both panes scroll their own content. min-width: 0 lets flex shrink
-     below intrinsic content width (critical for CodeMirror). */
-  .cvm-split-pane {
-    overflow-y: auto;
-    overflow-x: hidden;
+  /* Files panel spans both rows on the left. */
+  .cvm-ide__files {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     min-width: 0;
-    padding: 0 8px 16px;
+    overflow: hidden;
   }
 
-  /* Left pane: fixed at --split-pct; contains the Mac + supporting windows. */
-  .cvm-split-pane--left {
-    flex: 0 0 var(--split-pct);
+  /* Editor spans both rows in the center column. */
+  .cvm-ide__editor {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-width: 0;
+    overflow: hidden;
   }
 
-  /* Right pane: takes the remaining space; contains the editor. */
-  .cvm-split-pane--right {
-    flex: 1 1 0;
+  /* Mac is top-right (~60% of right-column height). */
+  .cvm-ide__mac {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  /* Windows inside panes should fill the available width, overriding the
-     max-width caps that exist for the centered-stack layout. */
-  .cvm-split-pane .window,
-  .cvm-split-pane .window--wide,
-  .cvm-split-pane .window--narrow {
+  /* Output is bottom-right (~40% of right-column height). */
+  .cvm-ide__output {
+    grid-column: 3;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Windows inside the grid should fill their cell, overriding the
+     stacked-layout max-width caps. */
+  .cvm-ide .window,
+  .cvm-ide .window--wide,
+  .cvm-ide .window--narrow {
     max-width: 100%;
-    /* Remove the centering margin used in the stacked layout. */
-    margin-left: 0;
-    margin-right: 0;
+    margin: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
-  /* Hover lift on windows inside panes would shift layout — disable it. */
-  .cvm-split-pane .window:hover {
+  /* Window bodies inside the IDE grid need to scroll independently. */
+  .cvm-ide .window__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  /* Hover lift would shift the grid — disable inside the IDE. */
+  .cvm-ide .window:hover {
     transform: none;
   }
 
-  /* Editor hidden: collapse right pane and divider; left pane expands full. */
-  .cvm-split-layout[data-editor-visible="false"] .cvm-split-pane--right,
-  .cvm-split-layout[data-editor-visible="false"] .cvm-split-divider {
+  /* Mac pane: the canvas + caption fill the body without scrolling. */
+  .cvm-ide__mac-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .cvm-ide__mac .inset {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 8px;
+  }
+
+  /* Editor pane: make the inner playground content flex so the
+     CodeMirror editor expands to fill remaining vertical space
+     instead of stopping at its default 420px. */
+  .cvm-ide__editor > .window__body {
+    display: flex;
+    flex-direction: column;
+  }
+  .cvm-ide__editor .cvm-pg-editor {
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 240px;
+  }
+
+  /* Editor hidden (Mac-only focus mode): collapse the editor column;
+     the right column expands to fill the freed space. The files panel
+     stays visible because the project picker is a primary UI affordance
+     in IDE mode. Toggle is "Show editor" in the Mac window's caption. */
+  .cvm-ide[data-editor-visible="false"] .cvm-ide__editor {
     display: none;
   }
-
-  .cvm-split-layout[data-editor-visible="false"] .cvm-split-pane--left {
-    flex-basis: 100%;
+  .cvm-ide[data-editor-visible="false"] {
+    grid-template-columns: 20% 1fr;
+  }
+  .cvm-ide[data-editor-visible="false"] .cvm-ide__mac {
+    grid-column: 2;
+  }
+  .cvm-ide[data-editor-visible="false"] .cvm-ide__output {
+    grid-column: 2;
   }
 
-  /* The desktop icon is decorative. Hide it in the IDE layout to avoid
-     it appearing awkwardly above the split container. */
+  /* The desktop icon is decorative. Hide it in the IDE layout. */
   .desktop-icon {
     display: none;
   }
-}
 
-/* Drag divider — visible and styled only at desktop. */
-.cvm-split-divider {
-  display: none; /* hidden below 1200px — no drag handle in stacked layout */
-}
-
-@media (min-width: 1200px) {
-  .cvm-split-divider {
+  /* Below-fold marketing content: vertical stack, centered, with
+     comfortable padding. Scrollable below the IDE grid. */
+  .cvm-below-fold {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 6px;
-    cursor: col-resize;
-    /* Subtle vertical dots pattern reminiscent of Mac OS drag handles. */
-    background:
-      radial-gradient(circle, var(--shadow) 1px, transparent 1px) center / 4px 4px;
-    background-color: var(--platinum);
-    border-left: 1px solid var(--shadow);
-    border-right: 1px solid var(--highlight);
-    transition: background-color 0.1s;
-    outline: none;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 880px;
+    margin: 32px auto;
+    padding: 0 16px 64px;
   }
-
-  .cvm-split-divider:hover {
-    background-color: var(--platinum-light);
-  }
-
-  .cvm-split-divider:focus-visible {
-    outline: 2px solid var(--selection);
-    outline-offset: -1px;
+  .cvm-below-fold .window {
+    max-width: 100%;
   }
 }
 
-/* Body cursor + pointer-event muting during active drag. */
-body.cvm-resizing {
-  cursor: col-resize !important;
-  user-select: none;
+/* Below-fold defaults at every width: just normal block flow. */
+.cvm-below-fold {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 32px;
 }
 
-body.cvm-resizing .cvm-split-pane {
-  pointer-events: none;
+/* --- Files panel (left column) -------------------------------------- */
+
+.cvm-files {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cvm-files__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  flex: 0 0 auto;
+}
+.cvm-files__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  cursor: default;
+}
+.cvm-files__item:hover {
+  background: var(--platinum-light);
+}
+.cvm-files__icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.cvm-files__hint {
+  margin: 12px;
+  padding: 10px;
+  border: 1px dashed var(--shadow);
+  background: var(--platinum-light);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--shadow);
+}
+.cvm-files__hint a {
+  color: var(--accent, #336699);
 }
 
-body.cvm-resizing .cvm-split-divider {
-  pointer-events: auto;
+/* --- Output panel (bottom-right column) ----------------------------- */
+
+.cvm-output {
+  padding: 14px;
+}
+.cvm-output__hint {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed var(--shadow);
+  background: var(--platinum-light);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--shadow);
+}
+.cvm-output__hint strong {
+  color: var(--ink);
 }
 
 /* --- Responsive ----------------------------------------------------- */
