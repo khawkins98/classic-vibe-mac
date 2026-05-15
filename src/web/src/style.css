@@ -1218,6 +1218,14 @@ body.cvm-paused .emulator-canvas {
   margin-bottom: -1px; /* tabs sit on top of editor border */
 }
 
+/* The Mac OS 8 IDE layout (#104) surfaces the file list in the left
+   "Project" pane. The in-editor tab strip becomes redundant — hide it
+   while keeping the DOM, since main.ts's switchFile() drives the
+   editor by clicking these tabs programmatically. */
+.cvm-ide .cvm-pg-tabbar {
+  display: none;
+}
+
 .cvm-pg-tab {
   position: relative;
   padding: 2px 10px;
