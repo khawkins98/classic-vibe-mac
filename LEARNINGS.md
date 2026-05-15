@@ -65,6 +65,18 @@ rule:** assume single-shot for C-runtime wasm binaries until proven
 re-entrant. The Emscripten wrapper makes the API *look* re-entrant; the
 underlying program almost certainly isn't.
 
+### 5. The canonical-build diff is the highest-leverage diagnostic when bypassing the GCC driver — *use it first, not last*
+
+Three days of "structural-pass-but-runtime-fail" bug-hunting on the in-browser C pipeline (cv-mac #82–#92, wasm-retro-cc#22–#26) culminated in a type-3 in production with no obvious cause. After 7+ deploy-and-eyes cycles and a Musashi harness that couldn't see past Retro68Relocate's first Toolbox call, the actual fix took **45 minutes** once we did the right diagnostic: pull the Retro68 docker image, run `m68k-apple-macos-gcc -v -save-temps -Wl,--verbose hello.c -o hello` on a known-working hello.c, and diff its tool invocations against ours.
+
+**The fix was a single missing ld flag: `--emit-relocs` (`-q`).** Without it, ld applies relocation records in place and discards them — Elf2Mac then converts an ELF with no `.rela` sections into empty 2-byte 'RELA' resources, leaving libretrocrt's runtime relocator with nothing to apply. Any cross-segment pointer in the final binary still references its ELF virtual address (0x0000xxxx instead of the loaded 0x002000xx), and the first cross-segment call lands in low memory → type-3 address error at app launch.
+
+The canonical build's collect2 invocation has `-elf2mac -q -undefined=_consolewrite` plain in plain sight — flags we'd never inferred from first principles. Comparing ELF sections via `objdump -h` showed the smoking gun: canonical had `RELOC` flag on `.code00001`/`.code00002`/`.data`, ours didn't. Comparing the resulting RELA resources via the m68k-runner harness made it visible-at-a-glance: canonical RELA 1 = 230 B (real relocations), ours = 2 B (empty terminator).
+
+**General rule.** When you bypass the GCC driver (no CMake, no `m68k-apple-macos-gcc`, no `collect2`), you are off the documented path. The driver isn't a thin wrapper — it carries dozens of implicit flags, default library lists, link-script choices, and a post-processor wrapper for `Elf2Mac`. No published recipe describes "run cc1, as, ld, Elf2Mac as separate wasm modules from JS" because nobody had done it before us. **In that situation, the GCC driver's `-v` output IS the canonical recipe.** A 45-minute Docker pull + `gcc -v` capture + side-by-side diff is worth more than 10 deploy-and-eyes cycles.
+
+This entry exists because we *didn't* do this first. We spent days bisecting one symptom at a time, each fix landing legitimately but failing to close the loop, because no individual fix would have closed the loop — the canonical recipe had several flags we were missing simultaneously. **Next time you're in a bypass situation: run the canonical build first.** Diff against ours. Treat every delta as a hypothesis. The fix that actually closes the loop is probably one of those deltas.
+
 ### 4. PROVIDE() in a Retro68 ld script silently overrides input-object symbols
 
 Retro68's stock ld scripts (both `retro68-flat.ld` and the multi-seg
@@ -1274,6 +1286,39 @@ That trace immediately revealed: the multi-seg ld script's `PROVIDE(_start = .)`
 **Mature state.** Today's MVP has no Toolbox stubs (A-line traps are logged and skipped), no LoadSeg, no Process Manager — sufficient for startup-time diagnosis (the failure modes that motivated the build), insufficient for full behavioral checks. [cv-mac #89](https://github.com/khawkins98/classic-vibe-mac/issues/89) tracks the expansion list: LoadSeg stub, the ~12 most-used Toolbox traps, a minimal heap simulator, OCR-like assertions on captured `DrawString` calls. Each expansion is opportunistic — pulled in when a concrete bug needs it, not built speculatively.
 
 **This entry is the story of the harness because the *meta*-lesson matters more than the bug-by-bug LEARNINGS above.** If a future agent reads only one entry in this file before starting toolchain work, this one should be it: **build the harness early; structural checks lie; eyes-on is ground truth but expensive; tooling that closes the loop in seconds rewards a few hours of investment many times over.**
+
+### 2026-05-15 PM — The type-3 was a missing `--emit-relocs` flag, diagnosed in 45 minutes via canonical-build diff
+
+**Context.** Multi-day debugging of "structural-pass-but-runtime-fail" in the in-browser C pipeline (cv-mac #82–#92, wasm-retro-cc#22–#26) hit a wall: even after fixing PROVIDE(_start), the multi-seg ld script, SIZE resource splicing, libgcc inclusion, section-name selectors for `_start`, etc., **production still bombed with a type-3 address error at app launch**. Each prior fix was legitimate. None of them, individually or together, closed the loop.
+
+The Musashi harness ([cv-mac #89](https://github.com/khawkins98/classic-vibe-mac/issues/89)) had run out of diagnostic depth — it could verify the trampoline reaches `Retro68Relocate`, but couldn't see what happened next without an unbounded investment in Toolbox stubs (Resource Manager, Memory Manager, low-memory globals, OS trap dispatch, LoadSeg, …). [cv-mac #95](https://github.com/khawkins98/classic-vibe-mac/pull/95) added a first batch of stubs but the harness's diagnostic horizon still ended at the first GetResource call.
+
+**The diagnostic that actually worked.** Per [cv-mac #96](https://github.com/khawkins98/classic-vibe-mac/issues/96): pull the `ghcr.io/autc04/retro68:latest` Docker image, build the SAME `wasm-hello/hello.c` inside it with `m68k-apple-macos-gcc -v -save-temps -Wl,--verbose -o hello.code.bin hello.c`, and **side-by-side every flag against our pipeline.**
+
+The result, in three layers:
+
+1. **GCC `-v` output** showed the canonical collect2 invocation explicitly:
+   ```
+   collect2 -plugin liblto_plugin.so … -elf2mac -q -undefined=_consolewrite -o hello.code.bin \
+     -L<sysroot>/lib hello.o --start-group -lgcc -lc -lretrocrt -lInterface --end-group
+   ```
+   The flag we were missing: `-q` (short for `--emit-relocs`).
+
+2. **`objdump -h` on the ELF** confirmed the consequence. Canonical ELF: `.code00001`, `.code00002`, `.data` all had the `RELOC` flag. Ours: same sections, **no `RELOC` flag**. ld had applied the relocations in place and discarded them, because we hadn't asked it to keep them.
+
+3. **The Musashi harness's resource listing** made the runtime impact visible. Canonical RELA 1 = 230 B (real relocation entries); ours = 2 B (empty terminator). At runtime libretrocrt's `Retro68Relocate` walks the RELA resource to fix up cross-segment pointers. With 230 B of real entries, fix-up works and `main()`'s first cross-segment call lands on real code. With 2 B of nothing, every cross-segment pointer still references its ELF virtual address (0x0000xxxx), so the first such call jumps to low memory → type-3 address error.
+
+**The fix.** One line added to `compileToBin`'s ld argv:
+
+```ts
+"--emit-relocs",
+```
+
+After the fix, the rebuilt binary has byte-identical resource layout to the canonical: 12544 B total, 8 CODE segments, RELA 1 = 230 B, RELA 2 = 5 B, RELA 3–8 = 2 B each (empty for segments with no relocs). Musashi harness runs cleanly through `_start`, into `Retro68Relocate`, with PC staying within CODE 1 — no low-memory wandering.
+
+**Meta-lesson (also captured at the top of this file as Key Story #5).** When you bypass the GCC driver (no CMake, no `m68k-apple-macos-gcc`, hand-rolled cc1 + as + ld + Elf2Mac orchestration from JavaScript), **the canonical build's `-v` output is your specification.** It's free. It's exact. It's *already correct*. There's no shortcut that beats it. Three days of bug-by-bug diagnosis would have collapsed to one afternoon if we'd run the diff first.
+
+**The reason we didn't run the diff first** is that the diff-first move *felt* like overhead. Each individual bug we found was real, each fix was justified, and at any moment the next deploy felt like it would close the loop. The cost of building diagnostic infrastructure feels speculative when the next experiment feels close enough. **It almost never is.** When you've been wrong N times in a row about "the next deploy will fix it", treat that as load-bearing evidence that your mental model is incomplete and only an external source of ground truth (the canonical build, the original spec, the working reference) can close the gap.
 
 ### 2026-05-15 — `_start` ended up in `.code00002` because file-form ld selectors don't match standalone `.o` files
 
