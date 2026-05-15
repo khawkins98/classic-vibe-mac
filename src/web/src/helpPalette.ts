@@ -101,6 +101,48 @@ const HELP_HTML = /* html */ `
     your browser. The two round-trip cleanly.
   </p>
 
+  <h3>Keyboard shortcuts</h3>
+  <table class="cvm-help__kbd">
+    <tbody>
+      <tr><th colspan="2">Menubar</th></tr>
+      <tr><td><kbd>F10</kbd> · <kbd>Alt</kbd></td>
+          <td>Enter menubar from anywhere (toggles)</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td>
+          <td>Walk between menus</td></tr>
+      <tr><td><kbd>↓</kbd></td>
+          <td>Open the focused menu</td></tr>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td>
+          <td>Walk items inside a menu</td></tr>
+      <tr><td><kbd>Home</kbd> · <kbd>End</kbd></td>
+          <td>First / last item</td></tr>
+      <tr><td>letter</td>
+          <td>Jump to next item starting with that letter (type-ahead)</td></tr>
+      <tr><td><kbd>Enter</kbd> · <kbd>Space</kbd></td>
+          <td>Fire focused item</td></tr>
+      <tr><td><kbd>Esc</kbd></td>
+          <td>Close menu, restore focus</td></tr>
+      <tr><th colspan="2">Commands</th></tr>
+      <tr><td><kbd>⌘O</kbd></td><td>File → Open Project…</td></tr>
+      <tr><td><kbd>⌘S</kbd></td><td>File → Download .zip</td></tr>
+      <tr><td><kbd>⌘,</kbd></td><td>Edit → Preferences…</td></tr>
+      <tr><td><kbd>⌘?</kbd></td><td>Help → classic-vibe-mac Help</td></tr>
+      <tr><th colspan="2">Windows</th></tr>
+      <tr><td>double-click titlebar</td>
+          <td>Shade (collapse to titlebar) / unshade</td></tr>
+      <tr><td>drag titlebar / edge / corner</td>
+          <td>Move / resize</td></tr>
+      <tr><td>click body</td>
+          <td>Raise to front</td></tr>
+      <tr><td>View → Reset window layout</td>
+          <td>Tile back to default positions</td></tr>
+    </tbody>
+  </table>
+  <p class="cvm-help__kbd-note">
+    On Windows / Linux the modifier is <kbd>Ctrl</kbd> instead of
+    <kbd>⌘</kbd>. The menubar's dropdowns show the platform-appropriate
+    label live.
+  </p>
+
   <h3>Deeper reading</h3>
   <ul>
     <li><a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/README.md" target="_blank">README</a> — three reader paths (what / how / build on)</li>
