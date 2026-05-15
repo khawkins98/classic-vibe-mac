@@ -1134,6 +1134,39 @@ future work), but we need one of these to actually trigger auto-launch:
 Option 1 or 2 is the path forward. Logged so the next agent doesn't spend a
 day debugging "why doesn't my app launch."
 
+### 2026-05-15 — Link `start.c.obj` first, before any archive (else `main` never runs)
+**Context:** First eyes-on test of in-browser `Build & Run` on `wasm-hello`. App launched (zoom-rect animation, no crash dialog), then disappeared in milliseconds. SysBeep test produced no beep. Bare-loop test (`for (volatile long i = 0; i < 2e8; i++) ;`) exited just as fast — `main` was never running at all. Pasting invalid syntax did surface a compile error in the panel, so the compile path was definitely seeing user edits; the failure was downstream.
+
+**Finding:** Extracted CODE 1 from the offending `.bin` and walked the entry trampoline's `ADDI.L #imm, (A7)` immediate to locate `_start`. The bytes there were `4e 75` — bare m68k `RTS`. That's the **`PROVIDE(_start = .)`** *fallback* from `retro68-flat.ld`:
+
+```
+PROVIDE(_start = .);
+Retro68InitMultisegApp = .;
+SHORT(0x4e75); /* rts */
+```
+
+Reference build's `hello-toolbox-retro68.bin` has libretrocrt's real `_start` (`LINK A6, #-8; MOVE.L #imm, D0; …`) at that offset.
+
+Why ours doesn't pull the real one: **GNU ld's archive search is symbol-driven** — it pulls a `.o` from a `.a` only when an unresolved symbol references it. Our `in.o` defines `main` and references nothing in libretrocrt, so the archive scan never reaches `start.c.obj`. The script's `PROVIDE(_start = .)` then *defines* `_start` (as the fallback RTS) during script evaluation, `ENTRY(_start)` is satisfied, link succeeds — and the resulting binary's `_start` is a bare RTS. Launching the app jumps to that RTS and exits cleanly. `-u _start` *should* have forced the search but didn't — PROVIDE fires during script eval before archive search completes.
+
+The Retro68 ld driver handles this implicitly by passing `start.c.obj` (or its equivalent crt setup) as an explicit input file *before* the script processes the PROVIDE. Bare ld doesn't.
+
+**Action:** Three things together (all on wasm-retro-cc#22; the bundle vendoring + bridge update is this PR):
+
+1. **Ship `libretrocrt.a:start.c.obj` as a standalone `.o`** in the bundle (extracted at bundle build time). The cv-mac bridge passes it to `ld` ahead of any `.a`, satisfying `_start` before the script's PROVIDE can fire.
+2. **`--start-group … --end-group`** around the archives. Once start.c.obj is pulled it transitively references atexit / malloc / exit / etc., which cross-reference between libretrocrt / libc / libgcc. Single-pass scan misses these; the group forces iterative scanning.
+3. **Add `libgcc.a` to the bundle.** libretrocrt's `syscalls.c` uses `__udivsi3` / `__mulsi3` (m68k has no native 32-bit divide; the compiler emits soft-fp helpers). The Retro68 ld driver auto-adds `-lgcc`; bare ld doesn't.
+
+After: `while(1);` source produces a `.bin` with `below_a5=1400` (vs reference's 1428; was 76), real libretrocrt code at `_start`, and CODE 1 grows from 40 B to 7548 B. Within 2 % of the Retro68 reference's structural fingerprint.
+
+**Rule of thumb:** when linking via `ld` directly (not through a compiler driver), be explicit about the things drivers do for you:
+
+1. **Order matters.** Objects providing required symbols (like `_start`) must appear *before* any script-side `PROVIDE` of those symbols.
+2. **`--start-group` for archive cross-references.** Single-pass scan silently drops them.
+3. **`libgcc.a` is not optional** for m68k C — the compiler emits soft-fp/-divide helpers no other runtime provides.
+
+This caps off the cv-mac #64 north star: write C in a browser tab, click Build & Run, watch a real 68k app boot inside BasiliskII. The compile-and-run loop now actually runs.
+
 ### 2026-05-15 — cc1.wasm (and the Retro68 toolchain in general) is not re-entrant
 **Context:** First eyes-on test of the in-browser C compile-and-run path on deployed Pages. First click of Build & Run on `wasm-hello` worked end-to-end — Apps disk mounted, app launched cleanly, no crash dialog. Second click returned `error: cc1 exited rc=1 (hello.c:1)` with no parseable diagnostic surfaced.
 **Finding:** GCC's `main()` mutates static globals — including `decode_options`' "output file already set" flag — and never resets them on exit. Emscripten can't simulate process re-creation; the heap and statics persist across `callMain` returns. The second `Module.callMain([..., "-o", "/tmp/out.s"])` on the same Module instance sees the prior call's `-o` state still set and errors with:
