@@ -82,6 +82,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "QuickDraw pattern gallery. Four system patterns (white/ltGray/gray/dkGray) plus eight hand-rolled 8x8 bitmaps — stripes, checkers, dots, bricks, weave. Demonstrates the canonical 8-byte Pattern shape and FillRect.",
   },
+  "wasm-bounce": {
+    emoji: "🏐",
+    description:
+      "Bouncing ball with no-flicker double-buffer rendering. Hand-constructs an offscreen 1-bit BitMap, draws into it each tick, then CopyBits the whole frame onto the window in one shot — the canonical animated-Mac-app pattern.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
