@@ -12,14 +12,17 @@
  */
 import { emulatorConfig } from "./emulator-config";
 import { startEmulator } from "./emulator-loader";
-import { BUNDLE_VERSION } from "./playground/types";
+import { BUNDLE_VERSION, BUILT_AT } from "./playground/types";
 
 // Identity stamp printed on every page load. Survives in DevTools across
 // reloads/navigation, so we can tell at a glance which deploy a user's
 // tab is running — invaluable when debugging the wasm toolchain ("does
 // your binary match mine?") and post-deploy sanity checks.
+// builtAt is Vite's wall-clock at bundle time; loaded is when this tab
+// fetched it. If builtAt is hours stale but loaded is fresh, you're on
+// cached HTML pointing at old JS.
 console.info(
-  `[cvm] build bundleVersion=${BUNDLE_VERSION} loaded=${new Date().toISOString()}`,
+  `[cvm] build bundleVersion=${BUNDLE_VERSION} builtAt=${BUILT_AT} loaded=${new Date().toISOString()}`,
 );
 import {
   isPauseWhenHiddenEnabled,
