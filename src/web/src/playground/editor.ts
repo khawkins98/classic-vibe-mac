@@ -1071,19 +1071,42 @@ function renderShell(persistent: boolean, preservedCount: number): string {
       </p>
       ${banner}
       ${migrationBanner}
-      <div class="cvm-pg-toolbar" role="group" aria-label="Playground controls">
-        <label class="cvm-pg-field">
-          <span class="cvm-pg-field__label">Project</span>
-          <select id="cvm-pg-project" class="cvm-pg-select"></select>
-        </label>
-        <button type="button" id="cvm-pg-build" class="cvm-pg-button cvm-pg-button--primary">
-          Build .bin
+      <!--
+        The project <select> is the canonical project-switching control;
+        it lives here because all of editor.ts's internal logic (switchTo,
+        readUiState/writeUiState) queries it by id. It is *visually hidden*
+        in the IDE layout — main.ts mounts a peer dropdown in the files
+        panel that proxies changes here. Tests still find it by id.
+      -->
+      <label class="cvm-pg-field cvm-pg-field--hidden-in-ide">
+        <span class="cvm-pg-field__label">Project</span>
+        <select id="cvm-pg-project" class="cvm-pg-select"></select>
+      </label>
+      <!--
+        Iconified build toolbar. Each button has a glyph + label so
+        users have visual + textual affordances. The glyphs are
+        Unicode (no SVG assets); the underlying IDs are unchanged so
+        all the existing JS hooks + Playwright tests continue to find
+        them.
+      -->
+      <div class="cvm-pg-toolbar cvm-pg-toolbar--icons" role="group" aria-label="Build controls">
+        <button type="button" id="cvm-pg-build"
+                class="cvm-pg-iconbtn cvm-pg-iconbtn--primary"
+                title="Compile the current project to a .bin and download it">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">🔨</span>
+          <span class="cvm-pg-iconbtn__label">Build</span>
         </button>
-        <button type="button" id="cvm-pg-buildrun" class="cvm-pg-button cvm-pg-button--primary">
-          Build &amp; Run
+        <button type="button" id="cvm-pg-buildrun"
+                class="cvm-pg-iconbtn cvm-pg-iconbtn--primary"
+                title="Compile + hot-load into the running Mac in ~1s">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">▶</span>
+          <span class="cvm-pg-iconbtn__label">Build &amp; Run</span>
         </button>
-        <button type="button" id="cvm-pg-download" class="cvm-pg-button">
-          Download .zip
+        <button type="button" id="cvm-pg-download"
+                class="cvm-pg-iconbtn"
+                title="Download the current project's source files as a .zip">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">💾</span>
+          <span class="cvm-pg-iconbtn__label">Download</span>
         </button>
       </div>
       <div class="cvm-pg-toolbar cvm-pg-toolbar--demos" role="group" aria-label="Prebuilt demos">

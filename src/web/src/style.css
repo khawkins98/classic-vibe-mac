@@ -691,6 +691,70 @@ body.cvm-paused .emulator-canvas {
   border-bottom: 1px dotted var(--shadow);
 }
 
+/* Iconified build toolbar variant (cv-mac #104 follow-up). Replaces the
+   plain text-button row inside the editor pane. Buttons get a glyph
+   above the label and a chunkier bevel for affordance. */
+.cvm-pg-toolbar--icons {
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--shadow);
+}
+.cvm-pg-iconbtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 64px;
+  padding: 6px 12px 4px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--platinum-light);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.cvm-pg-iconbtn:active:not(:disabled) {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-pg-iconbtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cvm-pg-iconbtn:focus-visible {
+  outline: 2px solid var(--selection);
+  outline-offset: 1px;
+}
+.cvm-pg-iconbtn--primary {
+  background: linear-gradient(to bottom, #f0f0f0, #c8c8c8);
+  font-weight: bold;
+}
+.cvm-pg-iconbtn__icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.cvm-pg-iconbtn__label {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Hide the editor's project dropdown in IDE layout — the files panel
+   owns project switching now. The element stays in the DOM because
+   editor.ts queries it by id and Playwright tests reference it.
+   !important because the base `.cvm-pg-field { display: inline-flex }`
+   rule appears later in the cascade. */
+@media (min-width: 1200px) {
+  .cvm-pg-field--hidden-in-ide {
+    display: none !important;
+  }
+}
+
 .cvm-pg-field {
   display: inline-flex;
   flex-direction: column;
@@ -1372,6 +1436,42 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-files__item--active:hover {
   background: var(--selection);
+}
+
+/* Project dropdown at the top of the files panel. */
+.cvm-files__project {
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--platinum);
+  border-bottom: 1px solid var(--shadow);
+}
+.cvm-files__project-label {
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--shadow);
+  text-transform: uppercase;
+}
+.cvm-files__select {
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  padding: 3px 6px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  cursor: pointer;
+}
+.cvm-files__section {
+  padding: 10px 12px 4px;
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--shadow);
+  text-transform: uppercase;
 }
 
 .cvm-files__footer {
