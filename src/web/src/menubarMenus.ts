@@ -265,6 +265,70 @@ export function mountMenubar(actions: MenubarActions): () => void {
       closeDropdown({ restoreFocus: true });
       return;
     }
+
+    // F10 / Alt — enter the menubar from anywhere. Focuses the first
+    // menubar trigger so subsequent Arrow / Enter / Type-ahead picks
+    // up the walk. Skips when focus is editable (typing in CodeMirror
+    // shouldn't be hijacked).
+    if (
+      (e.key === "F10" || (e.key === "Alt" && !e.repeat)) &&
+      !e.shiftKey && !e.ctrlKey && !e.metaKey &&
+      !isEditableTarget(e.target as HTMLElement | null) &&
+      !isEditableTarget(document.activeElement as HTMLElement | null)
+    ) {
+      e.preventDefault();
+      const triggers = menubarTriggers();
+      // If we're already inside the menubar, F10 should close any open
+      // menu and return focus to the body (matches Windows convention).
+      if (
+        openMenuKey ||
+        (document.activeElement && triggers.includes(
+          document.activeElement as HTMLElement,
+        ))
+      ) {
+        if (openMenuKey) closeDropdown({ restoreFocus: true });
+        else (document.activeElement as HTMLElement | null)?.blur?.();
+        return;
+      }
+      triggers[0]?.focus();
+      return;
+    }
+
+    // When a menubar trigger is focused (but no menu yet open), allow
+    // Left/Right to walk the menubar and ArrowDown / Enter / Space to
+    // open the focused menu. Mirrors how Mac OS 8's Finder feels once
+    // you've "entered" the menubar via F10 (or, in 1997, Power Manager's
+    // keyboard menubar mode).
+    if (!openMenuKey) {
+      const triggers = menubarTriggers();
+      const focused = triggers.indexOf(document.activeElement as HTMLElement);
+      if (focused >= 0) {
+        switch (e.key) {
+          case "ArrowLeft": {
+            e.preventDefault();
+            triggers[(focused - 1 + triggers.length) % triggers.length]!.focus();
+            return;
+          }
+          case "ArrowRight": {
+            e.preventDefault();
+            triggers[(focused + 1) % triggers.length]!.focus();
+            return;
+          }
+          case "ArrowDown":
+          case "Enter":
+          case " ": {
+            e.preventDefault();
+            const t = triggers[focused]!;
+            openDropdown(t.dataset.menu!, t);
+            // After opening, place focus inside the dropdown so the
+            // existing ↓↑ handlers can walk it.
+            focusItem(0);
+            return;
+          }
+        }
+      }
+    }
+
     // Arrow-key navigation while a dropdown is open. The classic Mac
     // menubar walk: Down/Up move through items, Enter fires, Left/Right
     // jump to neighbour menus.
