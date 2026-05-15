@@ -57,6 +57,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Editable TextEdit field in a draggable window. Type to insert, click to position the caret, click the close box to quit. Built on the Toolbox's native TEHandle — the foundation a real word processor would extend.",
   },
+  "wasm-notepad": {
+    emoji: "📝",
+    description:
+      "TextEdit + a real Mac menu bar. Apple / File / Edit menus, Cmd-key shortcuts (⌘N, ⌘Q, ⌘X, ⌘C, ⌘V), and a working About dialog. The ladder rung between an edit field and a mini word processor.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {

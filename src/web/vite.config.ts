@@ -85,6 +85,21 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-snake", f),
   })),
+  // wasm-textedit — TextEdit demo (#125). Foundation toward a word
+  // processor: window + TEHandle + TEClick/TEKey/TEIdle.
+  ...["textedit.c", "textedit.r"].map((f) => ({
+    project: "wasm-textedit",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-textedit", f),
+  })),
+  // wasm-notepad — TextEdit + real Mac menu bar (#125). Adds MBAR /
+  // MenuSelect / MenuKey dispatch, Apple/File/Edit menus, and an
+  // ALRT-based About dialog on top of the textedit foundation.
+  ...["notepad.c", "notepad.r"].map((f) => ({
+    project: "wasm-notepad",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-notepad", f),
+  })),
 ];
 
 
