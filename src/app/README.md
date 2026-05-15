@@ -11,43 +11,64 @@ Window Manager, Menu Manager, Event Manager, Dialog Manager, Resource
 Manager). Each app lives in its own subdirectory; the top-level
 `CMakeLists.txt` is a tiny aggregator.
 
+There are two parallel app shelves:
+
+1. **CMake / Retro68 apps** — full Mac apps cross-compiled in CI,
+   baked into the boot disk, auto-launched at startup. The longer-form
+   showcase apps (Reader, MacWeather, Hello Mac, Pixel Pad, Markdown
+   Viewer). All have their own `CMakeLists.txt` and unit tests on the
+   host.
+
+2. **Wasm-shelf samples** (under `wasm-*/`) — small focused demos that
+   the in-browser playground compiles end-to-end client-side via
+   wasm-retro-cc (cc1 + as + ld + Elf2Mac) and, where present, WASM-Rez
+   for the resource fork. No CMake. No CI step. Visitors pick them
+   from the project picker, edit, click Build & Run, and the emulator
+   reboots with the new binary in ~1 s. Section ["Wasm-shelf samples"
+   below](#wasm-shelf-samples) covers the inventory.
+
 ## Multi-app structure
 
 ```
 src/app/
-├── CMakeLists.txt          (aggregator: add_subdirectory(reader), etc.)
-├── reader/
-│   ├── reader.c
-│   ├── reader.r
-│   ├── html_parse.{c,h}
-│   └── CMakeLists.txt
+├── CMakeLists.txt          (aggregator for the CI apps below)
+│
+├── reader/                 (CMake apps — boot-disk auto-launch)
+│   ├── reader.c            ├── reader.r
+│   ├── html_parse.{c,h}    └── CMakeLists.txt
 ├── macweather/
-│   ├── macweather.c
-│   ├── macweather.r
-│   ├── weather_parse.{c,h}
-│   ├── weather_glyphs.{c,h}
+│   ├── macweather.c        ├── macweather.r
+│   ├── weather_parse.{c,h} ├── weather_glyphs.{c,h}
 │   └── CMakeLists.txt
-├── hello-mac/
-│   ├── hello-mac.c
-│   ├── hello-mac.r
-│   └── CMakeLists.txt
-├── pixelpad/
-│   ├── pixelpad.c
-│   ├── pixelpad.r
-│   └── CMakeLists.txt
-└── markdownviewer/
-    ├── markdownviewer.c
-    ├── markdownviewer.r
-    ├── md_parse.{c,h}
-    └── CMakeLists.txt
+├── hello-mac/              ├── hello-mac.c + .r + CMakeLists.txt
+├── pixelpad/               ├── pixelpad.c + .r + CMakeLists.txt
+├── markdownviewer/         ├── markdownviewer.c + .r + md_parse.{c,h} + CMakeLists.txt
+│
+├── wasm-hello/             (Wasm-shelf — in-browser compile only)
+│   └── hello.c
+├── wasm-hello-multi/       ├── main.c + greet.c + greet.h
+├── wasm-hello-window/      ├── hello.c + hello.r
+├── wasm-snake/             ├── snake.c + snake.r
+├── wasm-textedit/          ├── textedit.c + textedit.r
+├── wasm-notepad/           ├── notepad.c + notepad.r
+├── wasm-calculator/        ├── calc.c + calc.r
+└── wasm-scribble/          └── scribble.c + scribble.r
 ```
 
-Each app has its own creator code (Reader=`CVMR`, MacWeather=`CVMW`,
-HelloMac=`CVHM`, PixelPad=`CVMP`, MarkdownViewer=`CVMD`), its own
-`add_application()` call, and its own resource fork. Outputs land in
+CMake apps have their own creator code (Reader=`CVMR`, MacWeather=`CVMW`,
+HelloMac=`CVHM`, PixelPad=`CVMP`, MarkdownViewer=`CVMD`), their own
+`add_application()` call, and their own resource fork. Outputs land in
 `build/<appname>/<App>.{bin,dsk,APPL}`. CI uploads everything from
-`build/` so adding a new app just means `add_subdirectory(<name>)` above
-and a directory next to the others.
+`build/` so adding a new CMake app just means `add_subdirectory(<name>)`
+above and a directory next to the others.
+
+Wasm-shelf samples don't touch CMake — they're registered in
+[`src/web/src/playground/types.ts`](../web/src/playground/types.ts)
+and surfaced by the picker in
+[`src/web/src/projectPicker.ts`](../web/src/projectPicker.ts). The Vite
+plugin in [`src/web/vite.config.ts`](../web/vite.config.ts)'s
+`SEED_FILES` copies their sources into `public/sample-projects/` at
+build time so the playground can fetch them.
 
 ## Apps
 
@@ -121,6 +142,44 @@ The same `:Shared:` mechanism Reader uses — files baked onto the boot
 disk at build time by `scripts/build-boot-disk.sh`. To add your own
 `.md` files to the viewer, copy them into `src/web/public/shared/` before
 running the boot-disk build script.
+
+## Wasm-shelf samples
+
+These are the in-browser-buildable demos the playground surfaces in
+its picker. The picker reads
+[`SAMPLE_PROJECTS`](../web/src/playground/types.ts) for the list;
+[`projectPicker.ts`](../web/src/projectPicker.ts) holds the per-sample
+icon + blurb. Each one is deliberately small and picks a *distinct*
+Toolbox surface so the shelf reads as a progression rather than
+variations on a theme.
+
+| Sample | Files | Toolbox surfaces exercised | LOC (≈) |
+| --- | --- | --- | --- |
+| `wasm-hello/` | `hello.c` | `InitGraf`, `DrawString` — minimum-viable in-browser build | 30 |
+| `wasm-hello-multi/` | `main.c` + `greet.c` + `greet.h` | Multi-TU link path (`ld` two `.o`s + libs) | 30 |
+| `wasm-hello-window/` | `hello.c` + `.r` | `GetNewWindow` (WIND resource), `BeginUpdate`/`EndUpdate` | 50 |
+| `wasm-snake/` | `snake.c` + `.r` | `TickCount` game loop, `WaitNextEvent` keyboard, `EraseRect`+`PaintRect` grid | 230 |
+| `wasm-textedit/` | `textedit.c` + `.r` | `TENew`/`TEClick`/`TEKey`/`TEUpdate`/`TEIdle`/`TESelect` | 130 |
+| `wasm-notepad/` | `notepad.c` + `.r` | `MBAR`/`MenuSelect`/`MenuKey`, `TECut`/`TECopy`/`TEPaste` (system scrap), `StopAlert` dialogs | 180 |
+| `wasm-calculator/` | `calc.c` + `.r` | Hand-drawn `FrameRoundRect` buttons, `PtInRect` hit-test, `NumToString` display, `InvertRoundRect` press feedback | 170 |
+| `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
+
+**Coverage gaps worth filling next** — surfaces no sample exercises:
+
+- **Controls** (`NewControl`, `TrackControl`, `CDEF` 16 scroll bar) — a sample with a real scrollable text view
+- **Modal dialogs with editable fields** (`ModalDialog` + DITL items past a single OK)
+- **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
+- **Sound Manager** (`SndPlay`) — period-correct audio feedback
+
+### Adding a wasm-shelf sample
+
+Different flow from the CMake apps — no CMake, no CI, no boot disk:
+
+1. Create `src/app/wasm-<name>/<name>.c` (+ optional `<name>.r`).
+2. Add a `SEED_FILES` entry in [`src/web/vite.config.ts`](../web/vite.config.ts) so Vite copies the sources into `public/sample-projects/` at dev/build time.
+3. Add a `SAMPLE_PROJECTS` entry in [`src/web/src/playground/types.ts`](../web/src/playground/types.ts) — set `rezFile` to your `.r` (or `null` for a C-only sample) and pick a 4-letter creator code.
+4. Add a `PICKER_ENTRIES` blurb in [`src/web/src/projectPicker.ts`](../web/src/projectPicker.ts) (emoji + one-line description).
+5. `npm run build` from `src/web/` — done. The picker now lists your sample.
 
 ## Architectural pattern: Toolbox shell + pure-C engine
 
