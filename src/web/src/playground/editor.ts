@@ -18,6 +18,7 @@ import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
 import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
+import { m68k } from "./lang-m68k";
 import JSZip from "jszip";
 
 import { SAMPLE_PROJECTS, PREBUILT_DEMOS, type SampleProject } from "./types";
@@ -374,6 +375,7 @@ export async function mountPlayground(
           lineNumbers(),
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
+          m68k(), // brings its own HighlightStyle (see lang-m68k.ts)
           EditorView.theme(
             {
               "&": {
