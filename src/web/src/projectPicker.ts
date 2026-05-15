@@ -77,6 +77,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Scrolling list with a real Mac scroll bar. NewControl(scrollBarProc) + TrackControl with a live actionProc for the arrows and page regions. Arrow keys also scroll. 50 items, fits about 13 at a time — drag the thumb to jump.",
   },
+  "wasm-patterns": {
+    emoji: "🧵",
+    description:
+      "QuickDraw pattern gallery. Four system patterns (white/ltGray/gray/dkGray) plus eight hand-rolled 8x8 bitmaps — stripes, checkers, dots, bricks, weave. Demonstrates the canonical 8-byte Pattern shape and FillRect.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
