@@ -67,6 +67,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "4-function calculator. 16 buttons drawn directly to the window port, hit-tested via PtInRect, display formatted with NumToString. Demonstrates the playground can ship classic Mac apps without any TextEdit / scrap entanglement.",
   },
+  "wasm-scribble": {
+    emoji: "🖌",
+    description:
+      "Mouse-tracking draw demo. Click + drag in the window to draw; the inner StillDown / GetMouse / LineTo loop is the classic Mac drag-to-draw pattern from Inside Mac: Macintosh Toolbox Essentials ch. 1. Click Clear to wipe; click outside the window to quit.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
