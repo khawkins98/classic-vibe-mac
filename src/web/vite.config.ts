@@ -90,6 +90,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-window", f),
   })),
+  // wasm-snake — Phase D demo. A playable Snake clone with arrow-key
+  // input, TickCount-driven movement, win/lose/restart state. Uses
+  // the same mixed C + .r path as wasm-hello-window.
+  ...["snake.c", "snake.r"].map((f) => ({
+    project: "wasm-snake",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-snake", f),
+  })),
 ];
 
 /**
