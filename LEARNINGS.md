@@ -127,6 +127,35 @@ beyond the specific incident that produced them:
 
 (Process notes that overlap with Key Stories above and aren't repeated here: "compare against known-working reference" — see Key Story #5; "bisect probes pay for themselves even when they fail" — implicit in Key Story #1's harness story.)
 
+### 8. WinBox over CSS grid — *layout is a window manager, not a stylesheet*
+
+The IDE shipped its first cut as a CSS grid (#104 Phase 2): four
+fixed cells, beveled chrome via `.window`, a "Show editor" checkbox
+to collapse the editor column. It looked Mac-OS-8 but the chrome was
+a lie — titlebars weren't draggable, borders weren't resize handles,
+clicking didn't raise.
+
+When we layered WinBox in (#119) for the floating palettes (Help /
+Preferences / picker / build-explainer), the contrast was loud:
+those windows behaved like real Mac windows; the four "docked"
+panes behaved like styled `<section>` elements. Two systems pretending
+to be the same idiom.
+
+The fix (#122) was to make the docked panes WinBox windows too,
+positioned at startup to *tile* the viewport but free to be moved /
+resized / raised / shaded thereafter. The "Show editor" pref
+became redundant — drag the editor pane off-screen if you want it
+out of the way — so we ripped it out. The CSS grid rules went with
+it. Net: −85 CSS lines and the whole IDE now obeys a single window-
+manager idiom.
+
+**Rule:** when you reach for `display: grid` to lay out windows
+that should *feel* like windows, you're at a fork in the road.
+Either commit to non-draggable docked panels (and don't render
+fake titlebars on them), or commit to a window manager and treat
+the initial layout as just one starting position. Picking both is
+how you end up with chrome that promises behaviour it can't deliver.
+
 ---
 
 ## How to use this file
