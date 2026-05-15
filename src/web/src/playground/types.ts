@@ -73,42 +73,18 @@ export interface SampleProject {
  * does a System 7 app look like?" is one click away.
  */
 export const SAMPLE_PROJECTS: readonly SampleProject[] = [
-  {
-    id: "reader",
-    label: "Reader",
-    files: ["reader.c", "reader.r", "html_parse.c", "html_parse.h"],
-    rezFile: "reader.r",
-    precompiledName: "reader.code.bin",
-    outputName: "Reader.bin",
-    appType: "APPL",
-    appCreator: "CVMR",
-  },
-  {
-    id: "macweather",
-    label: "MacWeather",
-    files: [
-      "macweather.c",
-      "macweather.r",
-      "weather_parse.c",
-      "weather_parse.h",
-      "weather_glyphs.c",
-    ],
-    rezFile: "macweather.r",
-    precompiledName: "macweather.code.bin",
-    outputName: "MacWeather.bin",
-    appType: "APPL",
-    appCreator: "CVMW",
-  },
-  {
-    id: "hello-mac",
-    label: "Hello Mac",
-    files: ["hello.c", "hello.r"],
-    rezFile: "hello.r",
-    precompiledName: "hello-mac.code.bin",
-    outputName: "HelloMac.bin",
-    appType: "APPL",
-    appCreator: "CVHM",
-  },
+  // Three legacy splice-path projects (reader, macweather, hello-mac)
+  // were removed from this list 2026-05-15 as part of cv-mac #100. They
+  // used CI-precompiled .code.bin data forks that the playground
+  // couldn't actually rebuild in-browser — only the .r resource fork
+  // was editable, which surprised users who edited the .c expecting
+  // their changes to show up. Their source files still live under
+  // src/app/<name>/ and the CI-built binaries still ship on the boot
+  // disk (so the Mac auto-launches them on startup as showcase apps),
+  // but the playground picker only offers projects that build
+  // end-to-end in the browser. The runBuild dispatch's path C (rezFile
+  // + precompiledName) remains in editor.ts as dead-but-functional
+  // code in case a future use case wants this shape back.
   {
     // wasm-hello — first project that compiles end-to-end in the
     // browser (cv-mac #64 / wasm-retro-cc #15). Single hello.c,

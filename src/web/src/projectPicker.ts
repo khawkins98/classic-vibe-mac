@@ -34,32 +34,22 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
   "wasm-hello": {
     emoji: "✨",
     description:
-      "In-browser-only demo. C source compiles end-to-end in this tab — no CI involved. Start here to see the full wasm-cc1 pipeline in action.",
+      "Smallest in-browser-built demo. Single hello.c, no resources, no window — just InitGraf + DrawString on the desktop port. Start here to see the full wasm-cc1 pipeline in action.",
   },
-  reader: {
-    emoji: "📖",
+  "wasm-hello-multi": {
+    emoji: "📚",
     description:
-      "HTML viewer. Multi-file C + .r. Demonstrates the Toolbox-shell + pure-C-engine split and the URL-bar request/response over extfs.",
+      "Multi-file C. main.c + greet.c + greet.h linked together by ld. Demonstrates the multi-translation-unit build path landed in cv-mac #113.",
   },
-  macweather: {
-    emoji: "☁️",
+  "wasm-hello-window": {
+    emoji: "🪟",
     description:
-      "Live weather forecast. Host page polls open-meteo, drops JSON into the Mac via :Unix:, MacWeather watches + redraws with QuickDraw glyphs.",
+      "Mixed C + .r build. Compiles a real WIND resource alongside the C code and splices the two forks. Same path used by Wasm Snake.",
   },
-  "hello-mac": {
-    emoji: "👋",
+  "wasm-snake": {
+    emoji: "🐍",
     description:
-      "Smallest possible Toolbox app — one window, one string, a Quit menu. Start here if 68k Mac Toolbox is new to you.",
-  },
-  "pixel-pad": {
-    emoji: "🖌",
-    description:
-      "QuickDraw drawing app. Live PNG preview of your 64×64 1-bit canvas appears alongside the Mac via the extfs bridge.",
-  },
-  "markdown-viewer": {
-    emoji: "📝",
-    description:
-      "Renders .md files from :Shared: on the boot disk. Add your own markdown in the shared folder; reload to see it parsed.",
+      "Playable Snake clone. Arrow keys steer, eat apples to grow, click to restart on game over. Demonstrates a real event loop, TickCount-driven movement, QuickDraw rendering — all built in your browser.",
   },
 };
 
