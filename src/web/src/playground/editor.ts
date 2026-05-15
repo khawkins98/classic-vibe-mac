@@ -37,6 +37,7 @@ import {
   triggerDownload,
   fetchPrecompiled,
 } from "./build";
+import { compileToAsm } from "./cc1";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
   showBuildExplainer,
@@ -215,6 +216,13 @@ export async function mountPlayground(
     }, SAVE_DEBOUNCE_MS);
   }
 
+  // Forward-declaration: the live implementation is installed once the
+  // Assembly panel mounts (see initAsmPanel below). Until then any call
+  // here is a no-op — relevant because the updateListener fires on the
+  // very first dispatch.
+  let scheduleAsmCompile: (reason: "edit" | "switch" | "open") => void =
+    () => {};
+
   const editorState = EditorState.create({
     doc: initialContent,
     extensions: [
@@ -280,6 +288,7 @@ export async function mountPlayground(
           if (!loadingFile) {
             markDirty(current.project, current.filename);
             scheduleSave();
+            scheduleAsmCompile("edit");
           }
           // Clear stale diagnostics on any edit. Squiggles on a now-edited
           // line are misleading — better to vanish until the next Build
@@ -315,6 +324,204 @@ export async function mountPlayground(
       scrollIntoView: true,
     });
   }
+
+  // ── Show Assembly panel (wasm-retro-cc #17 / cv-mac #64) ────────────────
+  //
+  // The panel lives inside a `<details>` so it's collapsed by default —
+  // opening it triggers the first cc1.wasm fetch (~3.4 MB brotli). We
+  // delay constructing the read-only CodeMirror until first open too, so
+  // pages that never open the panel pay zero cost.
+  //
+  // Recompile triggers (all → scheduleAsmCompile):
+  //   • Panel open (`toggle` event with .open=true)
+  //   • Main editor doc change AND current file is .c/.h (the
+  //     updateListener above)
+  //   • File switch into a .c/.h file (the tail of switchTo)
+  //
+  // Serialization: cc1 has shared MEMFS — concurrent compileToAsm() calls
+  // would race on /tmp/in.c. We assign a monotonic asmSeq to each call;
+  // older calls drop their result if a newer one started while they were
+  // awaiting. The debounce means even fast typing only spawns one in-flight
+  // compile, but the seq guard covers the seam between debounce-fire and
+  // promise resolution.
+  const ASM_DEBOUNCE_MS = 500;
+  const asmPanel = rootEl.querySelector<HTMLDetailsElement>("#cvm-pg-asm-panel")!;
+  const asmStatusEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-asm-status")!;
+  const asmMountEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-asm-mount")!;
+  const asmMeterEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-asm-meter")!;
+  const asmStderrWrap = rootEl.querySelector<HTMLDetailsElement>("#cvm-pg-asm-stderr-wrap")!;
+  const asmStderrEl = rootEl.querySelector<HTMLPreElement>("#cvm-pg-asm-stderr")!;
+
+  let asmView: EditorView | null = null;
+  let asmDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let asmSeq = 0;
+
+  function isCSource(filename: string): boolean {
+    return /\.(c|h|cpp|hpp|cc|hh)$/i.test(filename);
+  }
+
+  function initAsmView(): void {
+    if (asmView) return;
+    // Read-only, plain-text view. m68k asm syntax highlighting would be
+    // nice-to-have but isn't critical for shipping the feature — the
+    // text is already monospaced and readable. Adding a CodeMirror lang
+    // package for GAS-flavoured 68k is open work (see cv-mac #64 follow-ups).
+    asmView = new EditorView({
+      parent: asmMountEl,
+      state: EditorState.create({
+        doc: "",
+        extensions: [
+          lineNumbers(),
+          EditorState.readOnly.of(true),
+          EditorView.editable.of(false),
+          EditorView.theme(
+            {
+              "&": {
+                backgroundColor: "#f8f8f8",
+                color: "#000000",
+                fontFamily:
+                  '"Monaco", "Andale Mono", "Courier New", monospace',
+                fontSize: "11px",
+              },
+              ".cm-content": { padding: "8px 0", caretColor: "transparent" },
+              ".cm-gutters": {
+                backgroundColor: "#dddddd",
+                color: "#666666",
+                border: "none",
+                borderRight: "1px solid #000000",
+              },
+              ".cm-scroller": { lineHeight: "1.4" },
+              "&.cm-focused": { outline: "none" },
+            },
+            { dark: false },
+          ),
+        ],
+      }),
+    });
+  }
+
+  function setAsmStatus(text: string, kind: "info" | "ok" | "err"): void {
+    asmStatusEl.textContent = text;
+    asmStatusEl.dataset.kind = kind;
+  }
+
+  async function runAsmCompile(): Promise<void> {
+    if (!asmPanel.open) return;
+    if (!isCSource(current.filename)) {
+      setAsmStatus(
+        `${current.filename} isn't a C source — switch to a .c tab to compile.`,
+        "info",
+      );
+      asmStderrWrap.hidden = true;
+      return;
+    }
+    initAsmView();
+    const seq = ++asmSeq;
+    setAsmStatus("Compiling…", "info");
+    asmMeterEl.textContent = "compiling…";
+
+    const source = view.state.doc.toString();
+    const fname = current.filename;
+
+    // Gather project sibling files so quoted `#include "x.h"` in the
+    // active buffer resolves. We read from IDB (or seed) — only the
+    // active file uses the live editor buffer.
+    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    const siblings: Array<{ name: string; content: string }> = [];
+    if (proj) {
+      for (const f of proj.files) {
+        if (f === fname) continue;
+        if (!isCSource(f)) continue;
+        try {
+          siblings.push({
+            name: f,
+            content: await readOrSeedFile(baseUrl, proj.id, f),
+          });
+        } catch {
+          // Skip unreadable siblings — cc1 will surface a clear "No such
+          // file" if the omission breaks the compile.
+        }
+      }
+    }
+    if (seq !== asmSeq) return; // tab switch / edit raced the await
+
+    let result;
+    try {
+      result = await compileToAsm(baseUrl, source, fname, { siblings });
+    } catch (e) {
+      if (seq !== asmSeq) return;
+      setAsmStatus(`cc1 load failed: ${(e as Error).message}`, "err");
+      asmMeterEl.textContent = "error";
+      return;
+    }
+    if (seq !== asmSeq) return; // a newer call superseded us
+
+    if (!result.ok) {
+      const first = result.diagnostics[0];
+      setAsmStatus(
+        first
+          ? `${first.severity}: ${first.message} (${first.file}:${first.line}:${first.column})`
+          : "cc1 failed",
+        "err",
+      );
+      asmMeterEl.textContent = "error";
+      if (result.rawStderr.trim()) {
+        asmStderrEl.textContent = result.rawStderr;
+        asmStderrWrap.hidden = false;
+      } else {
+        asmStderrWrap.hidden = true;
+      }
+      return;
+    }
+
+    // Success — replace the asm viewer content.
+    const asmText = result.asm ?? "";
+    asmView!.dispatch({
+      changes: { from: 0, to: asmView!.state.doc.length, insert: asmText },
+      scrollIntoView: false,
+    });
+    const lineCount = asmText.split("\n").length;
+    setAsmStatus(
+      `${fname} → ${lineCount} lines of m68k assembly in ${result.durationMs.toFixed(0)}ms`,
+      "ok",
+    );
+    asmMeterEl.textContent = `${result.durationMs.toFixed(0)}ms · ${lineCount}L`;
+    // Warnings are still surfaced — only show stderr block if non-empty.
+    if (result.rawStderr.trim()) {
+      asmStderrEl.textContent = result.rawStderr;
+      asmStderrWrap.hidden = false;
+    } else {
+      asmStderrWrap.hidden = true;
+    }
+  }
+
+  // Install the real scheduleAsmCompile (replaces the no-op forward-decl).
+  scheduleAsmCompile = (_reason) => {
+    if (!asmPanel.open) return;
+    if (asmDebounceTimer) clearTimeout(asmDebounceTimer);
+    asmDebounceTimer = setTimeout(() => {
+      asmDebounceTimer = null;
+      void runAsmCompile();
+    }, ASM_DEBOUNCE_MS);
+  };
+
+  // Panel toggle: on first open, kick off an immediate (no-debounce)
+  // compile so the viewer doesn't sit empty for 500ms. Subsequent re-opens
+  // already have content; re-running on every open would be wasted work
+  // unless the file or source changed since last time, which the seq
+  // guards already handle.
+  asmPanel.addEventListener("toggle", () => {
+    if (!asmPanel.open) return;
+    if (!isCSource(current.filename)) {
+      setAsmStatus(
+        `${current.filename} isn't a C source — switch to a .c tab to compile.`,
+        "info",
+      );
+      return;
+    }
+    initAsmView();
+    void runAsmCompile();
+  });
 
   /** Flush a pending debounced save synchronously. */
   async function flushSave(): Promise<void> {
@@ -356,6 +563,9 @@ export async function mountPlayground(
     renderTabBar(nextProject, nextFile);
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
+    // Refresh the Assembly panel (if open). On a switch we still debounce —
+    // the user might be tab-cycling and we don't want to fire mid-cycle.
+    scheduleAsmCompile("switch");
   }
 
   // Show / hide the "this file isn't compiled in your browser" banner
@@ -878,6 +1088,27 @@ function renderShell(persistent: boolean, preservedCount: number): string {
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
+      <details id="cvm-pg-asm-panel" class="cvm-pg-asm-panel">
+        <summary class="cvm-pg-asm-summary">
+          <span class="cvm-pg-asm-summary__title">Show Assembly</span>
+          <span class="cvm-pg-asm-summary__hint">— compile this <code>.c</code> to m68k assembly in your browser</span>
+          <span id="cvm-pg-asm-meter" class="cvm-pg-asm-meter" aria-live="polite"></span>
+        </summary>
+        <p class="cvm-pg-asm-intro">
+          The <code>.c</code> file open above is compiled through
+          <code>cc1.wasm</code> &mdash; the real GCC 12 backend for
+          Motorola 68k, ported to WebAssembly. Output below is exactly
+          what the cross-compiler would emit running natively. Switch
+          to a <code>.c</code> tab to see the assembly update as you
+          type (~500&nbsp;ms debounce).
+        </p>
+        <div id="cvm-pg-asm-status" class="cvm-pg-asm-status" role="status" aria-live="polite"></div>
+        <div id="cvm-pg-asm-mount" class="cvm-pg-asm-mount" aria-label="m68k assembly output"></div>
+        <details id="cvm-pg-asm-stderr-wrap" class="cvm-pg-asm-stderr-wrap" hidden>
+          <summary>cc1 diagnostics</summary>
+          <pre id="cvm-pg-asm-stderr" class="cvm-pg-asm-stderr"></pre>
+        </details>
+      </details>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
         browser to read or edit the source.
