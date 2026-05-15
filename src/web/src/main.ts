@@ -12,7 +12,12 @@
  */
 import { emulatorConfig } from "./emulator-config";
 import { startEmulator } from "./emulator-loader";
-import { BUNDLE_VERSION, BUILT_AT, TOOLCHAIN_VERSION } from "./playground/types";
+import {
+  BUNDLE_VERSION,
+  BUILT_AT,
+  TOOLCHAIN_VERSION,
+  SAMPLE_PROJECTS,
+} from "./playground/types";
 
 // Identity stamp printed on every page load. Survives in DevTools across
 // reloads/navigation, so we can tell at a glance which deploy a user's
@@ -100,45 +105,122 @@ root.innerHTML = /* html */ `
     <span class="desktop-icon__label">Read Me</span>
   </div>
 
-  <!-- Two-pane split layout (issue #45).
-       At ≥1200px: left pane = Mac + supporting windows, right pane = editor.
-       Below 1200px: all panes are transparent wrappers; windows stack normally. -->
-  <div class="cvm-split-layout" id="cvm-split-layout" data-editor-visible="true">
+  <!--
+    Mac OS 8 IDE layout (cv-mac #104; supersedes the #45 two-pane split).
+    At ≥1200px: 3-column CSS grid with the right column further split
+    top/bottom. At narrower viewports each grid cell becomes a normal
+    block — content stacks vertically in source order.
 
-    <!-- Left pane: Macintosh window + Read Me + Emulator Config -->
-    <div class="cvm-split-pane cvm-split-pane--left">
+    Grid cells (id-stable for tests + downstream wiring):
+      .cvm-ide__files  — left files panel (project picker, Phase 3+)
+      .cvm-ide__editor — center editor (existing playground innards)
+      .cvm-ide__mac    — top-right Macintosh preview
+      .cvm-ide__output — bottom-right output/console panel (Phase 4+)
 
-      <section class="window window--wide" aria-labelledby="title-emu">
-        <header class="window__titlebar">
-          <span class="window__close" aria-hidden="true"></span>
-          <h2 class="window__title" id="title-emu">Macintosh</h2>
-        </header>
-        <div class="window__body window__body--platinum">
-          <div class="inset" id="emulator">
-            <div id="emulator-canvas-mount" class="emulator-mount"></div>
-          </div>
-          <!--
-            Settings caption sits BELOW the inset (still inside the Macintosh
-            window's body, so it reads as part of the same chrome). A period-
-            styled checkbox lets the visitor opt out of pause-when-hidden.
-            The "💤" indicator on the right replaces the static label when
-            the emulator is currently paused. See settings.ts + emulator-loader.
-          -->
-          <div class="emulator-caption" role="group" aria-label="Emulator preferences">
-            <label class="cvm-check">
-              <input type="checkbox" id="cvm-pause-when-hidden" />
-              <span class="cvm-check__box" aria-hidden="true"></span>
-              <span class="cvm-check__label">Pause emulator when tab is hidden</span>
-            </label>
-            <label class="cvm-check">
-              <input type="checkbox" id="cvm-show-editor" />
-              <span class="cvm-check__box" aria-hidden="true"></span>
-              <span class="cvm-check__label">Show editor</span>
-            </label>
-            <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
-          </div>
+    The data-editor-visible attribute on .cvm-ide, when "false", hides
+    the editor column and expands the Mac to take the whole grid — a
+    "Mac-only focus mode" toggled by the "Show editor" checkbox.
+  -->
+  <div class="cvm-ide" id="cvm-split-layout" data-editor-visible="true">
+
+    <!-- LEFT: files panel (1/5 width).
+         Phase 2 content: static list of SAMPLE_PROJECTS as a Mac OS 8
+         icon-list sidebar. The playground's project dropdown is still
+         the canonical control; this panel is preview/navigation surface
+         until Phase 3 wires the WinBox startup picker. -->
+    <aside class="cvm-ide__files window" aria-labelledby="title-files">
+      <header class="window__titlebar">
+        <span class="window__close" aria-hidden="true"></span>
+        <h2 class="window__title" id="title-files">Projects</h2>
+      </header>
+      <div class="window__body cvm-files">
+        <ul class="cvm-files__list" role="list">
+          ${SAMPLE_PROJECTS.map((p) => `
+            <li class="cvm-files__item" data-project-id="${p.id}">
+              <span class="cvm-files__icon">📄</span>
+              <span class="cvm-files__label">${p.label}</span>
+            </li>
+          `).join("")}
+        </ul>
+        <p class="cvm-files__hint">
+          Multi-file editing + .zip import / export coming with
+          <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100">#100</a>.
+          The dropdown in the editor pane is the live project switcher today.
+        </p>
+      </div>
+    </aside>
+
+    <!-- CENTER: playground editor (2/5 width).
+         The existing playground section (project picker, build buttons,
+         tabs, CodeMirror) is mounted into this slot by editor.ts's
+         mountPlayground(). No internal restructure in Phase 2 — just
+         rehoming the same DOM into a wider, primary-position column. -->
+    <section class="cvm-ide__editor window window--wide window--playground"
+             id="cvm-playground"
+             aria-labelledby="title-playground">
+    </section>
+
+    <!-- RIGHT TOP: Macintosh preview (2/5 width, ~60% height). -->
+    <section class="cvm-ide__mac window" aria-labelledby="title-emu">
+      <header class="window__titlebar">
+        <span class="window__close" aria-hidden="true"></span>
+        <h2 class="window__title" id="title-emu">Macintosh</h2>
+      </header>
+      <div class="window__body window__body--platinum cvm-ide__mac-body">
+        <div class="inset" id="emulator">
+          <div id="emulator-canvas-mount" class="emulator-mount"></div>
         </div>
-      </section>
+        <!--
+          Settings caption sits BELOW the inset (still inside the Macintosh
+          window's body). The "💤" indicator on the right replaces the static
+          label when the emulator is currently paused. "Show editor"
+          collapses the editor column for a full-width Mac focus mode.
+          See settings.ts + emulator-loader.
+        -->
+        <div class="emulator-caption" role="group" aria-label="Emulator preferences">
+          <label class="cvm-check">
+            <input type="checkbox" id="cvm-pause-when-hidden" />
+            <span class="cvm-check__box" aria-hidden="true"></span>
+            <span class="cvm-check__label">Pause emulator when tab is hidden</span>
+          </label>
+          <label class="cvm-check">
+            <input type="checkbox" id="cvm-show-editor" />
+            <span class="cvm-check__box" aria-hidden="true"></span>
+            <span class="cvm-check__label">Show editor</span>
+          </label>
+          <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT BOTTOM: Output panel (2/5 width, ~40% height).
+         Phase 2 content: placeholder. Phase 4 moves Show Assembly + the
+         compile log + DebugStr capture into this slot as tabs.
+         See cv-mac #104. -->
+    <section class="cvm-ide__output window" aria-labelledby="title-output">
+      <header class="window__titlebar">
+        <span class="window__close" aria-hidden="true"></span>
+        <h2 class="window__title" id="title-output">Output</h2>
+      </header>
+      <div class="window__body cvm-output">
+        <p class="cvm-output__hint">
+          <strong>Phase 2 placeholder.</strong> Compiler log, Show
+          Assembly, console output, and DebugStr capture will move
+          into this panel as tabs in a follow-up
+          (<a href="https://github.com/khawkins98/classic-vibe-mac/issues/104">cv-mac #104</a>).
+          For now, expand the assembly section inside the editor pane.
+        </p>
+      </div>
+    </section>
+
+  </div><!-- /.cvm-ide -->
+
+  <!-- Below-the-fold marketing content: Read Me + Emulator Config.
+       Pre-#104 these lived inside the left pane alongside the Mac.
+       With the IDE layout the editor is primary, so the marketing
+       content moves below the grid — discoverable via scroll, but
+       not competing for editor space. -->
+  <div class="cvm-below-fold">
 
       <section class="window" aria-labelledby="title-readme">
         <header class="window__titlebar">
@@ -228,29 +310,7 @@ npm run dev</pre>
         </div>
       </section>
 
-    </div><!-- /.cvm-split-pane--left -->
-
-    <!-- Drag divider — keyboard-accessible via role=separator + arrow keys -->
-    <div
-      class="cvm-split-divider"
-      id="cvm-split-divider"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize Mac and editor panes"
-      aria-valuemin="30"
-      aria-valuemax="80"
-      aria-valuenow="65"
-      tabindex="0"
-      title="Drag to resize panes"
-    ></div>
-
-    <!-- Right pane: playground editor -->
-    <div class="cvm-split-pane cvm-split-pane--right">
-      <section class="window window--wide window--playground" id="cvm-playground" aria-labelledby="title-playground">
-      </section>
-    </div><!-- /.cvm-split-pane--right -->
-
-  </div><!-- /.cvm-split-layout -->
+  </div><!-- /.cvm-below-fold -->
 `;
 
 const configEl = document.getElementById("config");
@@ -308,90 +368,19 @@ if (emulatorMount) {
   emulatorHandle = startEmulator(emulatorConfig, emulatorMount);
 }
 
-// ── Two-pane split layout (issue #45) ──────────────────────────────────────
+// ── Mac OS 8 IDE grid layout (#104) ────────────────────────────────────────
 //
-// At ≥1200px the page switches from a vertical stack to a side-by-side IDE
-// layout: Mac + supporting windows on the left, editor on the right, with a
-// draggable divider. Below 1200px the split panes are transparent wrappers
-// and the existing stacked layout is unchanged.
+// The page is a fixed CSS grid at ≥1200px: files | editor | (Mac / Output).
+// No draggable divider (cv-mac #45's drag-divider system was removed in
+// #104 because grid cells don't resize the same way flex panes did).
+// At <1200px the grid cells become normal blocks and content stacks.
+//
+// We still hold a reference to the layout element because applyEditorVisibility()
+// toggles data-editor-visible on it.
 
 const splitLayoutEl = document.getElementById(
   "cvm-split-layout",
 ) as HTMLDivElement | null;
-const splitDividerEl = document.getElementById(
-  "cvm-split-divider",
-) as HTMLDivElement | null;
-
-const SPLIT_PCT_KEY = "cvm.splitPct";
-const SPLIT_DEFAULT = 65;
-const SPLIT_MIN = 30;
-const SPLIT_MAX = 80;
-
-let splitPct = SPLIT_DEFAULT;
-try {
-  const stored = localStorage.getItem(SPLIT_PCT_KEY);
-  if (stored) {
-    const v = Number(stored);
-    if (Number.isFinite(v) && v >= SPLIT_MIN && v <= SPLIT_MAX) splitPct = v;
-  }
-} catch { /* ignore */ }
-
-function clampSplit(pct: number): number {
-  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, pct));
-}
-
-function applySplitPct(pct: number, persist = false): void {
-  splitPct = clampSplit(pct);
-  if (splitLayoutEl) {
-    splitLayoutEl.style.setProperty("--split-pct", `${splitPct}%`);
-  }
-  if (splitDividerEl) {
-    splitDividerEl.setAttribute("aria-valuenow", String(Math.round(splitPct)));
-  }
-  if (persist) {
-    try { localStorage.setItem(SPLIT_PCT_KEY, String(splitPct)); } catch { /* ignore */ }
-  }
-}
-applySplitPct(splitPct);
-
-if (splitDividerEl && splitLayoutEl) {
-  let dragging = false;
-
-  splitDividerEl.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    dragging = true;
-    document.body.classList.add("cvm-resizing");
-    splitDividerEl.setPointerCapture(e.pointerId);
-  });
-
-  splitDividerEl.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const rect = splitLayoutEl.getBoundingClientRect();
-    const pct = ((e.clientX - rect.left) / rect.width) * 100;
-    applySplitPct(pct);
-  });
-
-  const stopDrag = () => {
-    if (!dragging) return;
-    dragging = false;
-    document.body.classList.remove("cvm-resizing");
-    applySplitPct(splitPct, /* persist */ true);
-  };
-  splitDividerEl.addEventListener("pointerup", stopDrag);
-  splitDividerEl.addEventListener("pointercancel", stopDrag);
-
-  // Keyboard resize: arrows ±2%, Shift+arrows ±10%, Home/End = clamps, Enter = reset.
-  splitDividerEl.addEventListener("keydown", (e) => {
-    const step = e.shiftKey ? 10 : 2;
-    if (e.key === "ArrowLeft") applySplitPct(splitPct - step, true);
-    else if (e.key === "ArrowRight") applySplitPct(splitPct + step, true);
-    else if (e.key === "Home") applySplitPct(SPLIT_MIN, true);
-    else if (e.key === "End") applySplitPct(SPLIT_MAX, true);
-    else if (e.key === "Enter") applySplitPct(SPLIT_DEFAULT, true);
-    else return;
-    e.preventDefault();
-  });
-}
 
 // ── Playground (Phase 1: read-only-leaning viewer + IDB-backed editor) ──
 //
