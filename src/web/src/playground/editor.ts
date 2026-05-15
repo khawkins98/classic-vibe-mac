@@ -1011,25 +1011,32 @@ function extensionsForFile(filename: string) {
 
 /**
  * Whether edits to this file are actually compiled by the in-browser
- * pipeline for the given project. Two compile paths:
+ * pipeline for the given project. Three compile paths exist (see
+ * runBuild's dispatch table):
  *
- *   - **Splice path** (project has a `rezFile`): WASM-Rez recompiles
- *     `.r` files in-browser and splices the new resource fork onto a
- *     CI-precompiled `.code.bin`. `.c`/`.h` edits ride along in
+ *   - **Path A** (`rezFile === null && precompiledName === null`):
+ *     compileToBin compiles every `.c` end-to-end in-browser.
+ *   - **Path B** (`rezFile !== null && precompiledName === null`):
+ *     compileToBin + WASM-Rez. BOTH `.c` AND `.r` edits compile
+ *     in-browser. (cv-mac #100 Phase B.)
+ *   - **Path C** (`rezFile !== null && precompiledName !== null`):
+ *     WASM-Rez only. `.r` edits compile in-browser; the `.c` data
+ *     fork comes from CI-precompiled. `.c`/`.h` edits ride along in
  *     Download .zip but the running binary uses CI's data fork.
- *   - **Full in-browser C path** (project has `rezFile === null`):
- *     `cc1` + `as` + `ld` + `Elf2Mac` compile the project's `.c`
- *     sources end-to-end via `compileToBin()`. `.c`/`.h` edits are
- *     live. (Shipped 2026-05-15; see LEARNINGS Key Story #6.)
  *
  * Drives the project-aware warning banner: shown only when the user
  * is on a file whose edits *don't* feed back into the running binary
- * — i.e. `.c`/`.h` on a splice-path project. Wasm-hello and other
- * `rezFile === null` projects compile `.c` in-browser, so no banner.
+ * — i.e. `.c`/`.h` on a Path C project. The banner specifically tells
+ * the user to switch to a Path A/B project (Wasm Hello family) to see
+ * `.c` edits compile live.
  */
 function isCompiledInBrowser(filename: string, project: SampleProject): boolean {
   if (/\.r$/i.test(filename)) return true;
-  if (/\.[ch]$/i.test(filename)) return project.rezFile === null;
+  if (/\.[ch]$/i.test(filename)) {
+    // .c/.h compile in-browser whenever the data fork is built here
+    // (precompiledName is null) — true for Path A and Path B.
+    return project.precompiledName === null;
+  }
   return false;
 }
 

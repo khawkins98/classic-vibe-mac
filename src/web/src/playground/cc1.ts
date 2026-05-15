@@ -540,8 +540,25 @@ function callMainSafe(tool: ToolHandle, argv: string[]): number {
   try {
     return tool.Module.callMain(argv);
   } catch (e) {
-    const err = e as { name?: string; status?: number };
+    const err = e as { name?: string; status?: number; message?: string };
     if (err?.name === "ExitStatus") return err.status ?? 1;
+    // Wasm runtime trap (out-of-bounds memory access, unreachable, etc.)
+    // surfaces as a RuntimeError. Surface it via the stderr buffer so
+    // the caller's diagnostic-extraction path gets a clean message
+    // instead of an uncaught exception in the UI. Most common cause
+    // observed in practice: cc1 hitting its memory ceiling under -Os
+    // or -O2 on non-trivial sources (Snake at -O2 → \"memory access
+    // out of bounds\"). Long-term fix is to rebuild wasm-retro-cc with
+    // MAXIMUM_MEMORY raised; until then we hand the user a clearer
+    // error and let the build pipeline return rc=2 cleanly.
+    if (err?.name === "RuntimeError" || /out of bounds|unreachable/.test(err?.message ?? "")) {
+      tool.stderr.push(
+        `wasm trap: ${err?.message ?? "memory access out of bounds"}. ` +
+          `Often caused by cc1 hitting its memory ceiling under -Os/-O2 on a large source. ` +
+          `Try -O0 in the Optimize dropdown.`,
+      );
+      return 2;
+    }
     throw e;
   }
 }
@@ -688,12 +705,27 @@ export async function compileToBin(
     if (cc1Stderr) stderrParts.push(`[cc1 ${c.filename}]\n${cc1Stderr}`);
     allDiags.push(...parseCc1Stderr(cc1Stderr, c.filename));
     if (cc1Rc !== 0) {
+      // Detect the wasm-trap path (callMainSafe returns rc=2 and pushes
+      // a trap message onto stderr starting with \"wasm trap:\"). Promote
+      // it to a top-level diagnostic so the status bar surfaces the
+      // \"try -O0\" hint instead of a bare exit code.
+      const trapLine = cc1.stderr.find((l) => l.startsWith("wasm trap:"));
+      const trapDiag = trapLine
+        ? [{
+            file: c.filename, line: 1, column: 1, severity: "error" as const,
+            message: trapLine,
+          }]
+        : [];
       return {
         ok: false,
-        diagnostics: allDiags.length ? allDiags : [{
-          file: c.filename, line: 1, column: 1, severity: "error",
-          message: `cc1 exited rc=${cc1Rc} on ${c.filename}`,
-        }],
+        diagnostics: trapDiag.length
+          ? [...allDiags, ...trapDiag]
+          : allDiags.length
+            ? allDiags
+            : [{
+                file: c.filename, line: 1, column: 1, severity: "error",
+                message: `cc1 exited rc=${cc1Rc} on ${c.filename}`,
+              }],
         rawStderr: stderrParts.join("\n\n"),
         failedStage: 1,
         totalMs: performance.now() - t0,
