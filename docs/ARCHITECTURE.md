@@ -383,6 +383,14 @@ server infrastructure.** Two closed Epics make this concrete:
   is in — disproportionate and only achievable via a token-exchange
   relay, which is a backend), and Phase 3 silently assumed an
   in-browser HFS writer that doesn't exist anywhere in the stack.
+  **Update (2026-05-15):** the *compilation* part of Epic #19
+  shipped after all — via a different path. Instead of porting GCC
+  from scratch (the closed Epic's 4-9 engineer-month estimate), we
+  wasm-compile Retro68's existing cc1/as/ld/Elf2Mac binaries and
+  orchestrate them from JavaScript. The auth/HFS issues from the
+  original Epic still hold; that's why the in-browser-built path
+  ends at "download .bin / hot-load into running Mac", not "commit
+  to your fork." See PLAYGROUND.md § Epic #19 follow-up.
 
 The constraint isn't a religious one — it's an architectural one
 about staying within the deploy target (GitHub Pages, free, no auth,

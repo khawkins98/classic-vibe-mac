@@ -43,9 +43,22 @@ Two things, sequenced in that order:
 - **Playground** — visit the live URL, open the source panel,
   read the C and Rez code that's running above it, edit it, watch
   your edits persist across reloads. The full loop is live: *read /
-  edit / compile (in-browser WASM-Rez) / hot-load / watch the Mac
-  re-launch with your change* in ~820ms warm. Architecture rationale
-  and the phase plan live in
+  edit / compile / hot-load / watch the Mac re-launch with your
+  change* in ~820ms warm. Two compile paths:
+  - **Resource fork edits** (`.r` files) → in-browser WASM-Rez
+    compiles + splices onto a CI-precompiled `.code.bin`. The
+    original Phase 2 path.
+  - **Full C compilation** (`.c` files, no `.r` needed) →
+    in-browser `cc1.wasm + as.wasm + ld.wasm + Elf2Mac.wasm`
+    (Retro68's toolchain, wasm-built via
+    [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc))
+    produces a complete MacBinary II APPL from C source alone.
+    Shipped 2026-05-15 as the `wasm-hello` demo; this was the
+    capability Epic #19 had originally been closed as 4-9
+    engineer-months but proved doable in ~2 weeks by
+    wasm-compiling Retro68's existing binaries rather than
+    porting GCC from scratch.
+  Architecture rationale and the phase plan live in
   [`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md).
 - **Template** — the same repo is structured so you can fork it,
   drop your own C source under `src/app/<your-app>/`, push, and
@@ -63,8 +76,8 @@ architecturally honest version. See
 [`docs/ARCHITECTURE.md` § What we deliberately avoid](./docs/ARCHITECTURE.md#what-we-deliberately-avoid)
 for the long version.
 
-The five demo apps under `src/app/` are deliberately minimal but
-real:
+Six demo apps under `src/app/` — five baked into the boot disk by
+CI, plus one in-browser-compile-only proof of concept:
 
 - **Reader** (`CVMR`) — a classic-Mac HTML viewer in C with a URL
   bar. Reads HTML from `:Shared:` on the boot disk, can ask the host
@@ -87,8 +100,17 @@ real:
 - **Markdown Viewer** (`CVMD`) — reads `.md` files from `:Shared:`
   on the boot disk and renders them with a simple Markdown parser in
   C. Add your own `.md` files via the shared folder.
+- **Wasm Hello** (`wasm-hello/hello.c`) — the in-browser-compile-only
+  demo. No `.r` resources, no CMake recipe, no CI step. Click Build
+  & Run in the playground and the browser's wasm toolchain produces
+  the `.bin` from C source alone, which then hot-loads into the
+  running Mac. The first time anyone has been able to write classic
+  Mac C in a tab and watch it launch in seconds without leaving the
+  page. Source under [`src/app/wasm-hello/`](./src/app/wasm-hello/).
 
-All five apps coexist on the same boot disk. `src/app/CMakeLists.txt`
+The first five coexist on the same boot disk; **Wasm Hello is the
+in-browser-only path** (Build & Run in the playground; the `.bin`
+hot-loads into the running Mac without ever leaving the tab). `src/app/CMakeLists.txt`
 is a tiny aggregator; the boot-disk script installs
 each `.bin` into `:System Folder:Startup Items:` (auto-launch on
 boot) and `:Applications:` (re-launch from the desktop). Adding a
