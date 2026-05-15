@@ -697,13 +697,20 @@ export async function compileToBin(
   ld.Module.FS.writeFile("/tmp/in.o", oBytes);
   const ldStart = performance.now();
   const ldRc = callMainSafe(ld, [
-    // `retro68-flat-cv.ld` is the wasm-retro-cc-patched copy of
-    // `retro68-flat.ld` with the `PROVIDE(_start = .)` line removed.
-    // The stock script's PROVIDE wins over libretrocrt's real `_start`
-    // even with `start.c.obj` linked explicitly, routing the entry
-    // trampoline to a bare RTS — `main` never runs. See LEARNINGS
-    // "2026-05-15 — Even with start.c.obj linked, PROVIDE still wins".
-    "-T", "/sysroot/ld/retro68-flat-cv.ld",
+    // `retro68-multiseg.ld` is the multi-segment ld script that
+    // Elf2Mac dynamically generates from its default SegmentMap in
+    // `--elf2mac` mode (captured into a static asset in
+    // wasm-retro-cc#24). libretrocrt's `_start` was written for the
+    // multi-segment layout — using the flat script crashes at app
+    // launch with type-3 because the runtime relocator can't find the
+    // named `.code00001`/`.code00002`/... sections.
+    //
+    // See LEARNINGS "2026-05-15 — Missing SIZE resource crashes
+    // libretrocrt startup with type-3" (the immediate-prior fix that
+    // got us this far) and the wasm-retro-cc LEARNINGS section
+    // "Follow-up: the flat ld script is fundamentally wrong for
+    // libretrocrt".
+    "-T", "/sysroot/ld/retro68-multiseg.ld",
     "-L", "/sysroot/lib",
     "--no-warn-rwx-segments",
     "-o", "/tmp/out.gdb",
