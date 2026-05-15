@@ -1374,10 +1374,9 @@ async function runBuildInBrowserC(
 ): Promise<BuildOutcome> {
   const t0 = performance.now();
 
-  // Primary C source — first `.c` in the project's file list. (All
-  // current `rezFile===null` projects have exactly one `.c`; we keep
-  // the convention explicit so future multi-`.c` projects can rely on
-  // file-order for the entrypoint.)
+  // Primary C source — first `.c` in the project's file list. Used as
+  // the diagnostics-labelling default; cc1 errors on a different file
+  // get tagged with that file's name (per-source parsing in cc1.ts).
   const cFile = proj.files.find((f) => /\.c$/i.test(f));
   if (!cFile) {
     return {
@@ -1398,35 +1397,28 @@ async function runBuildInBrowserC(
     };
   }
 
-  // Active editor buffer for the primary .c if it's open; otherwise
-  // read the IDB-saved copy (which falls back to the bundled seed).
-  const cSource =
-    activeFile === cFile
-      ? view.state.doc.toString()
-      : await readOrSeedFile(baseUrl, proj.id, cFile);
-
-  // Sibling project files for `#include "x.h"` resolution. Same rule
-  // as the Show Assembly panel: gather every .c/.h sibling and let the
-  // bridge mkdir-p them into /tmp/.
-  const siblings: Array<{ name: string; content: string }> = [];
+  // Gather every .c and .h in the project. .c files all get compiled
+  // (cv-mac #100 Phase A — multi-file support); .h files are co-mounted
+  // into MEMFS for #include resolution. Active editor buffer wins over
+  // IDB for whichever file is currently open.
+  const sources: Array<{ filename: string; content: string }> = [];
   for (const f of proj.files) {
-    if (f === cFile) continue;
-    if (!/\.(c|h|cpp|hpp|cc|hh)$/i.test(f)) continue;
+    if (!/\.(c|h)$/i.test(f)) continue;
     try {
-      siblings.push({
-        name: f,
+      sources.push({
+        filename: f,
         content:
           activeFile === f
             ? view.state.doc.toString()
             : await readOrSeedFile(baseUrl, proj.id, f),
       });
     } catch {
-      // Unreadable sibling — cc1 will surface the resulting "No such file"
+      // Unreadable source — cc1 will surface the resulting "No such file"
       // if the omission breaks the compile.
     }
   }
 
-  const r = await compileToBin(baseUrl, cSource, cFile, { siblings });
+  const r = await compileToBin(baseUrl, { sources, primaryName: cFile });
   setEditorDiagnostics(view, r.diagnostics, activeFile);
 
   if (!r.ok || !r.bin) {

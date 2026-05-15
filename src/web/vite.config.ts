@@ -74,6 +74,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello", f),
   })),
+  // wasm-hello-multi — multi-file in-browser-compile demo (cv-mac #100
+  // Phase A). main.c + greet.c + greet.h; exercises compileToBin's new
+  // multi-source path.
+  ...["main.c", "greet.c", "greet.h"].map((f) => ({
+    project: "wasm-hello-multi",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-multi", f),
+  })),
 ];
 
 /**
