@@ -84,3 +84,12 @@ spike/
 # Playwright test-demo automation outputs (issue #71)
 tests/e2e/screenshots/
 test-results-test-demo/
+
+# m68k-runner build artefacts
+tools/m68k-runner/m68k-run
+tools/m68k-runner/runner.o
+tools/m68k-runner/musashi/*.o
+tools/m68k-runner/musashi/m68kmake
+tools/m68k-runner/musashi/m68kops.c
+tools/m68k-runner/musashi/m68kops.h
+tools/m68k-runner/musashi/softfloat/*.o
