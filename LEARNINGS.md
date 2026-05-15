@@ -1134,6 +1134,34 @@ future work), but we need one of these to actually trigger auto-launch:
 Option 1 or 2 is the path forward. Logged so the next agent doesn't spend a
 day debugging "why doesn't my app launch."
 
+### 2026-05-15 — cc1.wasm (and the Retro68 toolchain in general) is not re-entrant
+**Context:** First eyes-on test of the in-browser C compile-and-run path on deployed Pages. First click of Build & Run on `wasm-hello` worked end-to-end — Apps disk mounted, app launched cleanly, no crash dialog. Second click returned `error: cc1 exited rc=1 (hello.c:1)` with no parseable diagnostic surfaced.
+**Finding:** GCC's `main()` mutates static globals — including `decode_options`' "output file already set" flag — and never resets them on exit. Emscripten can't simulate process re-creation; the heap and statics persist across `callMain` returns. The second `Module.callMain([..., "-o", "/tmp/out.s"])` on the same Module instance sees the prior call's `-o` state still set and errors with:
+
+```
+this.program: error: output filename specified twice
+this.program: error: too many filenames given; type 'this.program --help' for usage
+```
+
+Same root cause as the Node-side bug I hit earlier in `wasm-retro-cc/scripts/verify-show-asm-bundle.mjs` (browser Emscripten can't reset module statics any better than Node Emscripten can).
+
+**Worse:** the bridge's `compileToAsm` had the *exact same bug* — it cached the cc1 Module across edits, so every Show Assembly compile after the first was silently failing. The asm view kept showing the first successful result because the bridge doesn't clear it on subsequent failures, so the UX looked fine.
+
+The wasm-retro-cc/spike `full-pipeline.mjs` test got away with it because each tool is loaded fresh per run of the script — same effect as fresh Module per call.
+
+**Action:** Both `compileToAsm` and `compileToBin` in `src/web/src/playground/cc1.ts` now instantiate a **fresh** Module per invocation. The expensive parts have caches that survive:
+  - cc1.mjs / as.mjs / ld.mjs / Elf2Mac.mjs ES factory modules — once-loaded via the browser's ES module loader.
+  - cc1.wasm + sibling wasms — once-fetched, browser HTTP cache hits on re-instantiation.
+  - Parsed sysroot blobs (`{ blob: Uint8Array, index: SysrootIndexEntry[] }`) — module-scope `headersBlobPromise` / `libsBlobPromise`.
+
+What re-runs per call: Emscripten Module instantiation (~100–300 ms for cc1) and MEMFS sysroot mount (~100–200 ms for the 220-file headers walk). Net Show Assembly latency went from ~150 ms warm to ~400–500 ms warm — under the panel's 500 ms debounce, so the user-perceived "stop typing → asm updates" cycle is unchanged.
+
+Regression guard: `tests/e2e/playground-compile-to-bin.spec.ts` now includes a "survives repeat calls" test that fails fast if the cache ever sneaks back in.
+
+**Two general lessons:**
+1. **Eyes-on caught what headless missed.** The cc1 silent-fail in Show Assembly had been there since #80 shipped — Playwright specs only ever exercised the first compile, so the bug never surfaced. The first real user click (yours) hit it on attempt #2. Reinforces the "ship-to-staging is the boot-test strategy" entry above: there's failure-mode space the headless harness doesn't cover.
+2. **Assume single-shot for C-runtime wasm binaries until proven re-entrant.** GCC, binutils, and most C-compiled CLI tools were never written with "reset and run again in same process" in mind. The Emscripten wrapper makes the API LOOK re-entrant; the actual program almost certainly isn't.
+
 ### 2026-05-15 — In-browser C compile-and-run: ship-to-staging is the boot-test strategy
 **Context:** cv-mac #64's north star — "write C in a browser tab, click Compile & Run, watch it boot on a 68k Mac." After cv-mac #80/#81/#82 + wasm-retro-cc #18/#19/#20, the JS-side compile path is real (`compileToBin` produces a structurally-valid MacBinary II APPL from `.c` source via cc1 → as → ld → Elf2Mac, all in the user's tab). What's not yet known: whether the 896-byte single-segment output actually boots on the embedded BasiliskII.
 **Finding:** Headless Playwright probing of the boot path was inconclusive. The flow:
