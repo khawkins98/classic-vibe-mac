@@ -1,6 +1,6 @@
 # Playground
 
-_Last updated: 2026-05-09._
+_Last updated: 2026-05-15._
 
 The design rationale and rolling status of Epic #21 — the in-browser
 playground for resource-fork edits to classic Mac apps. Companion docs:

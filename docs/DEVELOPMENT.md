@@ -34,16 +34,32 @@ browser tab.
                               +-------------------+
 ```
 
-There are three loops you'll move between:
+There are **four** loops you'll move between, ordered from fastest
+to slowest:
 
+0. **In-browser (~1-2 s, no install).** Open the live page or
+   `npm run dev`, edit `.c` or `.r` source in the playground panel,
+   click Build & Run. The page compiles your edits using a wasm
+   build of the Retro68 toolchain (cc1 + as + ld + Elf2Mac) and
+   hot-loads the result into the embedded BasiliskII. Cold first
+   click: ~3-5 s (lazy-loads the 3.9 MB brotli toolchain bundle);
+   warm: ~1-1.5 s. **This is the fastest loop for changes scoped
+   to a single in-browser project** (e.g. `wasm-hello`). Shipped
+   2026-05-15 — see
+   [LEARNINGS Key Story #6](../LEARNINGS.md#6-closed-as-infeasible-epics-describe-a-path-not-the-universal-answer--survey-alternative-paths-before-locking-the-closure-rationale-in-as-wisdom).
 1. **Fast (sub-second).** Edit pure-C engine, run `npm run test:unit`.
-   No emulator, no browser.
-2. **Slow (~1-3 min).** Edit Toolbox shell or resource fork, cross-compile,
+   No emulator, no browser. The Toolbox-shell + pure-C-engine split
+   means most app logic is testable on the host.
+2. **Slow (~1-3 min).** Edit Toolbox shell or resource fork for a
+   bundled boot-disk app (Reader, MacWeather, etc.), cross-compile
+   via the Retro68 Docker image (or pull the latest CI artifact),
    rebuild boot disk, hard-reload the dev server.
 3. **Slowest (~5-10 min).** Push, let CI build, deploy lands on Pages.
 
 Pick the fastest loop that exercises the change. Most logic should be
-testable in loop 1.
+testable in loop 1. New in-browser projects (no `.r` resource fork,
+single `.c` file) can iterate fully in loop 0 without ever touching
+the host toolchain.
 
 ## First-time setup
 
