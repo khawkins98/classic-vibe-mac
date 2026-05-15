@@ -100,6 +100,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-notepad", f),
   })),
+  // wasm-calculator — 4-function calculator (#125). Different surface
+  // from the TextEdit ladder: hand-drawn buttons + PtInRect hit-testing
+  // + NumToString display. No TextEdit, no scrap.
+  ...["calc.c", "calc.r"].map((f) => ({
+    project: "wasm-calculator",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-calculator", f),
+  })),
 ];
 
 
