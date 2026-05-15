@@ -1723,16 +1723,19 @@ body.cvm-paused .emulator-canvas {
   padding-top: 8px;
 }
 
-/* Mac OS 8 chrome overrides for the Help WinBox — same striped titlebar
-   + platinum body the rest of the site uses. */
-.cvm-help-winbox {
+/* Mac OS 8 chrome overrides applied to ALL WinBoxes (palettes + docked
+   IDE panes). Shared border, striped titlebar, and paper title field
+   live on .cvm-mac-winbox. Body background varies per-palette (paper
+   for text-heavy palettes, platinum for picker / docked panes), so
+   that's overridden below per class. */
+.cvm-mac-winbox {
   border: 1px solid var(--ink) !important;
   box-shadow:
     inset 1px 1px 0 0 var(--highlight),
     inset -1px -1px 0 0 var(--shadow),
     3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
 }
-.cvm-help-winbox .wb-header {
+.cvm-mac-winbox .wb-header {
   background-image: repeating-linear-gradient(
     to bottom,
     var(--ink) 0, var(--ink) 1px,
@@ -1742,7 +1745,7 @@ body.cvm-paused .emulator-canvas {
   border-bottom: 1px solid var(--ink) !important;
   height: 20px !important;
 }
-.cvm-help-winbox .wb-title {
+.cvm-mac-winbox .wb-title {
   background: var(--paper) !important;
   color: var(--ink) !important;
   padding: 0 8px !important;
@@ -1752,8 +1755,47 @@ body.cvm-paused .emulator-canvas {
   height: 18px !important;
   margin: 1px auto !important;
 }
-.cvm-help-winbox .wb-body {
+
+/* Paper background for the text-heavy palettes. */
+.cvm-help-winbox .wb-body,
+.cvm-about-winbox .wb-body,
+.cvm-prefs-winbox .wb-body,
+.cvm-explainer-winbox .wb-body {
   background: var(--paper) !important;
+}
+/* Platinum background for the picker + the four docked work panes. */
+.cvm-picker-winbox .wb-body,
+.cvm-pane-files .wb-body,
+.cvm-pane-editor .wb-body,
+.cvm-pane-mac .wb-body,
+.cvm-pane-output .wb-body {
+  background: var(--platinum) !important;
+}
+
+/* Mac OS 8 grow box — the southeast resize corner. WinBox renders this
+   as a 15×15 transparent div (.wb-se); we paint Mac-OS-8 diagonal
+   stripes on top so the corner reads as a grow handle. */
+.cvm-mac-winbox .wb-se {
+  background:
+    /* corner triangle of stripes */
+    linear-gradient(135deg,
+      transparent 0%,
+      transparent 35%,
+      var(--ink) 36%,
+      var(--ink) 37%,
+      transparent 38%,
+      transparent 48%,
+      var(--ink) 49%,
+      var(--ink) 50%,
+      transparent 51%,
+      transparent 61%,
+      var(--ink) 62%,
+      var(--ink) 63%,
+      transparent 64%
+    ) !important;
+  background-color: var(--platinum) !important;
+  border-left: 1px solid var(--ink) !important;
+  border-top: 1px solid var(--ink) !important;
 }
 
 /* --- About palette (Apple menu) ------------------------------------- */
@@ -1837,43 +1879,9 @@ body.cvm-paused .emulator-canvas {
   min-width: 130px;
 }
 
-/* Apple + About + Prefs WinBoxes pick up the same Mac OS 8 chrome via
-   the shared .cvm-mac-winbox class. Explicit overrides keep the borders
-   crisp at the awkward viewport sizes where WinBox's defaults bleed. */
-.cvm-about-winbox,
-.cvm-prefs-winbox {
-  border: 1px solid var(--ink) !important;
-  box-shadow:
-    inset 1px 1px 0 0 var(--highlight),
-    inset -1px -1px 0 0 var(--shadow),
-    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
-}
-.cvm-about-winbox .wb-header,
-.cvm-prefs-winbox .wb-header {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--ink) 0, var(--ink) 1px,
-    var(--paper) 1px, var(--paper) 2px
-  ) !important;
-  background-color: transparent !important;
-  border-bottom: 1px solid var(--ink) !important;
-  height: 20px !important;
-}
-.cvm-about-winbox .wb-title,
-.cvm-prefs-winbox .wb-title {
-  background: var(--paper) !important;
-  color: var(--ink) !important;
-  padding: 0 8px !important;
-  font-family: var(--font-chrome) !important;
-  font-size: 12px !important;
-  line-height: 18px !important;
-  height: 18px !important;
-  margin: 1px auto !important;
-}
-.cvm-about-winbox .wb-body,
-.cvm-prefs-winbox .wb-body {
-  background: var(--paper) !important;
-}
+/* About/Prefs WinBox chrome is provided by .cvm-mac-winbox (consolidated
+   rules higher up). Per-palette body backgrounds are also consolidated
+   there. No per-class overrides needed. */
 
 /* --- Shared Mac OS 8 window behaviours for WinBox palettes ---------- */
 /*
@@ -1960,73 +1968,8 @@ body.cvm-paused .emulator-canvas {
   outline-offset: 3px;
 }
 
-/* Mac OS 8 chrome overrides for the explainer WinBox — striped titlebar
-   + paper body. Same pattern as .cvm-picker-winbox / .cvm-help-winbox. */
-.cvm-explainer-winbox {
-  border: 1px solid var(--ink) !important;
-  box-shadow:
-    inset 1px 1px 0 0 var(--highlight),
-    inset -1px -1px 0 0 var(--shadow),
-    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
-}
-.cvm-explainer-winbox .wb-header {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--ink) 0, var(--ink) 1px,
-    var(--paper) 1px, var(--paper) 2px
-  ) !important;
-  background-color: transparent !important;
-  border-bottom: 1px solid var(--ink) !important;
-  height: 20px !important;
-}
-.cvm-explainer-winbox .wb-title {
-  background: var(--paper) !important;
-  color: var(--ink) !important;
-  padding: 0 8px !important;
-  font-family: var(--font-chrome) !important;
-  font-size: 12px !important;
-  line-height: 18px !important;
-  height: 18px !important;
-  margin: 1px auto !important;
-}
-.cvm-explainer-winbox .wb-body {
-  background: var(--paper) !important;
-}
-
-/* WinBox Mac OS 8 chrome overrides — applied to the modal that wraps
-   .cvm-picker. We give it the same striped titlebar + platinum body the
-   rest of the site uses, so the picker reads as a system dialog instead
-   of a generic web modal. */
-.cvm-picker-winbox {
-  border: 1px solid var(--ink) !important;
-  box-shadow:
-    inset 1px 1px 0 0 var(--highlight),
-    inset -1px -1px 0 0 var(--shadow),
-    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
-}
-.cvm-picker-winbox .wb-header {
-  background-image: repeating-linear-gradient(
-    to bottom,
-    var(--ink) 0, var(--ink) 1px,
-    var(--paper) 1px, var(--paper) 2px
-  ) !important;
-  background-color: transparent !important;
-  border-bottom: 1px solid var(--ink) !important;
-  height: 20px !important;
-}
-.cvm-picker-winbox .wb-title {
-  background: var(--paper) !important;
-  color: var(--ink) !important;
-  padding: 0 8px !important;
-  font-family: var(--font-chrome) !important;
-  font-size: 12px !important;
-  line-height: 18px !important;
-  height: 18px !important;
-  margin: 1px auto !important;
-}
-.cvm-picker-winbox .wb-body {
-  background: var(--platinum) !important;
-}
+/* Explainer + picker chrome is provided by .cvm-mac-winbox (consolidated
+   above). Per-palette body backgrounds are also consolidated there. */
 
 /* --- Output panel (WinBox-wrapped) ---------------------------------- */
 
