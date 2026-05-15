@@ -243,6 +243,16 @@ declare const __CVM_BUILT_AT__: string;
 export const BUILT_AT: string =
   typeof __CVM_BUILT_AT__ === "string" ? __CVM_BUILT_AT__ : "dev";
 
+/** Build-time constant: hash of every wasm-cc1 toolchain artifact
+ * (cc1.wasm, as.wasm, ld.wasm, Elf2Mac.wasm, sysroot[-libs].bin). Changes
+ * when the toolchain itself is updated, even if no sample source changed.
+ * Use this to confirm "is my browser actually running the new toolchain?" */
+declare const __CVM_TOOLCHAIN_VERSION__: string;
+export const TOOLCHAIN_VERSION: string =
+  typeof __CVM_TOOLCHAIN_VERSION__ === "string"
+    ? __CVM_TOOLCHAIN_VERSION__
+    : "dev";
+
 /** IDB key for a per-project, per-file content blob. */
 export function fileKey(projectId: string, filename: string): string {
   return `${projectId}/${filename}`;
