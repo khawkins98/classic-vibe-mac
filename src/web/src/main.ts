@@ -219,8 +219,10 @@ npm run dev</pre>
         </header>
         <div class="window__body">
           <p>
-            For the curious. This is what the BasiliskII loader will be handed
-            once it is wired up.
+            For the curious. The config object below is what the
+            BasiliskII loader is handed at boot — the chunked HFS
+            disk URL, the canvas dimensions, the shared-folder
+            mapping, the weather fallback coords, etc.
           </p>
           <pre id="config"></pre>
         </div>
