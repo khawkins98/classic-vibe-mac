@@ -1836,6 +1836,27 @@ body.cvm-paused .emulator-canvas {
   border-top: 1px solid var(--shadow);
   padding-top: 8px;
 }
+.cvm-about__build {
+  margin: 4px 0 8px;
+  font-size: 11px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  padding: 6px 10px;
+}
+.cvm-about__build dt {
+  color: var(--shadow);
+  font-weight: bold;
+}
+.cvm-about__build dd {
+  margin: 0;
+}
+.cvm-about__build code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
 
 /* --- Preferences palette (Edit menu) -------------------------------- */
 .cvm-prefs {
