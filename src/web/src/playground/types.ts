@@ -216,6 +216,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVPT",
   },
+  {
+    // wasm-bounce — offscreen BitMap + CopyBits, no-flicker animation
+    // (cv-mac #125). Fills the "Offscreen GWorld + CopyBits" gap. The
+    // canonical double-buffer pattern any animated Mac app from 1989
+    // onwards relied on. Uses the older NewPtr+BitMap approach (no
+    // NewGWorld) for maximum 68k compatibility.
+    id: "wasm-bounce",
+    label: "Wasm Bounce",
+    files: ["bounce.c", "bounce.r"],
+    rezFile: "bounce.r",
+    outputName: "WasmBounce.bin",
+    appType: "APPL",
+    appCreator: "CVBO",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
