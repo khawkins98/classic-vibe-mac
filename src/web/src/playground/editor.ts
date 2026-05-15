@@ -1392,6 +1392,31 @@ async function runBuildInBrowserC(
     };
   }
 
+  // Identity stamp for every in-browser build. Mirrors the
+  // `[prebuilt-demo] ...` line from the static-bin path. Lets us
+  // confirm at a glance "did this Build click actually produce a
+  // different binary?" without downloading and shasumming locally —
+  // particularly useful when debugging service-worker cache hits or
+  // wasm-toolchain regressions.
+  // Copy into a fresh ArrayBuffer-backed Uint8Array for SubtleCrypto.
+  // The cc1 bridge's `r.bin` may be backed by an Emscripten-allocated
+  // SharedArrayBuffer / WASM heap; SubtleCrypto.digest is typed to
+  // accept only ArrayBuffer-backed BufferSource.
+  const copy = new Uint8Array(r.bin.byteLength);
+  copy.set(r.bin);
+  const buf = await crypto.subtle.digest("SHA-256", copy);
+  const shaHex = Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  console.info(
+    `[build-c] ${proj.id}/${cFile}: ${r.bin.byteLength}B  ` +
+      `sha256=${shaHex.slice(0, 16)}…  ` +
+      `cc1=${r.stages?.cc1Ms.toFixed(0)}ms ` +
+      `as=${r.stages?.asMs.toFixed(0)}ms ` +
+      `ld=${r.stages?.ldMs.toFixed(0)}ms ` +
+      `elf2mac=${r.stages?.elf2macMs.toFixed(0)}ms`,
+  );
+
   return {
     ok: true,
     bytes: r.bin,

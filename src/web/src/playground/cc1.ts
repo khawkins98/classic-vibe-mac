@@ -697,7 +697,13 @@ export async function compileToBin(
   ld.Module.FS.writeFile("/tmp/in.o", oBytes);
   const ldStart = performance.now();
   const ldRc = callMainSafe(ld, [
-    "-T", "/sysroot/ld/retro68-flat.ld",
+    // `retro68-flat-cv.ld` is the wasm-retro-cc-patched copy of
+    // `retro68-flat.ld` with the `PROVIDE(_start = .)` line removed.
+    // The stock script's PROVIDE wins over libretrocrt's real `_start`
+    // even with `start.c.obj` linked explicitly, routing the entry
+    // trampoline to a bare RTS — `main` never runs. See LEARNINGS
+    // "2026-05-15 — Even with start.c.obj linked, PROVIDE still wins".
+    "-T", "/sysroot/ld/retro68-flat-cv.ld",
     "-L", "/sysroot/lib",
     "--no-warn-rwx-segments",
     "-o", "/tmp/out.gdb",
