@@ -65,6 +65,15 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "hello-mac", f),
   })),
+  // wasm-hello — the in-browser compile-and-run demo (cv-mac #64).
+  // C only; no .r resources; no CMake / CI build. The playground's
+  // Build & Run path uses compileToBin() to produce the MacBinary
+  // directly in the user's browser.
+  ...["hello.c"].map((f) => ({
+    project: "wasm-hello",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello", f),
+  })),
 ];
 
 /**
