@@ -23,8 +23,14 @@ export interface MenuItem {
   /** Fired when the item is clicked or when its keyboard shortcut
    *  fires. Omit for disabled stubs that read as "coming soon". */
   action?: () => void;
-  /** Greyed/non-interactive (still rendered for context). */
-  disabled?: boolean;
+  /**
+   * Greyed/non-interactive. Boolean for static placeholders ("Coming
+   * soon"), or a thunk for live state (e.g. Reboot Mac is disabled
+   * until the first Build & Run produces a cached spec). The thunk is
+   * called every time the dropdown is opened and on each shortcut
+   * keystroke, so it should be cheap.
+   */
+  disabled?: boolean | (() => boolean);
   /**
    * Single-letter Cmd-key shortcut (uppercase). Rendered right-aligned
    * in the dropdown (⌘L on Mac, Ctrl-L elsewhere) and dispatched
@@ -32,6 +38,11 @@ export interface MenuItem {
    * action without opening the menu. Skipped when disabled.
    */
   shortcut?: string;
+}
+
+/** Resolve the `disabled` field to a boolean for the current frame. */
+function isDisabled(item: MenuItem): boolean {
+  return typeof item.disabled === "function" ? item.disabled() : !!item.disabled;
 }
 
 export type MenuEntry = MenuItem | { separator: true };
@@ -45,6 +56,9 @@ export interface MenubarActions {
   downloadCurrentZip: () => void;
   resetLayout: () => void;
   rebootEmulator: () => void;
+  /** Live predicate for whether Reboot Mac should be enabled. False
+   *  until the first Build & Run produces a cached spec. */
+  canRebootEmulator: () => boolean;
   /** Provide a list of currently open WinBox windows (docked + palettes)
    *  so the Windows menu can list them dynamically. Caller raises a
    *  window by clicking the corresponding item. */
@@ -104,11 +118,12 @@ export function mountMenubar(actions: MenubarActions): () => void {
         if ("separator" in it) {
           return `<div class="cvm-menu-dropdown__sep" role="separator"></div>`;
         }
+        const dis = isDisabled(it);
         const cls =
           "cvm-menu-dropdown__item" +
-          (it.disabled ? " cvm-menu-dropdown__item--disabled" : "");
-        const attrs = it.disabled ? "aria-disabled='true'" : `data-menu-action='${idx}'`;
-        const shortcut = it.shortcut && !it.disabled
+          (dis ? " cvm-menu-dropdown__item--disabled" : "");
+        const attrs = dis ? "aria-disabled='true'" : `data-menu-action='${idx}'`;
+        const shortcut = it.shortcut && !dis
           ? `<span class="cvm-menu-dropdown__shortcut">${SHORTCUT_PREFIX}${escapeHtml(it.shortcut)}</span>`
           : "";
         return `<button type="button"
@@ -133,7 +148,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
     if (!btn || !openMenuKey) return;
     const idx = Number(btn.dataset.menuAction);
     const item = menuFor(openMenuKey)[idx];
-    if (item && !("separator" in item) && item.action && !item.disabled) {
+    if (item && !("separator" in item) && item.action && !isDisabled(item)) {
       const a = item.action;
       // Close BEFORE firing so the action can open a palette that wants focus.
       closeDropdown();
@@ -206,7 +221,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
     for (const key of Object.keys(staticMenus)) {
       for (const item of staticMenus[key]) {
         if ("separator" in item) continue;
-        if (item.disabled) continue;
+        if (isDisabled(item)) continue;
         if (!item.shortcut) continue;
         if (item.shortcut.toUpperCase() === target && item.action) {
           e.preventDefault();
@@ -276,7 +291,13 @@ function buildMenuSchema(a: MenubarActions): Record<string, MenuEntry[]> {
       // happened yet the action surfaces a console hint and no-ops;
       // we don't dynamically grey because the live state isn't tracked
       // in the menu schema.
-      { label: "Reboot Mac", action: a.rebootEmulator },
+      {
+        label: "Reboot Mac",
+        action: a.rebootEmulator,
+        // Disabled until the first Build & Run caches an EmulatorInMemoryDiskSpec
+        // in main.ts. Dynamic — evaluated each time the menu opens.
+        disabled: () => !a.canRebootEmulator(),
+      },
     ],
     help: [{ label: "classic-vibe-mac Help", action: a.openHelp, shortcut: "?" }],
   };
