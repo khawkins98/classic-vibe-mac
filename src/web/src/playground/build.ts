@@ -525,23 +525,3 @@ export function makeRetro68DefaultSizeFork(): Uint8Array {
   return fork;
 }
 
-/** Fetch the precompiled `<projectId>.code.bin` static asset that the CI
- *  build emits. Returns the raw bytes. Throws on 404 or network failure
- *  with a message the playground UI can display. */
-export async function fetchPrecompiled(
-  baseUrl: string,
-  projectId: string,
-): Promise<Uint8Array> {
-  const url = `${baseUrl}precompiled/${projectId}.code.bin`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(
-      `precompiled .code.bin not available (${res.status}). ` +
-        `The CI build emits these into public/precompiled/ — if you're ` +
-        `running locally without a CI build, run \`npm run build\` after ` +
-        `\`cmake --build build\`.`,
-    );
-  }
-  const buf = await res.arrayBuffer();
-  return new Uint8Array(buf);
-}
