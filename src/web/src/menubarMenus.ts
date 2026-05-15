@@ -137,6 +137,21 @@ export function mountMenubar(actions: MenubarActions): () => void {
     openDropdown(key, btn);
   }
 
+  // Hover-to-switch: while a dropdown is open, hovering a *different*
+  // menubar trigger swaps to that menu without clicking. Classic Mac
+  // menubar behaviour — once a menu is "active" the user is effectively
+  // browsing the menubar with the cursor. When no menu is open, hover
+  // is a no-op (we don't pop a menu just because the cursor passed by).
+  function onMenubarHover(e: MouseEvent): void {
+    if (!openMenuKey) return;
+    const btn = (e.target as Element).closest<HTMLElement>("[data-menu]");
+    if (!btn) return;
+    const key = btn.dataset.menu!;
+    if (key === openMenuKey) return;
+    closeDropdown();
+    openDropdown(key, btn);
+  }
+
   // Listener for "outside" clicks → close.
   function onDocClick(e: MouseEvent): void {
     if (!openMenuKey) return;
@@ -153,11 +168,13 @@ export function mountMenubar(actions: MenubarActions): () => void {
   document.addEventListener("click", onMenubarClick, true);
   document.addEventListener("click", onDocClick);
   document.addEventListener("keydown", onKey);
+  document.addEventListener("mouseover", onMenubarHover);
 
   return () => {
     document.removeEventListener("click", onMenubarClick, true);
     document.removeEventListener("click", onDocClick);
     document.removeEventListener("keydown", onKey);
+    document.removeEventListener("mouseover", onMenubarHover);
     overlay.remove();
   };
 }
