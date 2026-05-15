@@ -809,11 +809,110 @@ body.cvm-paused .emulator-canvas {
   margin: 8px 0 0;
 }
 
+/* --- Show Assembly panel (cv-mac #64 / wasm-retro-cc #17) ------------ */
+.cvm-pg-asm-panel {
+  margin-top: 12px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+}
+
+.cvm-pg-asm-summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  background: linear-gradient(
+    180deg,
+    var(--highlight) 0%,
+    var(--paper) 30%,
+    var(--shadow) 100%
+  );
+  border-bottom: 1px solid var(--ink);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.cvm-pg-asm-summary__title {
+  font-weight: bold;
+}
+
+.cvm-pg-asm-summary__hint {
+  color: var(--shadow);
+  font-size: 11px;
+}
+
+.cvm-pg-asm-meter {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--shadow);
+  font-variant-numeric: tabular-nums;
+}
+
+.cvm-pg-asm-intro {
+  margin: 8px 10px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.cvm-pg-asm-status {
+  margin: 6px 10px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  min-height: 1.4em;
+}
+.cvm-pg-asm-status[data-kind="err"] {
+  color: #b00020;
+}
+.cvm-pg-asm-status[data-kind="ok"] {
+  color: #0a6d20;
+}
+
+.cvm-pg-asm-mount {
+  height: 320px;
+  min-height: 200px;
+  overflow: hidden;
+  margin: 0 10px 8px;
+  border: 1px solid var(--ink);
+  background: #f8f8f8;
+}
+.cvm-pg-asm-mount .cm-editor {
+  height: 100%;
+}
+
+.cvm-pg-asm-stderr-wrap {
+  margin: 0 10px 10px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+}
+.cvm-pg-asm-stderr-wrap > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  color: var(--shadow);
+}
+.cvm-pg-asm-stderr {
+  background: #fff7e6;
+  border: 1px solid #d0a838;
+  padding: 6px 8px;
+  margin: 4px 0 0;
+  font-family: "Monaco", "Andale Mono", "Courier New", monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 200px;
+  overflow: auto;
+}
+
 /* On narrow viewports, hide the editor entirely (per editor reviewer's
    "don't regress mobile" guidance) and show a one-line caption instead. */
 @media (max-width: 720px) {
   .cvm-pg-toolbar,
-  .cvm-pg-editor {
+  .cvm-pg-editor,
+  .cvm-pg-asm-panel {
     display: none;
   }
   .cvm-pg-mobile-note {
