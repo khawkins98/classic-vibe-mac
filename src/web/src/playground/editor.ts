@@ -38,7 +38,7 @@ import {
   triggerDownload,
   fetchPrecompiled,
 } from "./build";
-import { compileToAsm } from "./cc1";
+import { compileToAsm, compileToBin } from "./cc1";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
   showBuildExplainer,
@@ -1170,15 +1170,30 @@ interface BuildOutcome {
 
 /**
  * The Build pipeline, end-to-end. Owned here in editor.ts because it
- * touches the live view (for diagnostics) and the active project. The
- * individual stages live in their own modules:
+ * touches the live view (for diagnostics) and the active project.
  *
- *    user buffer (IDB) ── preprocessor.ts ──> flat source
- *    flat source ────── rez.ts ──────────> resource fork bytes
- *    rsrc fork + .code.bin ── build.ts ───> spliced MacBinary
+ * Two flavours depending on the project shape:
  *
- * Returns the spliced bytes on success, or a structured error otherwise.
- * The caller renders whichever appropriate.
+ *   • Splice path (`rezFile` non-null) — the existing `.r`-driven flow
+ *     used by reader / macweather / hello-mac. CI builds a `.code.bin`
+ *     with the m68k CODE/DATA/RELA from the project's `.c` source;
+ *     the playground recompiles the `.r` resource fork in-browser via
+ *     wasm-rez and splices it on top.
+ *
+ *       user buffer (IDB) ── preprocessor.ts ──> flat source
+ *       flat source ────── rez.ts ──────────> resource fork bytes
+ *       rsrc fork + .code.bin ── build.ts ───> spliced MacBinary
+ *
+ *   • In-browser C path (`rezFile === null`) — the wasm-hello flow
+ *     (cv-mac #64 / wasm-retro-cc #15). The whole pipeline runs
+ *     client-side: cc1 → as → ld → Elf2Mac produces a complete
+ *     MacBinary II APPL directly from the user's `.c` source. No
+ *     CI artefact involved.
+ *
+ *       user buffer ── compileToBin (cc1 → as → ld → Elf2Mac) ──> MacBinary
+ *
+ * Returns the resulting bytes on success, or a structured error
+ * otherwise. The caller renders whichever applies.
  */
 async function runBuild(
   baseUrl: string,
@@ -1186,6 +1201,9 @@ async function runBuild(
   view: EditorView,
   activeFile: string,
 ): Promise<BuildOutcome> {
+  if (proj.rezFile === null) {
+    return runBuildInBrowserC(baseUrl, proj, view, activeFile);
+  }
   const t0 = performance.now();
 
   // Read the latest .r source from IDB (the user's edits, possibly NOT
@@ -1280,6 +1298,105 @@ async function runBuild(
     bytes,
     totalMs: performance.now() - t0,
     diagnostics: allDiags,
+  };
+}
+
+/**
+ * Build via the in-browser C toolchain (cv-mac #64). Used by projects
+ * with `rezFile === null`. The active editor buffer wins for the
+ * primary `.c` (so users see their edits compile live); other project
+ * files are read from IDB to support sibling `#include`s.
+ *
+ * Diagnostic remap: cc1 reports errors as `<sourceName>:line:col: error: msg`,
+ * which we already parse in cc1.ts. The editor's lint markers consume
+ * the same `Diagnostic` shape the splice path uses.
+ */
+async function runBuildInBrowserC(
+  baseUrl: string,
+  proj: SampleProject,
+  view: EditorView,
+  activeFile: string,
+): Promise<BuildOutcome> {
+  const t0 = performance.now();
+
+  // Primary C source — first `.c` in the project's file list. (All
+  // current `rezFile===null` projects have exactly one `.c`; we keep
+  // the convention explicit so future multi-`.c` projects can rely on
+  // file-order for the entrypoint.)
+  const cFile = proj.files.find((f) => /\.c$/i.test(f));
+  if (!cFile) {
+    return {
+      ok: false,
+      totalMs: performance.now() - t0,
+      diagnostics: [
+        {
+          file: proj.files[0] ?? "(none)",
+          line: 1,
+          column: 1,
+          severity: "error",
+          message:
+            `Project ${proj.id} has no .c file — can't run the in-browser ` +
+            `C toolchain. Add a .c to the project, or set rezFile to use ` +
+            `the splice path instead.`,
+        },
+      ],
+    };
+  }
+
+  // Active editor buffer for the primary .c if it's open; otherwise
+  // read the IDB-saved copy (which falls back to the bundled seed).
+  const cSource =
+    activeFile === cFile
+      ? view.state.doc.toString()
+      : await readOrSeedFile(baseUrl, proj.id, cFile);
+
+  // Sibling project files for `#include "x.h"` resolution. Same rule
+  // as the Show Assembly panel: gather every .c/.h sibling and let the
+  // bridge mkdir-p them into /tmp/.
+  const siblings: Array<{ name: string; content: string }> = [];
+  for (const f of proj.files) {
+    if (f === cFile) continue;
+    if (!/\.(c|h|cpp|hpp|cc|hh)$/i.test(f)) continue;
+    try {
+      siblings.push({
+        name: f,
+        content:
+          activeFile === f
+            ? view.state.doc.toString()
+            : await readOrSeedFile(baseUrl, proj.id, f),
+      });
+    } catch {
+      // Unreadable sibling — cc1 will surface the resulting "No such file"
+      // if the omission breaks the compile.
+    }
+  }
+
+  const r = await compileToBin(baseUrl, cSource, cFile, { siblings });
+  setEditorDiagnostics(view, r.diagnostics, activeFile);
+
+  if (!r.ok || !r.bin) {
+    return {
+      ok: false,
+      totalMs: r.totalMs,
+      diagnostics: r.diagnostics.length
+        ? r.diagnostics
+        : [
+            {
+              file: cFile,
+              line: 1,
+              column: 1,
+              severity: "error",
+              message: `In-browser build failed at stage ${r.failedStage ?? "?"}`,
+            },
+          ],
+    };
+  }
+
+  return {
+    ok: true,
+    bytes: r.bin,
+    totalMs: performance.now() - t0,
+    diagnostics: r.diagnostics,
   };
 }
 
