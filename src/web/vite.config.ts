@@ -132,6 +132,13 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-patterns", f),
   })),
+  // wasm-bounce — offscreen BitMap + CopyBits double-buffer (#125).
+  // Fills the GWorld/CopyBits gap. Bouncing ball, no flicker.
+  ...["bounce.c", "bounce.r"].map((f) => ({
+    project: "wasm-bounce",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-bounce", f),
+  })),
 ];
 
 
