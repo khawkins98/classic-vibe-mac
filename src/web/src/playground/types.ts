@@ -122,101 +122,77 @@ export interface PrebuiltDemo {
  */
 export const PREBUILT_DEMOS: readonly PrebuiltDemo[] = [
   {
-    // Phase 2.0 derisk artefact (added 2026-05-14).  Same C source as
-    // hello-toolbox below, but compiled with Retro68 GCC + linked against
-    // Retro68's own crt + libInterface (via the pinned Docker image).
-    // Confirms that the project's downstream pipeline (HFS patcher,
-    // BasiliskII boot, MacBinary loader) handles a Retro68-built binary
-    // correctly — derisks Phase 2 ahead of any Emscripten porting work.
+    // Built by Retro68 GCC via the pinned Docker image. The Phase 2.0
+    // derisk artefact — first proof that the project's downstream
+    // pipeline handles a Retro68-built binary end-to-end (HFS patcher
+    // → BasiliskII hot-load → DrawString visible on screen).
     // Provenance: see VENDORED.md.
     id: "hello-toolbox-retro68",
-    label: "Hello Toolbox (Retro68 GCC)",
+    label: "Hello, World!",
     binPath: "precompiled/hello-toolbox-retro68.bin",
-    filename: "hello_toolbox_r68",
-    description:
-      "Compiled by Retro68 GCC via the pinned Docker image.  Same source " +
-      "and behaviour as the PCC build below — draws \\\"Hello, World!\\\" " +
-      "on the desktop and waits for a click.  Phase 2.0 derisk.",
-  },
-  {
-    id: "hello-toolbox",
-    label: "Hello Toolbox (wasm-retro-cc, PCC — archived)",
-    binPath: "precompiled/hello-toolbox.bin",
     filename: "hello_toolbox",
     description:
-      "Phase 1 PCC build (archived 2026-05-14).  Compiled by PCC + " +
-      "hand-written A-trap stubs — no Retro68 toolchain.  Crashes on any " +
-      "Toolbox call; kept as a historical record of the Phase 2 pivot.",
+      "Classic 'Hello, World!' — InitGraf, DrawString on the desktop, " +
+      "click to exit. Compiled by Retro68 GCC.",
   },
   {
-    // Bisect probe (added 2026-05-14): same compiler + link + CRT as
-    // hello-toolbox, but ZERO Toolbox calls — just integer arithmetic and
-    // return.  If this launches cleanly while hello-toolbox crashes, the
-    // bug is in our Toolbox stubs or shim headers, not in libretrocrt.
-    // If this also crashes, libretrocrt's startup itself is suspect.
-    id: "hello-bare",
-    label: "Hello Bare (no Toolbox) — bisect probe",
-    binPath: "precompiled/hello-bare.bin",
-    filename: "hello_bare",
+    // QuickDraw demo (added 2026-05-15). Fan of 8 lines radiating from
+    // a central point + bounding box. Demonstrates MoveTo/LineTo
+    // without any window machinery — draws directly to the screen
+    // port InitGraf sets up. Source: wasm-retro-cc/spike/demos/lines.c.
+    id: "lines",
+    label: "QuickDraw Lines",
+    binPath: "precompiled/lines.bin",
+    filename: "lines",
     description:
-      "wasm-retro-cc Phase-1 binary: pure integer math, no Toolbox calls. " +
-      "Same compiler + libretrocrt startup as hello_toolbox.  Diagnostic " +
-      "use only — launches and exits immediately (no visible output).",
+      "Fan of 8 lines + bounding box drawn via QuickDraw MoveTo/LineTo. " +
+      "Click to exit.",
   },
   {
-    // Bisect probe (added 2026-05-14, second tier): finer granularity than
-    // hello-bare.  Calls JUST InitGraf and returns.  Distinguishes whether
-    // InitGraf itself is the crash source (vs. some later Toolbox call).
-    //   - Launches cleanly like hello-bare → InitGraf works; bug is later.
-    //   - Bombs like hello-toolbox        → InitGraf is the culprit.
-    id: "hello-initgraf",
-    label: "Hello InitGraf only — bisect probe",
-    binPath: "precompiled/hello-initgraf.bin",
-    filename: "hello_initgraf",
+    // Interactive click counter (added 2026-05-15). Increments a
+    // counter on each click, redraws via NumToString + EraseRect.
+    // Demonstrates a real event loop. Source: spike/demos/counter.c.
+    id: "counter",
+    label: "Click Counter",
+    binPath: "precompiled/counter.bin",
+    filename: "counter",
     description:
-      "wasm-retro-cc bisect: calls InitGraf only, then returns.  Same " +
-      "compile + link + libtoolbox-stubs path as hello_toolbox.  No " +
-      "visible output if it works (silent exit, like hello-bare).",
+      "Click the desktop to increment the counter. After 10 clicks, " +
+      "one more click exits. Uses NumToString + EraseRect for redraw.",
   },
   {
-    // H1 probe (added 2026-05-14): same as hello-initgraf but uses a
-    // STACK-allocated GrafPtr, not &qd.thePort.  Eliminates the qd RELA
-    // fixup from the call site.  PCC emits `move.l A6,A0; sub.l #4,A0;
-    // move.l A0,-(SP); jsr InitGraf` — no relocation against bss.
-    //   - Silent exit (like hello-bare) → H1 confirmed: the qd-pointer
-    //     resolution is the bug.  Investigate Retro68Relocate's
-    //     displacements[bss] semantics.
-    //   - Crash (like hello-initgraf)   → H1 dead.  Move on to H2
-    //     (MaxApplZone) or H3 (stub mechanics).
-    id: "hello-initgraf-local",
-    label: "Hello InitGraf (local var) — H1 probe",
-    binPath: "precompiled/hello-initgraf-local.bin",
-    filename: "hello_initgraf_loc",
+    // Real-time clock (added 2026-05-15). Polls GetDateTime +
+    // IUTimeString every ~30 ticks via TickCount, redraws HH:MM:SS.
+    // Source: spike/demos/clock.c.
+    id: "clock",
+    label: "Mac Clock",
+    binPath: "precompiled/clock.bin",
+    filename: "clock",
     description:
-      "H1 probe: InitGraf with a stack-allocated GrafPtr instead of " +
-      "&qd.thePort.  No qd-relocation in the call site.  Silent exit " +
-      "if the qd-pointer was the bug; same crash if not.",
+      "Live HH:MM:SS clock via GetDateTime + IUTimeString. Updates " +
+      "twice a second. Click to exit.",
   },
   {
-    // H2 probe (added 2026-05-14): calls MaxApplZone + MoreMasters×3
-    // BEFORE InitGraf.  Standard Mac startup incantation: expands the
-    // application heap and pre-allocates master pointers before any
-    // Toolbox allocation.  H1 was ruled out — H1 probe crashes too —
-    // so the leading hypothesis is now heap pre-state.  Also relevant
-    // to the SimpleText crash seen alongside ours: SimpleText also
-    // does NewPtr; a globally-bad heap state would kill it too.
-    //   - Silent exit → H2 confirmed: bug is heap init.
-    //   - Crash       → H2 dead.  Move to H4: libretrocrt corrupts
-    //                   system state (A5 world / heap zone / SegLoad).
-    id: "hello-initgraf-zone",
-    label: "Hello InitGraf (MaxApplZone) — H2 probe",
-    binPath: "precompiled/hello-initgraf-zone.bin",
-    filename: "hello_initgraf_z",
+    // Phase 1 PCC archive (kept as a visible "what we tried" record).
+    // The bisect probes (hello-bare, hello-initgraf*) lived alongside
+    // this and are now retired — they were diagnostics for the Phase 1
+    // debugging session, not real demos. Their .bin files remain in
+    // precompiled/ as historical record; just not surfaced in the UI.
+    id: "hello-toolbox-pcc-archived",
+    label: "Hello Toolbox (PCC — archived)",
+    binPath: "precompiled/hello-toolbox.bin",
+    filename: "hello_toolbox_pcc",
     description:
-      "H2 probe: MaxApplZone + MoreMasters×3 + InitGraf.  Standard pre-" +
-      "InitGraf incantation.  Silent exit if heap init was the bug.",
+      "Phase 1 PCC build — crashes on any Toolbox call. Shipped as a " +
+      "historical comparison; the working Retro68 version is at the top.",
   },
 ];
+// Note: Phase 1 PCC bisect probes (hello-bare, hello-initgraf,
+// hello-initgraf-local, hello-initgraf-zone) lived in this array
+// alongside the demos until 2026-05-15. They were diagnostics for the
+// debugging session recorded in wasm-retro-cc's LEARNINGS.md, not
+// user-facing demos — and all four crash at runtime. Their .bin files
+// remain in precompiled/ as a historical record (see VENDORED.md).
 
 /** Build-time constant: hash of every bundled sample file's contents. */
 declare const __CVM_BUNDLE_VERSION__: string;

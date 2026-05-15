@@ -34,6 +34,26 @@ resource file and then _splices_ the result onto the appropriate `.code.bin` to
 produce a complete MacBinary APPL. These files are committed here as stale
 developer-local fallbacks; CI always overwrites them from the freshest build.
 
+## `lines.bin` / `counter.bin` / `clock.bin` (Phase 2 demos, 2026-05-15)
+
+**Source:** https://github.com/khawkins98/wasm-retro-cc — PR #16
+**Build script:** `spike/demos/build-demo.sh` (parameterised version of
+the Phase 2.0 build script; same pinned Retro68 image).
+**Toolchain image:** `ghcr.io/autc04/retro68@sha256:e8b6cc8ac3c0cf26dcb299d5396cc7055c102b6bc46b67e2df960453af8ae92b`
+
+Three small single-file demos exercising different slices of the Mac
+Toolbox. Each is a complete MacBinary II APPL (`APPL` / `????`) of
+~12.5 KB.
+
+| File | SHA-256 (prefix) | Toolbox APIs |
+| --- | --- | --- |
+| `lines.bin` | `c1c5d130…` | QuickDraw `MoveTo` + `LineTo` (fan + bounding box) |
+| `counter.bin` | `c1eee7df…` | Event loop, `NumToString`, `EraseRect`, `Button`, `StillDown` |
+| `clock.bin` | `5f506701…` | `GetDateTime`, `IUTimeString`, `TickCount`-throttled redraw |
+
+All three pass `spike-pcc/inspect_macbinary.py` structurally:
+APPL + CODE 0 + 8× CODE + DATA + 9× RELA + SIZE, `below_a5 > 0`.
+
 ## `hello-toolbox-retro68.bin` (Phase 2.0 — vendored from wasm-retro-cc)
 
 **Source:** https://github.com/khawkins98/wasm-retro-cc  
