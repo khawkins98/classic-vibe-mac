@@ -1337,17 +1337,199 @@ body.cvm-paused .emulator-canvas {
   font-size: 14px;
   flex-shrink: 0;
 }
-.cvm-files__hint {
-  margin: 12px;
-  padding: 10px;
-  border: 1px dashed var(--shadow);
+.cvm-files__item {
+  /* override the inherited default — file panel rows are interactive */
+  cursor: pointer;
+  user-select: none;
+}
+.cvm-files__item:focus-visible {
+  outline: 2px solid var(--selection);
+  outline-offset: -2px;
+}
+.cvm-files__item--active {
+  background: var(--selection);
+  color: var(--paper);
+}
+.cvm-files__item--active:hover {
+  background: var(--selection);
+}
+
+.cvm-files__footer {
+  border-top: 1px solid var(--shadow);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--platinum);
+  margin-top: auto;
+  flex-shrink: 0;
+}
+.cvm-files__btn {
+  font-family: var(--font-chrome);
+  font-size: 11px;
   background: var(--platinum-light);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  text-align: center;
+}
+.cvm-files__btn:active {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-files__btn--primary {
+  background: linear-gradient(to bottom, #e0e0e0, #b8b8b8);
+  font-weight: bold;
+}
+.cvm-files__hint {
+  margin: 0;
   font-size: 10px;
   line-height: 1.5;
   color: var(--shadow);
 }
 .cvm-files__hint a {
   color: var(--accent, #336699);
+}
+
+/* --- Project picker (WinBox modal contents) ------------------------- */
+
+.cvm-picker {
+  padding: 16px;
+  font-family: var(--font-chrome);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.cvm-picker__heading {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+.cvm-picker__lede {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--shadow);
+}
+.cvm-picker__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  align-content: start;
+}
+.cvm-picker__card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  font-family: var(--font-chrome);
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  padding: 10px;
+  cursor: pointer;
+  color: inherit;
+}
+.cvm-picker__card:hover {
+  background: var(--paper);
+}
+.cvm-picker__card:active {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-picker__card--active {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 2px 2px 0 0 var(--selection),
+    inset 1px 1px 0 0 var(--highlight);
+}
+.cvm-picker__icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.cvm-picker__name {
+  font-size: 12px;
+}
+.cvm-picker__desc {
+  font-size: 10px;
+  font-family: var(--font-body);
+  color: var(--shadow);
+  line-height: 1.5;
+}
+.cvm-picker__rule {
+  border: none;
+  border-top: 1px solid var(--shadow);
+  margin: 12px 0;
+}
+.cvm-picker__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.cvm-picker__action {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  padding: 4px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.cvm-picker__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.cvm-picker__note {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: var(--shadow);
+  margin-left: auto;
+}
+
+/* WinBox Mac OS 8 chrome overrides — applied to the modal that wraps
+   .cvm-picker. We give it the same striped titlebar + platinum body the
+   rest of the site uses, so the picker reads as a system dialog instead
+   of a generic web modal. */
+.cvm-picker-winbox {
+  border: 1px solid var(--ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
+}
+.cvm-picker-winbox .wb-header {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0, var(--ink) 1px,
+    var(--paper) 1px, var(--paper) 2px
+  ) !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--ink) !important;
+  height: 20px !important;
+}
+.cvm-picker-winbox .wb-title {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  padding: 0 8px !important;
+  font-family: var(--font-chrome) !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+  height: 18px !important;
+  margin: 1px auto !important;
+}
+.cvm-picker-winbox .wb-body {
+  background: var(--platinum) !important;
 }
 
 /* --- Output panel (bottom-right column) ----------------------------- */

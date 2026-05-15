@@ -43,6 +43,7 @@ import {
   onShowEditorChange,
 } from "./settings";
 import { mountPlayground } from "./playground/editor";
+import { openProjectPicker } from "./projectPicker";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -134,19 +135,28 @@ root.innerHTML = /* html */ `
         <h2 class="window__title" id="title-files">Projects</h2>
       </header>
       <div class="window__body cvm-files">
-        <ul class="cvm-files__list" role="list">
+        <ul class="cvm-files__list" id="cvm-files-list" role="listbox" aria-label="Projects">
           ${SAMPLE_PROJECTS.map((p) => `
-            <li class="cvm-files__item" data-project-id="${p.id}">
+            <li class="cvm-files__item"
+                role="option"
+                tabindex="0"
+                data-project-id="${p.id}">
               <span class="cvm-files__icon">📄</span>
               <span class="cvm-files__label">${p.label}</span>
             </li>
           `).join("")}
         </ul>
-        <p class="cvm-files__hint">
-          Multi-file editing + .zip import / export coming with
-          <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100">#100</a>.
-          The dropdown in the editor pane is the live project switcher today.
-        </p>
+        <div class="cvm-files__footer">
+          <button type="button"
+                  id="cvm-files-open"
+                  class="cvm-files__btn cvm-files__btn--primary">
+            Open project…
+          </button>
+          <p class="cvm-files__hint">
+            Multi-file projects + .zip import coming with
+            <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100">#100</a>.
+          </p>
+        </div>
       </div>
     </aside>
 
@@ -436,4 +446,85 @@ if (playgroundEl) {
         }
       : undefined,
   );
+}
+
+// ── Files panel: click-to-switch + Open project… modal (cv-mac #104 Phase 3) ──
+//
+// The files panel on the left (.cvm-ide__files) lists all SAMPLE_PROJECTS
+// as items. Clicking one switches the playground to that project; clicking
+// "Open project…" opens a WinBox modal with richer project descriptions and
+// stubbed Open .zip / New empty buttons (Phase 5 territory).
+//
+// We talk to the playground via its `<select id="cvm-pg-project">` dropdown:
+// setting `select.value` + dispatching `change` re-uses the playground's
+// internal switchTo() logic without us reaching into its closure. The files
+// panel's active-item highlighting follows the dropdown via a mutation
+// observer so cross-control changes (dropdown, picker, panel, future
+// keyboard shortcut) all stay in sync without explicit wiring.
+
+const filesList = document.getElementById("cvm-files-list") as HTMLUListElement | null;
+const filesOpenBtn = document.getElementById("cvm-files-open") as HTMLButtonElement | null;
+
+function getProjectDropdown(): HTMLSelectElement | null {
+  return document.querySelector<HTMLSelectElement>("#cvm-pg-project");
+}
+
+function activeProjectId(): string {
+  return getProjectDropdown()?.value ?? "reader";
+}
+
+function switchProject(projectId: string): void {
+  const sel = getProjectDropdown();
+  if (!sel) return;
+  if (sel.value === projectId) return;
+  sel.value = projectId;
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function refreshFilesActive(): void {
+  if (!filesList) return;
+  const active = activeProjectId();
+  for (const li of filesList.querySelectorAll<HTMLLIElement>(".cvm-files__item")) {
+    li.classList.toggle("cvm-files__item--active", li.dataset.projectId === active);
+  }
+}
+
+if (filesList) {
+  filesList.addEventListener("click", (e) => {
+    const li = (e.target as HTMLElement).closest<HTMLLIElement>(".cvm-files__item");
+    if (!li) return;
+    const pid = li.dataset.projectId;
+    if (pid) switchProject(pid);
+  });
+  filesList.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const li = (e.target as HTMLElement).closest<HTMLLIElement>(".cvm-files__item");
+    if (!li) return;
+    e.preventDefault();
+    const pid = li.dataset.projectId;
+    if (pid) switchProject(pid);
+  });
+
+  // Keep the active-item highlight in sync. The playground mounts async
+  // and may set the dropdown later; poll briefly then settle into a
+  // MutationObserver on the dropdown.
+  const settle = () => {
+    refreshFilesActive();
+    const sel = getProjectDropdown();
+    if (!sel) {
+      window.setTimeout(settle, 80);
+      return;
+    }
+    sel.addEventListener("change", refreshFilesActive);
+  };
+  settle();
+}
+
+if (filesOpenBtn) {
+  filesOpenBtn.addEventListener("click", () => {
+    openProjectPicker({
+      currentProjectId: activeProjectId(),
+      onPick: (pid) => switchProject(pid),
+    });
+  });
 }
