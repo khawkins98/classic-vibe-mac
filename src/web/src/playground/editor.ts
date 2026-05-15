@@ -21,7 +21,7 @@ import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
 import JSZip from "jszip";
 
-import { SAMPLE_PROJECTS, PREBUILT_DEMOS, type SampleProject } from "./types";
+import { SAMPLE_PROJECTS, type SampleProject } from "./types";
 import {
   initPersistence,
   isPersistent,
@@ -876,122 +876,6 @@ export async function mountPlayground(
   whatBtn.addEventListener("click", () => {
     if (lastBuildCtx) showBuildExplainer(lastBuildCtx, whatBtn);
   });
-
-  // Prebuilt demo load: event delegation for .cvm-pg-demo-load buttons.
-  // Each button carries data-demo-id matching a PREBUILT_DEMOS entry.
-  // The path: fetch binary → patch empty HFS volume → hotLoad (reboot emulator).
-  // No wasm-rez splice needed — the binary is a complete MacBinary II APPL.
-  rootEl.addEventListener("click", async (e) => {
-    if (!(e.target instanceof Element)) return;
-    const btn = e.target.closest<HTMLButtonElement>("button.cvm-pg-demo-load");
-    if (!btn) return;
-
-    const demo = PREBUILT_DEMOS.find((d) => d.id === btn.dataset.demoId);
-    if (!demo) return;
-
-    if (!hotLoad) {
-      setStatus(statusEl, "Load demo isn't wired in this build (no emulator).", "err");
-      return;
-    }
-
-    // Lock all interactive buttons during the reboot sequence.
-    const demoButtons = rootEl.querySelectorAll<HTMLButtonElement>(".cvm-pg-demo-load");
-    buildBtn.disabled = true;
-    buildRunBtn.disabled = true;
-    demoButtons.forEach((b) => (b.disabled = true));
-    rootEl.setAttribute("data-rebooting", "");
-    setStatus(statusEl, `Fetching ${demo.label}…`, "info");
-
-    try {
-      const binResp = await fetch(`${baseUrl}${demo.binPath}`);
-      if (!binResp.ok) throw new Error(`Fetch failed: HTTP ${binResp.status}`);
-      const macBinary = new Uint8Array(await binResp.arrayBuffer());
-
-      // Log fetched binary identity to make cached-vs-fresh debugging trivial
-      // (added 2026-05-14 after the wasm-retro-cc PR-#5 re-vendor; the
-      // previous binary type-3'd, so we want zero ambiguity about which one
-      // the browser actually got).  SHA-256 of the bytes is the canonical
-      // ID; Last-Modified is the deploy timestamp (fast cache-hit check).
-      const sha = await crypto.subtle.digest("SHA-256", macBinary);
-      const shaHex = Array.from(new Uint8Array(sha))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      console.info(
-        `[prebuilt-demo] ${demo.id}: ${macBinary.byteLength}B  ` +
-          `sha256=${shaHex.slice(0, 16)}…  ` +
-          `last-modified=${binResp.headers.get("last-modified") ?? "(none)"}`,
-      );
-
-      setStatus(statusEl, "Patching disk…", "info");
-      const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
-      if (!tmplResp.ok) throw new Error(`empty-secondary.dsk: HTTP ${tmplResp.status}`);
-      const templateBytes = new Uint8Array(await tmplResp.arrayBuffer());
-
-      // Drop a small diagnostic README on the mounted disk alongside the
-      // demo app.  When (not if) somebody hits a crash here, this is the
-      // first thing they can open in TeachText to identify what's actually
-      // mounted — no DevTools required.  Classic Mac convention is CR line
-      // endings (\r = 0x0D) inside TEXT files; SimpleText/TeachText displays
-      // those correctly.  Filename "info.txt" sorts AFTER any demo whose
-      // name starts with a letter <= 'h'; if a future demo starts with 'j'
-      // or later we'd need a different name.
-      const lastMod = binResp.headers.get("last-modified") ?? "(none)";
-      const readmeText =
-        `${demo.label}\r` +
-        `${"=".repeat(demo.label.length)}\r\r` +
-        `Mounted from classic-vibe-mac → "Hello Toolbox (wasm-retro-cc)".\r\r` +
-        `Binary identity\r` +
-        `---------------\r` +
-        `File:         ${demo.filename}\r` +
-        `Size:         ${macBinary.byteLength} bytes\r` +
-        `SHA-256:      ${shaHex}\r` +
-        `Last-Modified: ${lastMod}\r\r` +
-        `If the app crashed with "type 3" (illegal instruction):\r` +
-        ` 1. Open browser DevTools (Cmd+Option+I) → Console.\r` +
-        ` 2. Look for the [prebuilt-demo] line — it shows the SHA above.\r` +
-        ` 3. Compare against the expected SHA in:\r` +
-        `    src/web/public/precompiled/VENDORED.md\r\r` +
-        `Cross-repo source of truth\r` +
-        `--------------------------\r` +
-        ` Tracker:  github.com/khawkins98/classic-vibe-mac/issues/64\r` +
-        ` Compiler: github.com/khawkins98/wasm-retro-cc\r` +
-        ` LEARNINGS: see LEARNINGS.md "Boot test (2026-05-14)" in wasm-retro-cc.\r\r` +
-        `Expected behaviour\r` +
-        `------------------\r` +
-        ` Double-click "${demo.filename}" → app draws "Hello, World!" at (100, 100)\r` +
-        ` on the desktop, waits for a mouse click, then exits.\r`;
-      const readmeBytes = new TextEncoder().encode(readmeText);
-
-      const patched = patchEmptyVolumeWithBinary({
-        templateBytes,
-        macBinary,
-        filename: demo.filename,
-        extraFiles: [
-          {
-            filename: "info.txt",
-            type: 0x54455854, // 'TEXT'
-            creator: 0x74747874, // 'ttxt' (SimpleText / TeachText)
-            dataFork: readmeBytes,
-          },
-        ],
-      });
-      setStatus(statusEl, "Mounting disk…", "info");
-      await hotLoad({ bytes: patched, volumeName: "Apps" });
-      setStatus(
-        statusEl,
-        `${demo.label} loaded — double-click "Apps" on the desktop. ` +
-          `If it crashes, open "info.txt" on that disk for diagnostics.`,
-        "ok",
-      );
-    } catch (err) {
-      setStatus(statusEl, `Load demo error: ${(err as Error).message}`, "err");
-    } finally {
-      buildBtn.disabled = false;
-      buildRunBtn.disabled = false;
-      demoButtons.forEach((b) => (b.disabled = false));
-      rootEl.removeAttribute("data-rebooting");
-    }
-  });
 }
 
 /**
@@ -1143,13 +1027,6 @@ function renderShell(persistent: boolean, preservedCount: number): string {
             <option value="O2">-O2 (speed)</option>
           </select>
         </label>
-      </div>
-      <div class="cvm-pg-toolbar cvm-pg-toolbar--demos" role="group" aria-label="Prebuilt demos">
-        <span class="cvm-pg-field__label">Prebuilt demos</span>
-        ${PREBUILT_DEMOS.map((d) => `<button type="button"
-            class="cvm-pg-button cvm-pg-demo-load"
-            data-demo-id="${escapeHtml(d.id)}"
-            title="${escapeHtml(d.description)}">${escapeHtml(d.label)}</button>`).join("")}
       </div>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
