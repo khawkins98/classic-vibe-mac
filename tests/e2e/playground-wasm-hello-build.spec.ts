@@ -56,7 +56,8 @@ test("wasm-hello build kicks off the in-browser C pipeline", async ({ page }) =>
   }
 
   const text = await status.textContent();
-  expect(text ?? "").toMatch(/^Built WasmHello\.bin/);
+  // Stamped filename: WasmHello-YYYYMMDD-HHMM.bin (see withBuildTimestamp).
+  expect(text ?? "").toMatch(/^Built WasmHello-\d{8}-\d{4}\.bin/);
   // Sanity: the size should be at least a MacBinary header (128 B) and
   // not the multi-MB splice payload (that path is for .r-driven projects).
   expect(text ?? "").toMatch(/\((?:\d+ B|\d+(?:\.\d+)? KB)\)/);
