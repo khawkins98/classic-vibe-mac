@@ -34,11 +34,6 @@ import {
 console.info(
   `[cvm] build bundleVersion=${BUNDLE_VERSION} toolchainVersion=${TOOLCHAIN_VERSION} builtAt=${BUILT_AT} loaded=${new Date().toISOString()}`,
 );
-import {
-  isPauseWhenHiddenEnabled,
-  setPauseWhenHidden,
-  onPauseWhenHiddenChange,
-} from "./settings";
 import { mountPlayground } from "./playground/editor";
 import { mountIdePanes } from "./idePanes";
 import { openProjectPicker } from "./projectPicker";
@@ -49,6 +44,8 @@ import {
   summariseImport,
 } from "./zipImport";
 import { openHelp } from "./helpPalette";
+import { openAbout } from "./aboutPalette";
+import { openPreferences } from "./preferencesPalette";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -98,9 +95,15 @@ const today = new Intl.DateTimeFormat("en-US", {
 
 root.innerHTML = /* html */ `
   <div class="menubar" role="navigation" aria-label="Menu bar">
-    <span class="menubar__apple">${appleLogoSvg}</span>
+    <button type="button"
+            id="cvm-menubar-apple"
+            class="menubar__apple menubar__item--interactive"
+            title="About classic-vibe-mac">${appleLogoSvg}</button>
     <span class="menubar__item">File</span>
-    <span class="menubar__item">Edit</span>
+    <button type="button"
+            id="cvm-menubar-edit"
+            class="menubar__item menubar__item--interactive"
+            title="Preferences">Edit</button>
     <span class="menubar__item">View</span>
     <span class="menubar__item">Special</span>
     <button type="button"
@@ -230,29 +233,10 @@ if (configEl) {
   configEl.textContent = JSON.stringify(emulatorConfig, null, 2);
 }
 
-// ── Settings checkbox wiring (sleep when hidden) ──
-//
-// The checkbox lives in the caption row under the Mac window. We keep
-// the DOM in sync with the persisted value (cvm.pauseWhenHidden) on:
-//   - initial load
-//   - cross-tab storage events (handled inside settings.ts → onPauseWhenHiddenChange)
-// Toggling fires the setter which both persists and notifies listeners,
-// so the loader's visibility controller observes the change immediately.
-const pauseCheckbox = document.getElementById(
-  "cvm-pause-when-hidden",
-) as HTMLInputElement | null;
+// "Pause when tab is hidden" lives in the Preferences palette now
+// (Edit menu). The emulator-loader subscribes to onPauseWhenHiddenChange
+// directly, so no main.ts wiring is required.
 const pauseStatus = document.getElementById("cvm-pause-status");
-if (pauseCheckbox) {
-  pauseCheckbox.checked = isPauseWhenHiddenEnabled();
-  pauseCheckbox.addEventListener("change", () => {
-    setPauseWhenHidden(pauseCheckbox.checked);
-  });
-  // Mirror back in case another tab toggled it.
-  onPauseWhenHiddenChange(() => {
-    const v = isPauseWhenHiddenEnabled();
-    if (pauseCheckbox.checked !== v) pauseCheckbox.checked = v;
-  });
-}
 
 // ── Output panel: Build log capture + tab switching (cv-mac #104 Phase 4) ──
 //
@@ -585,8 +569,13 @@ if (filesOpenBtn) {
   });
 }
 
-// Menubar "Help" → Help palette (cv-mac #104 Phase 6).
+// Menubar wiring (cv-mac #104 Phase 6+).
+//   Apple → About palette
+//   Edit  → Preferences palette
+//   Help  → Help palette
+const appleMenuBtn = document.getElementById("cvm-menubar-apple");
+if (appleMenuBtn) appleMenuBtn.addEventListener("click", () => openAbout());
+const editMenuBtn = document.getElementById("cvm-menubar-edit");
+if (editMenuBtn) editMenuBtn.addEventListener("click", () => openPreferences());
 const helpMenuBtn = document.getElementById("cvm-menubar-help");
-if (helpMenuBtn) {
-  helpMenuBtn.addEventListener("click", () => openHelp());
-}
+if (helpMenuBtn) helpMenuBtn.addEventListener("click", () => openHelp());
