@@ -116,6 +116,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-scribble", f),
   })),
+  // wasm-scrollwin — Controls / scroll-bar demo (#125). NewControl
+  // (scrollBarProc) + TrackControl + actionProc. Fills the Controls
+  // coverage gap flagged by the post-#144 review.
+  ...["scrollwin.c", "scrollwin.r"].map((f) => ({
+    project: "wasm-scrollwin",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-scrollwin", f),
+  })),
 ];
 
 

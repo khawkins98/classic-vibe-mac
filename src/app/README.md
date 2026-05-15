@@ -163,13 +163,14 @@ variations on a theme.
 | `wasm-notepad/` | `notepad.c` + `.r` | `MBAR`/`MenuSelect`/`MenuKey`, `TECut`/`TECopy`/`TEPaste` (system scrap), `StopAlert` dialogs | 180 |
 | `wasm-calculator/` | `calc.c` + `.r` | Hand-drawn `FrameRoundRect` buttons, `PtInRect` hit-test, `NumToString` display, `InvertRoundRect` press feedback | 170 |
 | `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
+| `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
-- **Controls** (`NewControl`, `TrackControl`, `CDEF` 16 scroll bar) — a sample with a real scrollable text view
 - **Modal dialogs with editable fields** (`ModalDialog` + DITL items past a single OK)
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **Sound Manager** (`SndPlay`) — period-correct audio feedback
+- **Bitmaps** — `CopyBits` of an offscreen `GWorld` to the window
 
 ### Adding a wasm-shelf sample
 
