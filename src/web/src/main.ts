@@ -118,6 +118,10 @@ root.innerHTML = /* html */ `
             class="menubar__item menubar__item--interactive"
             aria-haspopup="menu">Special</button>
     <button type="button"
+            data-menu="windows"
+            class="menubar__item menubar__item--interactive"
+            aria-haspopup="menu">Windows</button>
+    <button type="button"
             data-menu="help"
             class="menubar__item menubar__item--interactive"
             aria-haspopup="menu">Help</button>
@@ -602,5 +606,22 @@ mountMenubar({
   rebootEmulator: () => {
     // Future: emulatorHandle.reboot({ kind: "currentSecondary" }). For
     // now this is wired as disabled in the menu schema.
+  },
+  listOpenWindows: () => {
+    // Read the WinBox stack from globalThis.WinBox.stack(); each entry
+    // exposes the title element + focus(). The four docked panes are
+    // always present; palettes (Help / About / Prefs / picker /
+    // build-explainer) appear only while open.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const WB: any = (globalThis as any).WinBox;
+    if (!WB || typeof WB.stack !== "function") return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stack: any[] = WB.stack();
+    return stack.map((wb) => ({
+      title: wb.title ?? (wb.body?.parentElement?.querySelector(".wb-title")?.textContent ?? "Window"),
+      focus: () => {
+        try { wb.focus(); } catch { /* defunct */ }
+      },
+    }));
   },
 });
