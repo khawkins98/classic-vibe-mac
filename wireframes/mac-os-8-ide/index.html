@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Wireframe — Mac OS 8 IDE layout (cv-mac #104)</title>
+  <meta name="viewport" content="width=1280" />
+
+  <!--
+    WinBox.js — draggable / resizable / minimizable windows.
+    https://github.com/nextapps-de/winbox
+    Used here only for the floating palettes (Help, Find) and the
+    Startup picker dialog. The main 3-col + bottom-row layout is
+    plain CSS grid — *not* WinBox — because those panes are docked
+    by design and shouldn't be drag-detachable.
+  -->
+  <link rel="stylesheet" href="https://unpkg.com/winbox@0.2.6/dist/css/winbox.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/winbox@0.2.6/dist/css/themes/modern.min.css" />
+  <script defer src="https://unpkg.com/winbox@0.2.6/dist/winbox.bundle.min.js"></script>
+
+  <link rel="stylesheet" href="./wireframe.css" />
+</head>
+<body>
+
+  <!-- ─── Menu bar ─────────────────────────────────────────────── -->
+  <div class="menubar" role="navigation">
+    <span class="menubar__apple">🍎</span>
+    <span class="menubar__item">File</span>
+    <span class="menubar__item">Edit</span>
+    <span class="menubar__item">Project</span>
+    <span class="menubar__item">Build</span>
+    <span class="menubar__item">Window</span>
+    <span class="menubar__item">Help</span>
+    <span class="menubar__item menubar__item--right">Fri, May 15</span>
+  </div>
+
+  <!-- ─── Main IDE layout: 3 columns + bottom-right output panel ─ -->
+  <div class="ide">
+
+    <!-- LEFT: Files panel (1/5 width) — Mac OS 8 icon-list sidebar -->
+    <aside class="ide__files window">
+      <header class="window__titlebar">
+        <span class="window__close"></span>
+        <h2 class="window__title">Project — Wasm Hello</h2>
+      </header>
+      <div class="window__body files-body">
+        <ul class="files-list" role="list">
+          <li class="files-list__group">PROJECT</li>
+          <li class="files-list__item files-list__item--active">
+            <span class="files-list__icon">📄</span>
+            <span class="files-list__label">hello.c</span>
+          </li>
+          <li class="files-list__item">
+            <span class="files-list__icon">📄</span>
+            <span class="files-list__label">README.md</span>
+          </li>
+          <li class="files-list__group">SETTINGS</li>
+          <li class="files-list__item">
+            <span class="files-list__icon">⚙️</span>
+            <span class="files-list__label">Build options</span>
+          </li>
+          <li class="files-list__item">
+            <span class="files-list__icon">⚙️</span>
+            <span class="files-list__label">Memory (SIZE)</span>
+          </li>
+        </ul>
+        <button class="files-list__add" type="button">+ Add file…</button>
+        <div class="files-list__footer">
+          <button class="btn btn--small" type="button" onclick="openStartup()">Open project…</button>
+          <button class="btn btn--small" type="button">Import .zip</button>
+          <button class="btn btn--small" type="button">Export .zip</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER: Editor (2/5 width) -->
+    <section class="ide__editor window">
+      <header class="window__titlebar">
+        <span class="window__close"></span>
+        <h2 class="window__title">hello.c — Wasm Hello</h2>
+      </header>
+      <div class="window__toolbar">
+        <button class="btn btn--primary">Build .bin</button>
+        <button class="btn btn--primary">Build &amp; Run</button>
+        <span class="window__toolbar-spacer"></span>
+        <button class="btn btn--small" onclick="openFind()">Find</button>
+        <button class="btn btn--small" onclick="openHelp()">Help</button>
+      </div>
+      <div class="window__tabs" role="tablist">
+        <button class="window__tab window__tab--active" role="tab">hello.c</button>
+        <button class="window__tab" role="tab">README.md</button>
+      </div>
+      <pre class="window__body editor-body"><span class="kw">#include</span> <span class="str">"Types.h"</span>
+<span class="kw">#include</span> <span class="str">"Quickdraw.h"</span>
+<span class="kw">#include</span> <span class="str">"Fonts.h"</span>
+<span class="kw">#include</span> <span class="str">"Windows.h"</span>
+<span class="kw">#include</span> <span class="str">"Menus.h"</span>
+<span class="kw">#include</span> <span class="str">"TextEdit.h"</span>
+<span class="kw">#include</span> <span class="str">"Dialogs.h"</span>
+<span class="kw">#include</span> <span class="str">"Events.h"</span>
+<span class="kw">#include</span> <span class="str">"Memory.h"</span>
+
+QDGlobals qd;
+
+<span class="kw">static const unsigned char</span> hello_pstr[] = {
+    13, <span class="str">'H'</span>, <span class="str">'e'</span>, <span class="str">'l'</span>, <span class="str">'l'</span>, <span class="str">'o'</span>, <span class="str">','</span>, <span class="str">' '</span>,
+    <span class="str">'W'</span>, <span class="str">'o'</span>, <span class="str">'r'</span>, <span class="str">'l'</span>, <span class="str">'d'</span>, <span class="str">'!'</span>,
+};
+
+<span class="kw">int</span> <span class="fn">main</span>(<span class="kw">void</span>) {
+    InitGraf(&amp;qd.thePort);
+    InitFonts();
+    InitWindows();
+    InitMenus();
+    TEInit();
+    InitDialogs(<span class="num">0</span>);
+
+    MoveTo(<span class="num">100</span>, <span class="num">100</span>);
+    DrawString(hello_pstr);
+
+    <span class="kw">while</span> (<span class="num">1</span>) {
+        EventRecord evt;
+        WaitNextEvent(everyEvent, &amp;evt, <span class="num">60</span>, NULL);
+        <span class="kw">if</span> (evt.what == mouseDown) <span class="kw">break</span>;
+    }
+    <span class="kw">return</span> <span class="num">0</span>;
+}</pre>
+      <div class="window__status">
+        Line 18, Col 12 • <code>.c</code> compiled in-browser via wasm-cc1 • 1,243 bytes
+      </div>
+    </section>
+
+    <!-- RIGHT TOP: Macintosh preview (2/5 width, 60% height) -->
+    <section class="ide__mac window">
+      <header class="window__titlebar">
+        <span class="window__close"></span>
+        <h2 class="window__title">Macintosh — System 7.5.5</h2>
+      </header>
+      <div class="window__body window__body--platinum mac-body">
+        <div class="mac-canvas">
+          <div class="mac-canvas__placeholder">
+            BasiliskII canvas
+            <small>(640×480 native, scales to pane)</small>
+          </div>
+        </div>
+        <div class="mac-caption">
+          <label class="check">
+            <input type="checkbox" checked />
+            Pause when tab hidden
+          </label>
+          <span class="mac-caption__status">Booted • 64 MB RAM</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT BOTTOM: Output / Console (2/5 width, 40% height) -->
+    <section class="ide__output window">
+      <header class="window__titlebar">
+        <span class="window__close"></span>
+        <h2 class="window__title">Output</h2>
+      </header>
+      <div class="window__tabs" role="tablist">
+        <button class="window__tab window__tab--active" role="tab">Build log</button>
+        <button class="window__tab" role="tab">Console</button>
+        <button class="window__tab" role="tab">Show Assembly</button>
+        <button class="window__tab" role="tab">Diagnostics</button>
+      </div>
+      <pre class="window__body output-body">[cc1]    -mcpu=68020 -O0 -o /tmp/out.s    36 ms ✓
+[as]     -march=68020 -o /tmp/out.o      1 ms ✓
+[ld]     --emit-relocs -T retro68-multiseg.ld -o /tmp/out.gdb
+          /sysroot/lib/start.c.obj /tmp/in.o
+          --start-group libretrocrt.a libInterface.a libc.a libm.a libgcc.a --end-group
+                                          4 ms ✓
+[Elf2Mac] /tmp/out.gdb → /tmp/out.bin    2 ms ✓
+[SIZE]   spliced default 1MB partition  ✓
+[total]  12,416 bytes • RELA 1 = 230 B • _start @ 0x0d0e ∈ .code00001
+[boot]   hot-loaded into BasiliskII, app launched
+[trap]   $A86E InitGraf
+[trap]   $A8FE InitFonts
+[trap]   $A912 InitWindows
+[trap]   $A930 InitMenus
+[trap]   $A9CC TEInit
+[trap]   $A97B InitDialogs
+[trap]   $A893 MoveTo  100, 100
+[trap]   $A882 DrawString  "Hello, World!"
+[trap]   $A860 WaitNextEvent — waiting for mouseDown</pre>
+    </section>
+
+  </div><!-- /.ide -->
+
+  <!-- Hidden until WinBox opens it; demo trigger in toolbar -->
+  <template id="startup-template">
+    <div class="startup">
+      <h3>Open project</h3>
+      <p>What would you like to work on?</p>
+      <div class="startup__grid">
+        <button class="startup__card">
+          <div class="startup__card-icon">📄</div>
+          <strong>Wasm Hello</strong>
+          <small>The in-browser-only demo. C only, no resources.</small>
+        </button>
+        <button class="startup__card">
+          <div class="startup__card-icon">🌐</div>
+          <strong>Reader</strong>
+          <small>HTML viewer. Multi-file, C + .r resources.</small>
+        </button>
+        <button class="startup__card">
+          <div class="startup__card-icon">☁️</div>
+          <strong>MacWeather</strong>
+          <small>Live forecast. Demonstrates Mac↔JS data flow.</small>
+        </button>
+        <button class="startup__card">
+          <div class="startup__card-icon">📝</div>
+          <strong>Hello Mac</strong>
+          <small>Smallest Toolbox app. Start here if new to Mac dev.</small>
+        </button>
+        <button class="startup__card">
+          <div class="startup__card-icon">🖌</div>
+          <strong>Pixel Pad</strong>
+          <small>QuickDraw drawing with PNG preview.</small>
+        </button>
+        <button class="startup__card">
+          <div class="startup__card-icon">📖</div>
+          <strong>Markdown Viewer</strong>
+          <small>Renders .md files from :Shared:.</small>
+        </button>
+      </div>
+      <hr />
+      <div class="startup__row">
+        <button class="btn">Open .zip…</button>
+        <button class="btn">New empty project…</button>
+        <button class="btn btn--small">Recent…</button>
+      </div>
+    </div>
+  </template>
+
+  <script>
+    // ── WinBox demo wiring ─────────────────────────────────────
+    //
+    // The main 3-col+bottom layout is CSS grid (not WinBox). WinBox is
+    // used only for the *floating* surfaces: startup picker, find, help.
+    // These are draggable, resizable, closable, minimizable — exactly the
+    // Mac OS 8 floating-palette feel.
+
+    function openStartup() {
+      const tpl = document.getElementById("startup-template");
+      const content = tpl.content.cloneNode(true);
+      const div = document.createElement("div");
+      div.appendChild(content);
+      new WinBox({
+        title: "Open project — Wasm Retro IDE",
+        width: "560px",
+        height: "520px",
+        x: "center",
+        y: "center",
+        mount: div,
+        modal: true,
+        background: "#cccccc",
+        class: ["no-min", "no-max"],
+      });
+    }
+
+    function openFind() {
+      new WinBox({
+        title: "Find / Replace",
+        width: "360px",
+        height: "240px",
+        x: 80,
+        y: 120,
+        html: `
+          <div style="padding:12px;">
+            <label style="display:block;margin-bottom:8px;">Find:
+              <input type="text" style="width:100%;padding:4px;" />
+            </label>
+            <label style="display:block;margin-bottom:8px;">Replace:
+              <input type="text" style="width:100%;padding:4px;" />
+            </label>
+            <div style="display:flex;gap:6px;margin-top:8px;">
+              <button>Find Next</button>
+              <button>Replace</button>
+              <button>Replace All</button>
+            </div>
+          </div>
+        `,
+        background: "#cccccc",
+        class: ["no-max"],
+      });
+    }
+
+    function openHelp() {
+      new WinBox({
+        title: "Wasm Retro IDE — Help",
+        width: "440px",
+        height: "320px",
+        x: "right",
+        y: 80,
+        html: `
+          <div style="padding:14px;line-height:1.5;">
+            <h3 style="margin:0 0 8px;">Quick start</h3>
+            <ol style="padding-left:18px;">
+              <li>Pick a project from the left panel.</li>
+              <li>Edit the file in the center.</li>
+              <li>Click <em>Build &amp; Run</em> — the Mac on the right reboots with your edits in ~1 s.</li>
+              <li>Compiler output goes to the panel below the Mac.</li>
+            </ol>
+            <p><a href="https://github.com/khawkins98/classic-vibe-mac">README</a> &middot;
+               <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md">How it works</a></p>
+          </div>
+        `,
+        background: "#cccccc",
+      });
+    }
+
+    // Auto-open the startup picker on first visit (commented out for the
+    // wireframe — re-enable to demo the "first thing you see" UX).
+    // window.addEventListener("DOMContentLoaded", openStartup);
+  </script>
+</body>
+</html>
