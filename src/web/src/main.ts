@@ -38,11 +38,9 @@ import {
   isPauseWhenHiddenEnabled,
   setPauseWhenHidden,
   onPauseWhenHiddenChange,
-  isShowEditorEnabled,
-  setShowEditor,
-  onShowEditorChange,
 } from "./settings";
 import { mountPlayground } from "./playground/editor";
+import { mountIdePanes } from "./idePanes";
 import { openProjectPicker } from "./projectPicker";
 import {
   importZipFile,
@@ -117,162 +115,11 @@ root.innerHTML = /* html */ `
     <span class="desktop-icon__label">Read Me</span>
   </div>
 
-  <!--
-    Mac OS 8 IDE layout (cv-mac #104; supersedes the #45 two-pane split).
-    At ≥1200px: 3-column CSS grid with the right column further split
-    top/bottom. At narrower viewports each grid cell becomes a normal
-    block — content stacks vertically in source order.
-
-    Grid cells (id-stable for tests + downstream wiring):
-      .cvm-ide__files  — left files panel (project picker, Phase 3+)
-      .cvm-ide__editor — center editor (existing playground innards)
-      .cvm-ide__mac    — top-right Macintosh preview
-      .cvm-ide__output — bottom-right output/console panel (Phase 4+)
-
-    The data-editor-visible attribute on .cvm-ide, when "false", hides
-    the editor column and expands the Mac to take the whole grid — a
-    "Mac-only focus mode" toggled by the "Show editor" checkbox.
-  -->
-  <div class="cvm-ide" id="cvm-split-layout" data-editor-visible="true">
-
-    <!-- LEFT: files panel (1/5 width).
-         Top: project dropdown (proxies to the playground's hidden
-         #cvm-pg-project). Body: list of FILES in the currently-active
-         project (proxies to the playground's hidden tab bar). Footer:
-         Open project… opens the WinBox startup picker (Phase 3+). -->
-    <aside class="cvm-ide__files window" aria-labelledby="title-files">
-      <header class="window__titlebar">
-        <span class="window__close" aria-hidden="true"></span>
-        <h2 class="window__title" id="title-files">Project</h2>
-      </header>
-      <div class="window__body cvm-files">
-        <div class="cvm-files__project">
-          <label class="cvm-files__project-label" for="cvm-files-project">
-            Project
-          </label>
-          <select id="cvm-files-project"
-                  class="cvm-files__select"
-                  aria-label="Switch project">
-            ${SAMPLE_PROJECTS.map((p) =>
-              `<option value="${p.id}">${p.label}</option>`,
-            ).join("")}
-          </select>
-        </div>
-        <div class="cvm-files__section">Files</div>
-        <ul class="cvm-files__list"
-            id="cvm-files-list"
-            role="listbox"
-            aria-label="Files in this project">
-          <!-- populated dynamically by main.ts on project switch -->
-        </ul>
-        <div class="cvm-files__footer">
-          <button type="button"
-                  id="cvm-files-open"
-                  class="cvm-files__btn cvm-files__btn--primary">
-            Open project…
-          </button>
-          <p class="cvm-files__hint">
-            Multi-file projects + .zip import coming with
-            <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100">#100</a>.
-          </p>
-        </div>
-      </div>
-    </aside>
-
-    <!-- CENTER: playground editor (2/5 width).
-         The existing playground section (project picker, build buttons,
-         tabs, CodeMirror) is mounted into this slot by editor.ts's
-         mountPlayground(). No internal restructure in Phase 2 — just
-         rehoming the same DOM into a wider, primary-position column. -->
-    <section class="cvm-ide__editor window window--wide window--playground"
-             id="cvm-playground"
-             aria-labelledby="title-playground">
-    </section>
-
-    <!-- RIGHT TOP: Macintosh preview (2/5 width, ~60% height). -->
-    <section class="cvm-ide__mac window" aria-labelledby="title-emu">
-      <header class="window__titlebar">
-        <span class="window__close" aria-hidden="true"></span>
-        <h2 class="window__title" id="title-emu">Macintosh</h2>
-      </header>
-      <div class="window__body window__body--platinum cvm-ide__mac-body">
-        <div class="inset" id="emulator">
-          <div id="emulator-canvas-mount" class="emulator-mount"></div>
-        </div>
-        <!--
-          Settings caption sits BELOW the inset (still inside the Macintosh
-          window's body). The "💤" indicator on the right replaces the static
-          label when the emulator is currently paused. "Show editor"
-          collapses the editor column for a full-width Mac focus mode.
-          See settings.ts + emulator-loader.
-        -->
-        <div class="emulator-caption" role="group" aria-label="Emulator preferences">
-          <label class="cvm-check">
-            <input type="checkbox" id="cvm-pause-when-hidden" />
-            <span class="cvm-check__box" aria-hidden="true"></span>
-            <span class="cvm-check__label">Pause emulator when tab is hidden</span>
-          </label>
-          <label class="cvm-check">
-            <input type="checkbox" id="cvm-show-editor" />
-            <span class="cvm-check__box" aria-hidden="true"></span>
-            <span class="cvm-check__label">Show editor</span>
-          </label>
-          <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
-        </div>
-      </div>
-    </section>
-
-    <!-- RIGHT BOTTOM: Output panel (2/5 width, ~40% height).
-         Phase 2 content: placeholder. Phase 4 moves Show Assembly + the
-         compile log + DebugStr capture into this slot as tabs.
-         See cv-mac #104. -->
-    <!-- RIGHT BOTTOM: Output panel — Build log + Console tabs (#104 Phase 4).
-         Build log captures cc1/as/ld/Elf2Mac timings + the [cvm] identity
-         stamp via a console.info proxy in main.ts. Console is a placeholder
-         for DebugStr / DrawString capture (future). Show Assembly stays in
-         the editor pane for now — it has its own focused UX. -->
-    <section class="cvm-ide__output window" aria-labelledby="title-output">
-      <header class="window__titlebar">
-        <span class="window__close" aria-hidden="true"></span>
-        <h2 class="window__title" id="title-output">Output</h2>
-      </header>
-      <div class="cvm-output__tabbar" role="tablist" aria-label="Output panel">
-        <button type="button"
-                class="cvm-output__tab cvm-output__tab--active"
-                role="tab"
-                data-pane="buildlog"
-                aria-selected="true">Build log</button>
-        <button type="button"
-                class="cvm-output__tab"
-                role="tab"
-                data-pane="console"
-                aria-selected="false">Console</button>
-        <span class="cvm-output__tabbar-spacer"></span>
-        <button type="button" class="cvm-output__btn" id="cvm-output-clear"
-                title="Clear the current tab">Clear</button>
-      </div>
-      <div class="cvm-output__pane cvm-output__pane--active"
-           data-pane="buildlog"
-           role="tabpanel"
-           aria-label="Build log">
-        <pre id="cvm-output-buildlog" class="cvm-output__log"></pre>
-      </div>
-      <div class="cvm-output__pane"
-           data-pane="console"
-           role="tabpanel"
-           aria-label="Console"
-           hidden>
-        <p class="cvm-output__hint">
-          <strong>Coming soon.</strong> The Console tab will capture
-          <code>DebugStr</code> and <code>DrawString</code> output from
-          your running Mac app — useful for in-tab debugging without
-          looking at the canvas. Tracked in
-          <a href="https://github.com/khawkins98/classic-vibe-mac/issues/104">#104</a>.
-        </p>
-      </div>
-    </section>
-
-  </div><!-- /.cvm-ide -->
+  <!-- IDE work surface: four docked WinBox panes (Project / Editor /
+       Macintosh / Output). Built dynamically by mountIdePanes() below,
+       which constructs each pane as a draggable + resizable + shadeable
+       WinBox positioned to tile the viewport. The previous CSS-grid
+       layout was retired with this commit. -->
 
   <!-- Below-the-fold marketing content: Read Me + Emulator Config.
        Pre-#104 these lived inside the left pane alongside the Mac.
@@ -371,6 +218,12 @@ npm run dev</pre>
 
   </div><!-- /.cvm-below-fold -->
 `;
+
+// Build the four docked IDE panes as WinBox windows. This is intentionally
+// synchronous so the IDs inside each pane body (#cvm-files-list,
+// #cvm-playground, #emulator-canvas-mount, #cvm-output-buildlog, etc.)
+// exist by the time the subsequent document.getElementById queries run.
+mountIdePanes();
 
 const configEl = document.getElementById("config");
 if (configEl) {
@@ -515,58 +368,15 @@ if (emulatorMount) {
   emulatorHandle = startEmulator(emulatorConfig, emulatorMount);
 }
 
-// ── Mac OS 8 IDE grid layout (#104) ────────────────────────────────────────
+// ── Playground (mounted into the Editor WinBox pane) ───────────────────
 //
-// The page is a fixed CSS grid at ≥1200px: files | editor | (Mac / Output).
-// No draggable divider (cv-mac #45's drag-divider system was removed in
-// #104 because grid cells don't resize the same way flex panes did).
-// At <1200px the grid cells become normal blocks and content stacks.
-//
-// We still hold a reference to the layout element because applyEditorVisibility()
-// toggles data-editor-visible on it.
-
-const splitLayoutEl = document.getElementById(
-  "cvm-split-layout",
-) as HTMLDivElement | null;
-
-// ── Playground (Phase 1: read-only-leaning viewer + IDB-backed editor) ──
-//
-// Mounted under the Macintosh window. Vite's import.meta.env.BASE_URL is
-// the configured base path (e.g. `/` in dev, `/classic-vibe-mac/` on
-// Pages); the playground prepends it to fetch bundled sample files from
-// `/sample-projects/<project>/<filename>`. The mount is async because
-// initPersistence() opens IndexedDB.
+// Vite's import.meta.env.BASE_URL is the configured base path (e.g. `/`
+// in dev, `/classic-vibe-mac/` on Pages); the playground prepends it to
+// fetch bundled sample files from `/sample-projects/<project>/<filename>`.
+// The mount is async because initPersistence() opens IndexedDB.
 const playgroundEl = document.getElementById("cvm-playground");
-const showEditorCheckbox = document.getElementById(
-  "cvm-show-editor",
-) as HTMLInputElement | null;
-
-function applyEditorVisibility(visible: boolean) {
-  if (!playgroundEl) return;
-  // Hide the section (mobile + stacked layout: collapses it entirely).
-  playgroundEl.toggleAttribute("hidden", !visible);
-  // At desktop, also signal the split container so CSS can collapse/expand
-  // the right pane and divider without touching the left pane's flex basis.
-  if (splitLayoutEl) {
-    splitLayoutEl.dataset.editorVisible = visible ? "true" : "false";
-  }
-}
-
-if (showEditorCheckbox) {
-  showEditorCheckbox.checked = isShowEditorEnabled();
-  showEditorCheckbox.addEventListener("change", () => {
-    setShowEditor(showEditorCheckbox.checked);
-    applyEditorVisibility(showEditorCheckbox.checked);
-  });
-  onShowEditorChange(() => {
-    const v = isShowEditorEnabled();
-    if (showEditorCheckbox.checked !== v) showEditorCheckbox.checked = v;
-    applyEditorVisibility(v);
-  });
-}
 
 if (playgroundEl) {
-  applyEditorVisibility(isShowEditorEnabled());
   // Hot-load callback: hands the patched HFS image to the loader, which
   // tears down the worker, spawns a fresh one with the new disk in the
   // secondary slot, and resolves once the second boot is complete.
