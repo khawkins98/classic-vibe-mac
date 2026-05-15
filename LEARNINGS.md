@@ -156,6 +156,46 @@ fake titlebars on them), or commit to a window manager and treat
 the initial layout as just one starting position. Picking both is
 how you end up with chrome that promises behaviour it can't deliver.
 
+### 9. Sample shelves climb in Toolbox surface, not in scale
+
+When the wasm-shelf had four entries — `wasm-hello`, `wasm-hello-multi`,
+`wasm-hello-window`, `wasm-snake` — the natural pull was to add the
+next sample by *making the existing ones bigger*. A windowed multi-file
+multi-`.r` "Hello, World!" with menus. Then one with a status bar.
+
+We almost did that, then pivoted on a review-pass observation: a
+sample shelf is most valuable when each entry picks a *distinct
+Toolbox surface*, not when each entry adds another feature to the
+same surface. The wasm-shelf is now nine entries (textedit / notepad /
+calculator / scribble / scrollwin added 2026-05-16) and each one
+exists because it exercises something nothing else does:
+
+- `wasm-textedit` — TextEdit handle + edit-loop primitives
+- `wasm-notepad` — MBAR + MenuSelect + system scrap (Cut/Copy/Paste)
+- `wasm-calculator` — hand-drawn buttons + PtInRect hit-testing
+- `wasm-scribble` — StillDown / GetMouse / LineTo (the IM ch. 1 loop)
+- `wasm-scrollwin` — NewControl + TrackControl with live actionProc
+
+A second-order benefit: when the shelf is a coverage matrix, *gaps*
+become first-class artefacts. `src/app/README.md` now ships a "Coverage
+gaps worth filling next" list (Bitmaps / CopyBits, ModalDialog with
+editable fields, StandardGetFile, Sound Manager). The next contributor
+doesn't have to invent a sample idea — they pick a row.
+
+**Rule:** when you're sizing the Nth sample app in a learning shelf,
+ask "what API surface does this teach that the existing N-1 don't?"
+If the honest answer is "more of the same surface, just elaborated",
+the right move is either (a) extend an existing sample with the
+elaboration, or (b) skip the sample and pick something on the gap list.
+
+The same review surfaced a corollary: ~320 lines of boilerplate
+(Toolbox init + standard inGoAway / inDrag arms + drag-bounds rect)
+duplicate across the nine samples. The fix is a `wasm-common.h`
+helper, but that's *only* worth pulling once the shelf reads as a
+coverage matrix — otherwise factoring out boilerplate from
+arbitrarily-shaped samples just hides the variation that does exist.
+Shelf first, shared header second.
+
 ---
 
 ## How to use this file
