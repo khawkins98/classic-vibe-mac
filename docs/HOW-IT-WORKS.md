@@ -102,50 +102,61 @@ Each request carries an ID so stale responses don't win, and each host
 fetch gets its own `AbortController`, which keeps the flow simple even
 when the visitor changes their mind mid-load.
 
-### 6. Below the desktop, the playground editor seeds itself
+### 6. The IDE: four draggable WinBox panes + a real menubar
 
-Below the emulator pane sits a CodeMirror 6 editor (minimalSetup +
-the C language pack). On first load it copies the canonical sample
-project from `src/web/public/sample-projects/` into IndexedDB; on
-subsequent loads it rehydrates from IDB so the visitor's edits
-survive reloads. UI state (open file, cursor position) is persisted
-on a 1s debounce. Mobile hides the editor with an "open in desktop
-browser" message. See [`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
+The page is a classic-Mac IDE. A fixed menubar across the top
+(Apple / File / Edit / View / Special / Windows / Help) drops down
+real Mac-OS-8-style pull-down menus — Apple opens the About box,
+Edit opens Preferences, File hosts project actions, Windows lists
+every open window, Help opens the help palette.
 
-### 7. Build & Run: edit a `.r` file, see the change in ~1 second
+Under the menubar, four docked windows tile the viewport at first
+load: **Project** (file list + project switcher), **Playground**
+(CodeMirror 6 editor + Build buttons + Show Assembly), **Macintosh**
+(the live emulator), and **Output** (build log + console). Each is
+a real [WinBox](https://nextapps-de.github.io/winbox/) window with
+the Mac OS 8 striped titlebar + paper title field + diagonal grow
+box — fully draggable, resizable, raise-on-click, and
+shade-on-double-click (titlebar collapse). View → Reset window
+layout snaps them back to the tiled grid.
 
-Click Build. The page:
+The CodeMirror editor inside Playground (minimalSetup + the C
+language pack) seeds from `src/web/public/sample-projects/` on
+first load and rehydrates from IndexedDB on subsequent loads, so
+edits survive reloads. UI state (open file, cursor position) is
+persisted on a 1s debounce. See
+[`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
 
-1. Reads the edited `.r` from IndexedDB.
-2. Runs a TypeScript-side preprocessor (`#include`, `#define`,
-   `#if`).
-3. Hands the preprocessed Rez source to a ~100KB WASM build of the
-   classic Apple Rez compiler (`tools/wasm-rez/` → `src/web/public/wasm-rez/`).
-4. Splices the resulting resource fork onto the CI-precompiled
-   `.code.bin` (the data fork stays untouched).
-5. Patches the new MacBinary into an in-memory HFS disk image (a
-   template-splice path: ship one empty `.dsk` as a CI artifact,
+### 7. Build & Run: the full toolchain runs in the tab
+
+Click Build. The page does, for every sample project in the picker:
+
+1. Reads the user's source from IndexedDB.
+2. Compiles every `.c` through the in-browser toolchain
+   ([wasm-retro-cc](https://github.com/khawkins98/wasm-retro-cc)'s
+   Retro68 GCC ported to wasm): cc1 → as → ld → Elf2Mac, yielding a
+   complete MacBinary II APPL.
+3. If the project has an `.r` file (e.g. `wasm-hello-window`,
+   `wasm-snake`, `wasm-textedit`), compiles it through the
+   ~100 KB Apple Rez wasm and splices the resulting resource fork
+   over the C-built fork — user resources (WIND, MENU, SIZE) win
+   on (type, id) collision.
+4. Patches the merged MacBinary into an in-memory HFS disk image
+   (template-splice path: ship one empty `.dsk` as a CI artifact,
    patch the catalog leaf + bitmap + MDB to insert one file).
-6. Calls the worker's `dispose()` + `boot()` to re-spawn BasiliskII
-   on the new disk.
+5. Calls the emulator worker's `dispose()` + `boot()` to re-spawn
+   BasiliskII on the new disk.
 
-Warm round trip: **~820ms in production today**, well under the
-"sub-second" goal. First click after page load is ~1.5s (WASM-Rez
+Warm round trip: **~820 ms in production today**, well under the
+"sub-second" goal. First click after page load is ~1.5 s (WASM-Rez
 instantiation + RIncludes parse).
 
-That's the resource-only loop. Edit a string, watch the Mac
-re-launch with your change. Single tab, no install, no auth, no
-server.
+That's the loop. Edit a string, watch the Mac re-launch with your
+change. Single tab, no install, no auth, no server.
 
-### 8. Build & Run for `.c` files: the full C-compiler in the tab (shipped 2026-05-15)
+#### How the C compile path works (shipped 2026-05-15)
 
-The `.r`-only path above splices new resources onto a *precompiled*
-data fork — the C code comes from CI. But for the `wasm-hello/`
-project (and, soon, any user-supplied `.c`-only project), the page
-goes one step further: **it compiles the C source itself in the
-browser.**
-
-When you Build & Run a `.c`-only project, the page:
+The page reaches into the wasm toolchain like so:
 
 1. Reads all `.c` source files from IndexedDB.
 2. Loads four wasm modules — the Retro68 toolchain Emscripten-built
