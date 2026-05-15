@@ -19,6 +19,10 @@ dist/
 !src/web/public/precompiled/lines.bin
 !src/web/public/precompiled/counter.bin
 !src/web/public/precompiled/clock.bin
+# ...and the vendored wasm-retro-cc "Show Assembly" bundle (cc1 + sysroot).
+# Refresh with `node scripts/vendor-wasm-cc1.mjs` from a sibling
+# wasm-retro-cc checkout. See cv-mac #64 / wasm-retro-cc #17.
+!src/web/public/wasm-cc1/sysroot.bin
 
 # Node
 node_modules/
