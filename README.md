@@ -40,8 +40,17 @@ This README serves three different visitors:
 
 ![Live deployed page: a Mac System 7 desktop runs at the top with two demo apps open — Reader showing the :Shared: folder of bundled HTML pages, and MacWeather rendering current conditions plus a 3-day forecast in 1-bit pixel art. Below the desktop, a "classic-vibe-mac" Read Me window explains the project. Below that, a source-viewer panel lists the Mac apps' C and Rez files — the in-browser editor where visitors can read (and, increasingly, change) the same code that's running above.](public/screenshot-deployed.png)
 
-The screenshot above is the deployed page right now. Three things on
-one screen, all running in the visitor's tab:
+> _The screenshot above is from an earlier deploy. The current page
+> ships a full Mac OS 7/8-style IDE with four draggable WinBox panes
+> (Project / Playground / Macintosh / Output), a real pull-down
+> menubar (Apple / File / Edit / View / Special / Windows / Help),
+> Cmd-key shortcuts, type-ahead, F10 menubar entry, and a
+> nine-sample wasm shelf the user can edit and rebuild in-browser.
+> See [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) §6 for the
+> current layout. Refresh of the hero image is a follow-up._
+
+The deployed page is three things on one screen, all running in the
+visitor's tab:
 
 - **The Mac** — System 7.5.5 booted on a WebAssembly Basilisk II. Five
   apps auto-launched from `:System Folder:Startup Items:` —
@@ -123,22 +132,30 @@ CI, plus one in-browser-compile-only proof of concept:
 - **Markdown Viewer** (`CVMD`) — reads `.md` files from `:Shared:`
   on the boot disk and renders them with a simple Markdown parser in
   C. Add your own `.md` files via the shared folder.
-- **Wasm Hello** (`wasm-hello/hello.c`) — the in-browser-compile-only
-  demo. No `.r` resources, no CMake recipe, no CI step. Click Build
-  & Run in the playground and the browser's wasm toolchain produces
-  the `.bin` from C source alone, which then hot-loads into the
-  running Mac. The first time anyone has been able to write classic
-  Mac C in a tab and watch it launch in seconds without leaving the
-  page. Source under [`src/app/wasm-hello/`](./src/app/wasm-hello/).
+- **Wasm shelf** — nine in-browser-compile-only sample apps the
+  playground picker surfaces. No CMake, no CI step. The user picks
+  one, edits, clicks Build & Run, and the browser's wasm toolchain
+  produces the `.bin` from C source alone and hot-loads it into the
+  running Mac. The progression climbs in Toolbox surface, not in
+  scale: *Wasm Hello* (DrawString) → *Wasm Hello Multi* (multi-file
+  link) → *Wasm Hello Window* (WIND resource) → *Wasm Snake*
+  (TickCount game loop) → *Wasm TextEdit* (TEHandle) → *Wasm Notepad*
+  (MBAR + Cmd-key menus + scrap) → *Wasm Calculator* (hand-drawn
+  FrameRoundRect buttons + PtInRect) → *Wasm Scribble* (StillDown /
+  GetMouse / LineTo) → *Wasm ScrollWin* (NewControl + TrackControl).
+  Full inventory + coverage matrix in
+  [`src/app/README.md` § "Wasm-shelf samples"](./src/app/README.md#wasm-shelf-samples).
 
-The first five coexist on the same boot disk; **Wasm Hello is the
-in-browser-only path** (Build & Run in the playground; the `.bin`
-hot-loads into the running Mac without ever leaving the tab). `src/app/CMakeLists.txt`
-is a tiny aggregator; the boot-disk script installs
-each `.bin` into `:System Folder:Startup Items:` (auto-launch on
-boot) and `:Applications:` (re-launch from the desktop). Adding a
-sixth app is one directory plus one line — see
-[`src/app/README.md`](./src/app/README.md).
+The first five coexist on the same boot disk; **the Wasm-shelf samples
+are the in-browser-only path** (Build & Run in the playground; the
+`.bin` hot-loads into the running Mac without ever leaving the tab).
+`src/app/CMakeLists.txt` is a tiny aggregator; the boot-disk script
+installs each `.bin` into `:System Folder:Startup Items:` (auto-launch
+on boot) and `:Applications:` (re-launch from the desktop). Adding a
+sixth boot-disk app is one directory plus one line — see
+[`src/app/README.md`](./src/app/README.md). Adding a wasm-shelf
+sample is similar but skips CMake entirely; the steps are listed in
+[`src/app/README.md` § "Adding a wasm-shelf sample"](./src/app/README.md#adding-a-wasm-shelf-sample).
 
 ## Try it
 
@@ -315,7 +332,10 @@ loop**. Highlights of what's shipped on `main` today:
   rendered via `DrawString`. First time anyone has compiled classic
   Mac C in a tab and watched it launch.
 - Five baked-in demo apps (Reader, MacWeather, Hello Mac, Pixel
-  Pad, Markdown Viewer) + one in-browser-only demo (Wasm Hello).
+  Pad, Markdown Viewer) + a nine-sample wasm shelf (Wasm Hello,
+  Hello Multi, Hello Window, Snake, TextEdit, Notepad, Calculator,
+  Scribble, ScrollWin) the playground picker surfaces for
+  in-browser editing.
 - Opt-in AppleTalk/Ethernet zone networking via `?zone=`.
 
 The canonical shipped-state checklist — what's live, what's
