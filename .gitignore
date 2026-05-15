@@ -16,6 +16,9 @@ dist/
 !src/web/public/precompiled/hello-initgraf.bin
 !src/web/public/precompiled/hello-initgraf-local.bin
 !src/web/public/precompiled/hello-initgraf-zone.bin
+!src/web/public/precompiled/lines.bin
+!src/web/public/precompiled/counter.bin
+!src/web/public/precompiled/clock.bin
 
 # Node
 node_modules/
