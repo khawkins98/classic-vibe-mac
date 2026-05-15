@@ -713,6 +713,17 @@ export async function compileToBin(
     "-T", "/sysroot/ld/retro68-multiseg.ld",
     "-L", "/sysroot/lib",
     "--no-warn-rwx-segments",
+    // `--emit-relocs` (`-q`) keeps the relocation records in the output
+    // ELF so Elf2Mac can convert them into 'RELA' resources. Without it,
+    // ld applies the relocations and DISCARDS them — leaving an ELF with
+    // no .rela sections, which Elf2Mac turns into empty 2-byte 'RELA'
+    // resources. At runtime libretrocrt's `Retro68Relocate` has nothing
+    // to apply, so unrelocated pointers still reference ELF virtual
+    // addresses (0x0000xxxx) instead of the loaded segment addresses,
+    // and `main()`'s first cross-segment call lands in low memory →
+    // type-3 address error at app launch. Discovered 2026-05-15 PM via
+    // diff against the canonical Retro68 docker build (cv-mac #96).
+    "--emit-relocs",
     "-o", "/tmp/out.gdb",
     "/sysroot/lib/start.c.obj",
     "/tmp/in.o",
