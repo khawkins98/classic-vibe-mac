@@ -72,6 +72,9 @@ export interface OpenPickerOptions {
   currentProjectId: string;
   /** Called with the chosen project id when the user picks one. */
   onPick: (projectId: string) => void;
+  /** Called when the user clicks "Open .zip…". Phase 5 — wire to the
+   *  zipImport module. The picker closes after this fires. */
+  onOpenZip?: () => void;
 }
 
 /**
@@ -99,9 +102,16 @@ export function openProjectPicker(opts: OpenPickerOptions): { close: () => void 
 
   // Card click → dispatch picked project.
   content.addEventListener("click", (e) => {
-    const card = (e.target as HTMLElement).closest<HTMLElement>(
-      ".cvm-picker__card",
+    const target = e.target as HTMLElement;
+    const openZipBtn = target.closest<HTMLButtonElement>(
+      "[data-action='open-zip']",
     );
+    if (openZipBtn && !openZipBtn.disabled) {
+      opts.onOpenZip?.();
+      wb.close();
+      return;
+    }
+    const card = target.closest<HTMLElement>(".cvm-picker__card");
     if (!card) return;
     const pid = card.dataset.projectId;
     if (!pid) return;
@@ -139,8 +149,8 @@ function renderPickerHtml(currentProjectId: string): string {
     <div class="cvm-picker__footer">
       <button type="button"
               class="cvm-picker__action"
-              disabled
-              title="Coming with cv-mac #104 Phase 5">
+              data-action="open-zip"
+              title="Restore a project from a .zip exported by this playground">
         Open .zip…
       </button>
       <button type="button"
@@ -150,11 +160,8 @@ function renderPickerHtml(currentProjectId: string): string {
         New empty project…
       </button>
       <small class="cvm-picker__note">
-        Future: .zip import / export, multi-file scaffold, recent
-        projects. Tracked in
-        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100" target="_blank">#100</a>
-        and
-        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/104" target="_blank">#104</a>.
+        Future: multi-file scaffold, recent projects. Tracked in
+        <a href="https://github.com/khawkins98/classic-vibe-mac/issues/100" target="_blank">#100</a>.
       </small>
     </div>
   `;
