@@ -44,6 +44,12 @@ import {
 } from "./settings";
 import { mountPlayground } from "./playground/editor";
 import { openProjectPicker } from "./projectPicker";
+import {
+  importZipFile,
+  pickZipFile,
+  peekZipTarget,
+  summariseImport,
+} from "./zipImport";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -638,11 +644,51 @@ if (filesList) {
   settle();
 }
 
+async function handleOpenZip(): Promise<void> {
+  console.info("[cvm] open-zip: prompting user for file");
+  const file = await pickZipFile();
+  if (!file) {
+    console.info("[cvm] open-zip: cancelled");
+    return;
+  }
+
+  // Peek at the zip to identify the target project BEFORE importing.
+  // Why: the editor's switchTo() calls flushSave() which writes the
+  // editor's *current* buffer back to IDB. If we imported first and
+  // then switched, flushSave would overwrite our import with stale
+  // content. By hopping to another project FIRST, flushSave saves the
+  // current project's old content (fine — that's what's actually in
+  // the buffer), THEN we import, THEN we switch back and the editor
+  // reads our imported content from IDB cleanly.
+  const target = await peekZipTarget(file);
+  const current = activeProjectId();
+  if (target && current === target) {
+    const other = SAMPLE_PROJECTS.find((p) => p.id !== target)?.id;
+    if (other) {
+      switchProject(other);
+      // Give switchTo()'s flushSave + IDB write a moment to complete.
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  const result = await importZipFile(file);
+  const lookup = (id: string) => SAMPLE_PROJECTS.find((p) => p.id === id);
+  console.info(`[cvm] open-zip: ${summariseImport(result, lookup)}`);
+  for (const err of result.errors) console.warn(`[cvm] open-zip: ${err}`);
+
+  if (result.ok && result.projectId) {
+    switchProject(result.projectId);
+  }
+}
+
 if (filesOpenBtn) {
   filesOpenBtn.addEventListener("click", () => {
     openProjectPicker({
       currentProjectId: activeProjectId(),
       onPick: (pid) => switchProject(pid),
+      onOpenZip: () => {
+        void handleOpenZip();
+      },
     });
   });
 }
