@@ -456,6 +456,51 @@ function switchProject(projectId: string): void {
   if (sel.value === projectId) return;
   sel.value = projectId;
   sel.dispatchEvent(new Event("change", { bubbles: true }));
+  recordRecentProject(projectId);
+}
+
+// Apple-menu "Recent Projects" list. localStorage-backed, most-recent
+// first, max 5 entries. We push on every actual switch (not on the
+// startup load — the user hasn't "chosen" the initial project, they
+// just landed on it).
+const RECENTS_KEY = "cvm.recentProjects";
+const MAX_RECENTS = 5;
+
+function readRecents(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENTS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s) => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordRecentProject(projectId: string): void {
+  try {
+    const prev = readRecents().filter((id) => id !== projectId);
+    prev.unshift(projectId);
+    localStorage.setItem(
+      RECENTS_KEY,
+      JSON.stringify(prev.slice(0, MAX_RECENTS)),
+    );
+  } catch {
+    // localStorage full / sandboxed; recents list is purely a UI
+    // affordance, so silent skip is fine.
+  }
+}
+
+function listRecentProjects(): Array<{ label: string; switchTo: () => void }> {
+  const current = activeProjectId();
+  const recents = readRecents().filter((id) => id !== current);
+  return recents
+    .map((id) => SAMPLE_PROJECTS.find((p) => p.id === id))
+    .filter((p): p is (typeof SAMPLE_PROJECTS)[number] => p !== undefined)
+    .map((p) => ({
+      label: p.label,
+      switchTo: () => switchProject(p.id),
+    }));
 }
 
 function switchFile(filename: string): void {
@@ -644,4 +689,5 @@ mountMenubar({
       },
     }));
   },
+  listRecentProjects,
 });
