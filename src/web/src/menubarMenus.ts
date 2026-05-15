@@ -271,10 +271,12 @@ function buildMenuSchema(a: MenubarActions): Record<string, MenuEntry[]> {
       { label: "Reset window layout", action: a.resetLayout },
     ],
     special: [
-      // Wired in a follow-up: reboot the emulator with the currently
-      // mounted secondary disk so the user can re-launch their app
-      // without rebuilding.
-      { label: "Reboot Mac", disabled: true, action: a.rebootEmulator },
+      // Re-launch the most recently built app — calls reboot() on the
+      // emulator with the cached lastBootSpec. If no Build & Run has
+      // happened yet the action surfaces a console hint and no-ops;
+      // we don't dynamically grey because the live state isn't tracked
+      // in the menu schema.
+      { label: "Reboot Mac", action: a.rebootEmulator },
     ],
     help: [{ label: "classic-vibe-mac Help", action: a.openHelp, shortcut: "?" }],
   };

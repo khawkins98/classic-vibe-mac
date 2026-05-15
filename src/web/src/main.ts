@@ -375,6 +375,13 @@ if (emulatorMount) {
 // The mount is async because initPersistence() opens IndexedDB.
 const playgroundEl = document.getElementById("cvm-playground");
 
+// Cache the last hot-loaded disk spec so the menubar "Reboot Mac"
+// item can re-launch the user's most recently built app without
+// re-running the toolchain. `null` until the first Build & Run.
+let lastBootSpec:
+  | { kind: "inMemory"; name: string; bytes: Uint8Array }
+  | null = null;
+
 if (playgroundEl) {
   // Hot-load callback: hands the patched HFS image to the loader, which
   // tears down the worker, spawns a fresh one with the new disk in the
@@ -384,11 +391,13 @@ if (playgroundEl) {
     import.meta.env.BASE_URL,
     emulatorHandle
       ? async ({ bytes, volumeName }) => {
-          await emulatorHandle!.reboot({
-            kind: "inMemory",
+          const spec = {
+            kind: "inMemory" as const,
             name: volumeName,
             bytes,
-          });
+          };
+          lastBootSpec = spec;
+          await emulatorHandle!.reboot(spec);
         }
       : undefined,
   );
@@ -606,8 +615,16 @@ mountMenubar({
   },
   resetLayout: () => idePanes.reset(),
   rebootEmulator: () => {
-    // Future: emulatorHandle.reboot({ kind: "currentSecondary" }). For
-    // now this is wired as disabled in the menu schema.
+    // Re-mount the most recently built secondary disk and re-launch the
+    // app. If no Build & Run has happened yet there's nothing to relaunch;
+    // SysBeep-equivalent: surface a console hint and bail.
+    if (!emulatorHandle || !lastBootSpec) {
+      console.info(
+        "[cvm] Reboot Mac: no app built yet — run Build & Run first.",
+      );
+      return;
+    }
+    void emulatorHandle.reboot(lastBootSpec);
   },
   listOpenWindows: () => {
     // Read the WinBox stack from globalThis.WinBox.stack(); each entry
