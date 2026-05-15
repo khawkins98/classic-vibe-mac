@@ -54,17 +54,21 @@ const HELP_HTML = /* html */ `
 
   <h3>Quick start</h3>
   <ol>
-    <li>Pick a project on the left: <strong>Wasm Hello</strong>,
-        <strong>Wasm Hello Multi</strong>,
-        <strong>Wasm Hello Window</strong>, or
-        <strong>Wasm Snake</strong>.</li>
+    <li>Pick a project in the <strong>Project</strong> pane on the
+        left, or open <em>File → Open Project…</em> for a richer
+        picker. Eleven samples ship — a Toolbox-surface ladder from
+        <strong>Wasm Hello</strong> (DrawString) up through
+        <strong>Wasm Notepad</strong> (TextEdit + menu bar),
+        <strong>Wasm Scribble</strong> (mouse-tracking), and
+        <strong>Wasm Bounce</strong> (offscreen-buffer animation).</li>
     <li>Edit the source in the center editor. Edits save automatically
         to your browser (IndexedDB).</li>
     <li>Click <em>Build &amp; Run</em>. The page compiles your changes
         in-browser and the Mac in the top-right reboots with your
         edits in ~1 second.</li>
     <li>Compiler stage timings + identity stamps appear in the
-        <em>Output</em> panel (bottom right).</li>
+        <em>Output</em> panel (bottom right). <em>Special → Reboot
+        Mac</em> re-launches the last build without recompiling.</li>
   </ol>
 
   <h3>How it compiles</h3>
