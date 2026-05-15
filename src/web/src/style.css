@@ -1298,136 +1298,69 @@ body.cvm-paused .emulator-canvas {
     padding-bottom: 0;
   }
 
-  /* IDE grid fills one viewport height under the menubar. */
-  .cvm-ide {
-    display: grid;
-    grid-template-columns: 20% 1fr 1fr;
-    grid-template-rows: 1.5fr 1fr;
+  /* The four docked IDE panes are now WinBox windows (idePanes.ts).
+     The grid-based layout was retired with the WinBox refactor; each
+     pane is positioned absolutely by WinBox at startup and can be
+     dragged/resized/raise-or-lowered/shaded thereafter. The styles
+     below shape the content inside each pane's wb-body.
+
+     Mac pane: canvas + caption fill body, no scroll. */
+  .cvm-pane-mac .wb-body {
+    overflow: hidden;
+  }
+  .cvm-pane-mac .cvm-ide__mac-body {
+    display: flex;
+    flex-direction: column;
     gap: 8px;
-    height: calc(100dvh - 30px);
-    padding: 6px;
-    overflow: hidden;
-  }
-
-  /* Files panel spans both rows on the left. */
-  .cvm-ide__files {
-    grid-column: 1;
-    grid-row: 1 / span 2;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  /* Editor spans both rows in the center column. */
-  .cvm-ide__editor {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  /* Mac is top-right (~60% of right-column height). */
-  .cvm-ide__mac {
-    grid-column: 3;
-    grid-row: 1;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  /* Output is bottom-right (~40% of right-column height). */
-  .cvm-ide__output {
-    grid-column: 3;
-    grid-row: 2;
-    min-width: 0;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  /* Windows inside the grid should fill their cell, overriding the
-     stacked-layout max-width caps. */
-  .cvm-ide .window,
-  .cvm-ide .window--wide,
-  .cvm-ide .window--narrow {
-    max-width: 100%;
-    margin: 0;
     height: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .cvm-pane-mac .inset {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 4px;
+  }
+
+  /* Editor pane: CodeMirror needs to flex to fill the body. */
+  .cvm-pane-editor .wb-body {
     display: flex;
     flex-direction: column;
   }
-
-  /* Window bodies inside the IDE grid need to scroll independently. */
-  .cvm-ide .window__body {
+  .cvm-pane-editor #cvm-playground {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
+    min-height: 0;
+  }
+  .cvm-pane-editor .window__body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     min-height: 0;
     overflow: auto;
   }
-
-  /* Hover lift would shift the grid — disable inside the IDE. */
-  .cvm-ide .window:hover {
-    transform: none;
-  }
-
-  /* Mac pane: the canvas + caption fill the body without scrolling. */
-  .cvm-ide__mac-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    overflow: hidden;
-  }
-  .cvm-ide__mac .inset {
-    flex: 1 1 auto;
-    min-height: 0;
-    padding: 8px;
-  }
-
-  /* Editor pane: make the inner playground content flex so the
-     CodeMirror editor expands to fill remaining vertical space
-     instead of stopping at its default 420px. */
-  .cvm-ide__editor > .window__body {
-    display: flex;
-    flex-direction: column;
-  }
-  .cvm-ide__editor .cvm-pg-editor {
+  .cvm-pane-editor .cvm-pg-editor {
     height: auto;
     flex: 1 1 auto;
     min-height: 240px;
   }
 
-  /* Editor hidden (Mac-only focus mode): collapse the editor column;
-     the right column expands to fill the freed space. The files panel
-     stays visible because the project picker is a primary UI affordance
-     in IDE mode. Toggle is "Show editor" in the Mac window's caption. */
-  .cvm-ide[data-editor-visible="false"] .cvm-ide__editor {
-    display: none;
+  /* Files body: scroll vertically if content overflows. */
+  .cvm-pane-files .wb-body {
+    overflow: auto;
+    padding: 4px;
+    box-sizing: border-box;
   }
-  .cvm-ide[data-editor-visible="false"] {
-    grid-template-columns: 20% 1fr;
-  }
-  .cvm-ide[data-editor-visible="false"] .cvm-ide__mac {
-    grid-column: 2;
-  }
-  .cvm-ide[data-editor-visible="false"] .cvm-ide__output {
-    grid-column: 2;
+  /* Output body: no padding — output panel handles its own layout. */
+  .cvm-pane-output .wb-body {
+    overflow: hidden;
   }
 
-  /* The desktop icon is decorative. Hide it in the IDE layout. */
+  /* The desktop icon is decorative. Hide it on screens wide enough
+     for the IDE layout. */
   .desktop-icon {
-    display: none;
-  }
-
-  /* Core IDE windows (Files / Editor / Mac / Output) don't close —
-     they're the four primary panes, always docked. Hide the
-     decorative close box that ships with `.window__titlebar`. The
-     below-the-fold Read Me + Emulator Config keep their close boxes
-     since they're more visually-decorative-paper-window than
-     "essential workspace pane". */
-  .cvm-ide .window__close {
-    display: none;
-  }
-  /* The title centering relies on the ::after spacer matching the
-     close box. With the close hidden we need to also drop the
-     spacer so the title stays centered. */
-  .cvm-ide .window__titlebar::after {
     display: none;
   }
 
@@ -1917,18 +1850,17 @@ body.cvm-paused .emulator-canvas {
   background: var(--platinum) !important;
 }
 
-/* --- Output panel (bottom-right column) ----------------------------- */
+/* --- Output panel (WinBox-wrapped) ---------------------------------- */
 
-/* The Output window is a flex column inside the grid cell; the tab bar
-   stays fixed at the top and each pane scrolls its own content. */
-.cvm-ide__output {
+/* Output content is the only child of its WinBox body; flex column so
+   the tab bar stays at top and each pane scrolls independently. */
+.cvm-pane-output .wb-body {
+  padding: 0;
+}
+.cvm-pane-output .cvm-output {
   display: flex;
   flex-direction: column;
-}
-.cvm-ide__output > .window__body {
-  /* The pane elements are direct children of the window section; no
-     scrolling window__body wrapper. */
-  display: none;
+  height: 100%;
 }
 .cvm-output__tabbar {
   display: flex;
