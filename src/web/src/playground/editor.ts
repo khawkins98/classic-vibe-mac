@@ -36,7 +36,6 @@ import { compile } from "./rez";
 import {
   spliceResourceFork,
   triggerDownload,
-  fetchPrecompiled,
   makeRetro68DefaultSizeFork,
 } from "./build";
 import { compileToAsm, compileToBin } from "./cc1";
@@ -566,7 +565,6 @@ export async function mountPlayground(
     } finally {
       loadingFile = false;
     }
-    updateNonCompiledBanner(nextFile, nextProject);
     renderTabBar(nextProject, nextFile);
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
@@ -574,26 +572,6 @@ export async function mountPlayground(
     // the user might be tab-cycling and we don't want to fire mid-cycle.
     scheduleAsmCompile("switch");
   }
-
-  // Show / hide the "this file isn't compiled in your browser" banner
-  // based on the active file + project. The banner only fires when the
-  // user is on a .c/.h file in a splice-path project (rezFile !== null);
-  // wasm-hello and other in-browser-C projects suppress it because their
-  // .c edits *do* feed back into the running binary. See
-  // isCompiledInBrowser() for the rule and LEARNINGS Key Story #6 for
-  // the closed-as-infeasible-but-actually-possible context.
-  const nonCompiledBanner = rootEl.querySelector<HTMLDivElement>(
-    "#cvm-pg-noncompiled-banner",
-  );
-  function updateNonCompiledBanner(
-    filename: string,
-    proj: SampleProject,
-  ): void {
-    if (!nonCompiledBanner) return;
-    nonCompiledBanner.hidden = isCompiledInBrowser(filename, proj);
-  }
-  // Initial state matches the file + project the editor opens with.
-  updateNonCompiledBanner(filename, project);
 
   projectSelect.addEventListener("change", () => {
     const newId = projectSelect.value;
@@ -886,36 +864,6 @@ function extensionsForFile(filename: string) {
   return [];
 }
 
-/**
- * Whether edits to this file are actually compiled by the in-browser
- * pipeline for the given project. Three compile paths exist (see
- * runBuild's dispatch table):
- *
- *   - **Path A** (`rezFile === null && precompiledName === null`):
- *     compileToBin compiles every `.c` end-to-end in-browser.
- *   - **Path B** (`rezFile !== null && precompiledName === null`):
- *     compileToBin + WASM-Rez. BOTH `.c` AND `.r` edits compile
- *     in-browser. (cv-mac #100 Phase B.)
- *   - **Path C** (`rezFile !== null && precompiledName !== null`):
- *     WASM-Rez only. `.r` edits compile in-browser; the `.c` data
- *     fork comes from CI-precompiled. `.c`/`.h` edits ride along in
- *     Download .zip but the running binary uses CI's data fork.
- *
- * Drives the project-aware warning banner: shown only when the user
- * is on a file whose edits *don't* feed back into the running binary
- * — i.e. `.c`/`.h` on a Path C project. The banner specifically tells
- * the user to switch to a Path A/B project (Wasm Hello family) to see
- * `.c` edits compile live.
- */
-function isCompiledInBrowser(filename: string, project: SampleProject): boolean {
-  if (/\.r$/i.test(filename)) return true;
-  if (/\.[ch]$/i.test(filename)) {
-    // .c/.h compile in-browser whenever the data fork is built here
-    // (precompiledName is null) — true for Path A and Path B.
-    return project.precompiledName === null;
-  }
-  return false;
-}
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {
@@ -1015,15 +963,6 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         <button type="button" id="cvm-pg-whatjusthappened" class="cvm-pg-btn-what" hidden>
           What just happened?
         </button>
-      </div>
-      <div id="cvm-pg-noncompiled-banner" class="cvm-pg-banner cvm-pg-banner--warn" role="note" hidden>
-        <strong>Heads-up:</strong> for this project, <code>.c</code> /
-        <code>.h</code> edits save locally and ride along in
-        <em>Download .zip</em>, but the running binary uses a
-        CI-precompiled code fork &mdash; <code>.r</code> resource-fork
-        edits are what recompile in-browser here. To see <code>.c</code>
-        edits compile live in your tab, open the <em>Wasm Hello</em>
-        project instead.
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
@@ -1150,116 +1089,18 @@ async function runBuild(
   view: EditorView,
   activeFile: string,
 ): Promise<BuildOutcome> {
-  // Three build paths, dispatched by the project's rezFile +
-  // precompiledName combo:
+  // Two build paths:
+  //   rezFile == null → A: in-browser C only (cc1 → as → ld → Elf2Mac)
+  //   rezFile != null → B: in-browser C + in-browser Rez, splice forks
   //
-  //   rezFile  precompiled  → path
-  //   null     null         → A: in-browser C only (wasm-cc1 → .bin)
-  //   non-null null         → B: in-browser C + in-browser Rez,
-  //                              splice rez fork over the C-built fork
-  //   non-null non-null     → C: in-browser Rez + CI-precompiled
-  //                              .code.bin splice (original Phase 2 path)
+  // Path C (CI-precompiled .code.bin + in-browser Rez splice) was the
+  // original Phase 2 design; retired in #117 when the splice-path
+  // projects (reader / macweather / hello-mac) were removed from the
+  // picker. Removed for real in a follow-up to #125.
   if (proj.rezFile === null) {
     return runBuildInBrowserC(baseUrl, proj, view, activeFile);
   }
-  if (proj.precompiledName === null) {
-    return runBuildMixedCAndR(baseUrl, proj, view, activeFile);
-  }
-  const t0 = performance.now();
-
-  // Read the latest .r source from IDB (the user's edits, possibly NOT
-  // the buffer currently shown in the editor — we Build on the project's
-  // canonical .r file which may be a different file in the dropdown).
-  // readOrSeedFile falls back to the bundled copy on first read.
-  const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
-
-  // Issue #31: lock Type/Creator. The Finder's Desktop DB binds icons by
-  // creator code; changing the creator on a single launch invalidates
-  // every existing document's binding (the old icon resource is orphaned
-  // until the DB rebuilds, which doesn't always happen automatically).
-  // Cheapest guard: refuse the build if the user has touched the
-  // signature resource declaration. We don't allow editing this *yet*;
-  // when we do, it'll be a deliberate UX with a "rebuild Desktop"
-  // affordance.
-  const expectedSig = `data '${proj.appCreator}' (0`;
-  if (!topSource.includes(expectedSig)) {
-    return {
-      ok: false,
-      totalMs: performance.now() - t0,
-      diagnostics: [
-        {
-          file: proj.rezFile,
-          line: 1,
-          column: 1,
-          message:
-            `Type/Creator is locked in this build. The signature resource ` +
-            `'${proj.appCreator}' must remain unchanged — restore the ` +
-            `\`data '${proj.appCreator}' (0, "Owner signature")\` declaration ` +
-            `to compile.`,
-          severity: "error",
-        },
-      ],
-    };
-  }
-
-  // Build the VFS and warm it. We pre-fetch every project file plus the
-  // bundled RIncludes so the synchronous preprocessor pass can resolve
-  // every #include without going async mid-walk.
-  const vfs = createVfs(baseUrl, proj.id);
-  await vfs.prefetch(proj.id, proj.files);
-
-  // Run the preprocessor. We seed the same handful of macros the spike's
-  // MiniLexer addDefine sets at startup so existing .r files compile
-  // identically.
-  const pp = preprocess(topSource, proj.rezFile, vfs, {
-    Rez: "1",
-    DeRez: "0",
-    true: "1",
-    false: "0",
-    TRUE: "1",
-    FALSE: "0",
-  });
-
-  // Show preprocessor diagnostics on the editor (cross-file ones get
-  // remapped to the include line of the active buffer per the
-  // error-markers contract).
-  setEditorDiagnostics(view, pp.diagnostics, activeFile);
-
-  if (pp.diagnostics.some((d) => d.severity === "error")) {
-    return {
-      ok: false,
-      totalMs: performance.now() - t0,
-      diagnostics: pp.diagnostics,
-    };
-  }
-
-  // Compile through WASM-Rez.
-  const rez = await compile(baseUrl, pp.output, proj.rezFile);
-  // Combine pp + rez diagnostics so the user sees everything.
-  const allDiags = [...pp.diagnostics, ...rez.diagnostics];
-  setEditorDiagnostics(view, allDiags, activeFile);
-
-  if (!rez.ok || !rez.resourceFork) {
-    return {
-      ok: false,
-      totalMs: performance.now() - t0,
-      diagnostics: allDiags,
-    };
-  }
-
-  // Splice onto the precompiled .code.bin.
-  const dataForkBin = await fetchPrecompiled(baseUrl, proj.id);
-  const bytes = spliceResourceFork({
-    dataForkBin,
-    resourceFork: rez.resourceFork,
-  });
-
-  return {
-    ok: true,
-    bytes,
-    totalMs: performance.now() - t0,
-    diagnostics: allDiags,
-  };
+  return runBuildMixedCAndR(baseUrl, proj, view, activeFile);
 }
 
 /**
