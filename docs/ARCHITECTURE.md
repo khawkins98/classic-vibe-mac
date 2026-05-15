@@ -1,6 +1,6 @@
 # Architecture
 
-_Last updated: 2026-05-09._
+_Last updated: 2026-05-15._
 
 The technical shape of `classic-vibe-mac` as it stands today. Companion
 docs: [`PLAYGROUND.md`](./PLAYGROUND.md) for the in-browser

@@ -5,13 +5,36 @@ in the same tab. System 7.5.5 boots in your browser. Five demo apps
 launch from Startup Items. Open the source panel and you can edit
 them, hit Build, and the page returns a real `.bin`; hit Build & Run
 and the Mac above reboots ~1s later with your edits applied, no
-reload, no toolchain.
+reload, no toolchain. **You can also write classic Mac C in the
+browser and watch it compile end-to-end** — `cc1` + `as` + `ld` +
+`Elf2Mac` are wasm-bundled, no install required (shipped 2026-05-15).
 The full read / edit / compile / hot-load loop is live in production
 today.
+
+> **Two-repo project.** This repo ships the playground, demo apps,
+> and the in-browser editor + emulator integration. The wasm
+> toolchain it compiles your code with lives in a sibling repo,
+> **[`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc)** —
+> Retro68's C compiler + binutils + Elf2Mac, Emscripten-compiled.
+> That toolchain is also reusable on its own; nothing in
+> `wasm-retro-cc` is cv-mac-specific.
 
 ## Live at
 
 **https://khawkins98.github.io/classic-vibe-mac/**
+
+## Reading paths
+
+This README serves three different visitors:
+
+- **[I'm curious — what is this?](#what-it-does)** Two-minute read.
+  Screenshots, the live link, what's running where.
+- **[I want to try it / build something with it](#try-it)** Step-by-step
+  walkthrough from "open the URL" through "compile my own C code in
+  the tab" through "fork it for my own app."
+- **[I want to understand how it works or build on the platform itself](#build-on-it)**
+  Pointers into the deeper docs: architecture, build pipeline, design
+  rationale, dev process, gotchas.
 
 ## What it looks like
 
@@ -248,21 +271,27 @@ no GCC port), see
 
 ## Iterating on it
 
-Three loops:
+Four loops, fastest first. Pick the fastest one that exercises your
+change.
 
-1. **Fast (sub-second).** Edit pure-C engine, run `npm run test:unit`.
-   No emulator, no browser. The Toolbox-shell + pure-C-engine split
-   means most logic is testable on the host.
-2. **Slow (~1-3 min).** Edit Toolbox shell or resource fork,
-   cross-compile via the Retro68 Docker image (or pull the latest
-   CI artifact), rebuild the boot disk, hard-reload the dev server.
-3. **Slowest (~5-10 min).** Push, let CI build, deploy lands on
-   Pages.
+1. **In-browser (sub-second, no install).** Open the live page, edit
+   `.c` or `.r` source in the playground, click Build & Run. The
+   page compiles your edits in-browser and hot-loads the result into
+   the running Mac in ~1s. New since 2026-05-15 — see
+   [§ Try the in-browser compile-and-run flow](#try-the-in-browser-compile-and-run-flow).
+2. **Fast (sub-second, host gcc).** Edit pure-C engine, run
+   `npm run test:unit`. No emulator, no browser. The Toolbox-shell +
+   pure-C-engine split means most app logic is testable on the host.
+3. **Slow (~1-3 min, cross-compile).** Edit Toolbox shell or
+   resource fork, cross-compile via the Retro68 Docker image (or
+   pull the latest CI artifact), rebuild the boot disk, hard-reload
+   the dev server. Use when you're changing the bundled boot-disk
+   apps (Reader, MacWeather, etc.), not just the in-browser ones.
+4. **Slowest (~5-10 min, deploy).** Push, let CI build, deploy
+   lands on Pages.
 
-Pick the fastest loop that exercises your change. The full
-walkthrough — first-time setup, both Loop 2 paths (CI artifact
-or local Docker build), common-task recipes, common failure modes
-mapped to fixes — is in
+The full walkthrough — first-time setup, all four loop variants,
+common-task recipes, common failure modes mapped to fixes — is in
 [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md). The architectural
 pattern the apps follow (and the rationale for the split) is in
 [`src/app/README.md`](./src/app/README.md).
@@ -273,22 +302,47 @@ documented in [`docs/AGENT-PROCESS.md`](./docs/AGENT-PROCESS.md).
 
 ## Status
 
-All three playground phases shipped on `main` as of 2026-05-09: editor + IDB
-persistence (Phase 1), in-browser Rez compilation (Phase 2), and hot-load
-into the running Mac in ~820ms warm (Phase 3).
+The playground is **feature-complete on the main editor + build + run
+loop**. Highlights of what's shipped on `main` today:
 
-Issues #9, #14, #15, #17 (Markdown Viewer, Reader URL bar, Ethernet relay,
-Pixel Pad) all shipped since the last docs sweep.
+- Phase 1 (editor + IndexedDB persistence) + Phase 2 (in-browser Rez
+  compilation) + Phase 3 (hot-load into the running Mac in ~820ms
+  warm) — all live in production since 2026-05-09.
+- **In-browser C compilation** (cc1 + as + ld + Elf2Mac wasm-bundled,
+  produced from Retro68 via [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc))
+  — shipped 2026-05-15. End-to-end Build & Run on
+  `wasm-hello/hello.c` boots cleanly in BasiliskII; "Hello, World!"
+  rendered via `DrawString`. First time anyone has compiled classic
+  Mac C in a tab and watched it launch.
+- Five baked-in demo apps (Reader, MacWeather, Hello Mac, Pixel
+  Pad, Markdown Viewer) + one in-browser-only demo (Wasm Hello).
+- Opt-in AppleTalk/Ethernet zone networking via `?zone=`.
 
-The canonical shipped-state checklist — what's live, what's closed-Epic,
-what's next — lives in
-[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md#status).
+The canonical shipped-state checklist — what's live, what's
+closed-Epic, what's next — lives in
+[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md#status). The
+forward-looking roadmap for the in-browser C path is in
+[#100](https://github.com/khawkins98/classic-vibe-mac/issues/100)
+(multi-file C, mixed C + `.r`, backend abstraction for future
+target ports).
 
 ## Recently shipped
 
-The old "coming soon" slate is now live on `main`: Pixel Pad, Markdown
-Viewer, the Reader URL bar, and the opt-in AppleTalk/Ethernet relay all
-shipped. For the current status table, see
+- **In-browser C compilation end-to-end** (2026-05-15). The wasm
+  toolchain (cc1 + as + ld + Elf2Mac, built from Retro68 via
+  [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc))
+  compiles `wasm-hello/hello.c` in the tab and boots it cleanly in
+  BasiliskII. Originally estimated as 4-9 engineer-months (and
+  closed as Epic #19 on that basis); shipped in ~2 weeks via a
+  different path — wasm-compile the existing Retro68 binaries and
+  orchestrate from JavaScript instead of porting GCC from scratch.
+  See [LEARNINGS Key Story #6](./LEARNINGS.md) for the
+  closed-as-infeasible-but-actually-possible retrospective.
+- **The "coming soon" slate** (early 2026) is now live: Pixel Pad,
+  Markdown Viewer, the Reader URL bar, and the opt-in
+  AppleTalk/Ethernet relay all shipped.
+
+For the current status table, see
 [`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md#status).
 
 ## Fork it for your own app
@@ -315,6 +369,48 @@ with the deploy.
 The web layer in `src/web/` doesn't usually need touching — it's
 the container the OS boots in. Edit it if you want a different
 page chrome around the emulator.
+
+## Build on it
+
+Pointers for the third reader path — *I want to understand how it
+works, modify the platform, or extend it.* Suggested reading order:
+
+1. **[`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md)** — Guided
+   tour. From "you typed the URL" through "the Mac is running and
+   the editor is seeded" to "you clicked Build and the new binary
+   booted." One layer of abstraction below this README.
+2. **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)** — Engineer
+   deep-dive. The boot pipeline, the SharedArrayBuffer layout, the
+   four-state input lock, the chunked disk reader, the two-way
+   `:Shared:` data flow, the multi-app model. Read this if you're
+   going to modify the host TypeScript or worker.
+3. **[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md)** — The
+   playground's design rationale (Epic #21), the five-reviewer pass
+   that produced it, the open child issues, and the closed-Epic
+   graveyard. Read before proposing anything that smells like "what
+   if we just added a backend."
+4. **[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md)** — Local
+   iteration. The four loops (in-browser, host-test, cross-compile,
+   deploy), first-time setup, common-task recipes, common failure
+   modes → fixes. Start here if you're cloning the repo.
+5. **[`src/app/README.md`](./src/app/README.md)** — Per-app
+   anatomy. How `add_application()` wires creator codes through
+   Rez, the Toolbox-shell + pure-C-engine split, how to add a new
+   app to the boot disk.
+6. **[`docs/AGENT-PROCESS.md`](./docs/AGENT-PROCESS.md)** — The
+   five-reviewer red-flag pass that catches "what if we just added
+   a backend"-class proposals before they sink weeks. Useful if
+   you're scoping new work.
+7. **[`LEARNINGS.md`](./LEARNINGS.md)** — Running gotcha log + Key
+   Stories. Skim this before you debug anything weird. Six Key
+   Stories at the top are required reading for toolchain work.
+8. **[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md)** —
+   Symptom → cause → fix table for the common things that break.
+9. **[`docs/NETWORKING.md`](./docs/NETWORKING.md)** — Specialised:
+   the opt-in AppleTalk zone relay.
+
+For cross-repo context (the wasm toolchain itself), see
+[`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc).
 
 ## Requirements
 
