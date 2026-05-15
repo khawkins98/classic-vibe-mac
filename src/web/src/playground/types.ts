@@ -128,6 +128,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     // don't ship a custom icon for this demo.
     appCreator: "????",
   },
+  {
+    // wasm-hello-multi — multi-file C demo (cv-mac #100 Phase A).
+    // Same shape as wasm-hello but split across main.c + greet.c +
+    // greet.h to exercise the compileToBin pipeline's multi-source
+    // path. Both .c files compile through cc1+as separately; ld
+    // links the two .o's together with libretrocrt/libInterface/etc.
+    id: "wasm-hello-multi",
+    label: "Wasm Hello (multi-file)",
+    files: ["main.c", "greet.c", "greet.h"],
+    rezFile: null,
+    precompiledName: null,
+    outputName: "WasmHelloMulti.bin",
+    appType: "APPL",
+    appCreator: "????",
+  },
 ];
 
 /**
