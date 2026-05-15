@@ -1,0 +1,132 @@
+/**
+ * Help palette (cv-mac #104 Phase 6).
+ *
+ * A floating WinBox window with quick-start guidance, links to the
+ * deeper docs, and a keyboard-shortcuts cheat sheet. Trigger: the
+ * menubar's "Help" item.
+ *
+ * Singleton — calling openHelp() while one is already open just brings
+ * the existing window to the front and re-focuses it instead of
+ * stacking another copy.
+ */
+
+// Side-effect import the WinBox bundle — its main field is broken (see
+// projectPicker.ts for the trail) so we reach for the global at runtime.
+import "winbox/dist/winbox.bundle.min.js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const WinBox: any = (globalThis as any).WinBox;
+
+let active: { focus: () => void; close: () => void } | null = null;
+
+export function openHelp(): void {
+  if (active) {
+    active.focus();
+    return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wb: any = new WinBox({
+    title: "Help — classic-vibe-mac",
+    width: "560px",
+    height: "560px",
+    x: "right",
+    y: 80,
+    html: HELP_HTML,
+    background: "#cccccc",
+    class: ["cvm-help-winbox"],
+    onclose: () => {
+      active = null;
+      return false; // allow close
+    },
+  });
+  active = { focus: () => wb.focus(), close: () => wb.close() };
+}
+
+const HELP_HTML = /* html */ `
+<div class="cvm-help">
+  <h2 class="cvm-help__title">classic-vibe-mac</h2>
+  <p class="cvm-help__tagline">
+    A 1993 Macintosh that lives at a URL — and lets you build apps for
+    it in the same tab.
+  </p>
+
+  <h3>Quick start</h3>
+  <ol>
+    <li>Pick a project on the left: <strong>Reader</strong>, <strong>MacWeather</strong>,
+        <strong>Hello Mac</strong>, or <strong>Wasm Hello</strong>.</li>
+    <li>Edit the source in the center editor. Edits save automatically
+        to your browser (IndexedDB).</li>
+    <li>Click <em>Build &amp; Run</em>. The page compiles your changes
+        in-browser and the Mac in the top-right reboots with your
+        edits in ~1 second.</li>
+    <li>Compiler stage timings + identity stamps appear in the
+        <em>Output</em> panel (bottom right).</li>
+  </ol>
+
+  <h3>Two compile paths</h3>
+  <ul>
+    <li><strong>Splice path</strong> (Reader, MacWeather, Hello Mac,
+        Pixel Pad, Markdown Viewer): in-browser WASM-Rez recompiles the
+        <code>.r</code> resource fork; the <code>.c</code> data fork
+        comes from CI's precompiled <code>.code.bin</code>. Edits to
+        <code>.c</code> save locally but don't change the running
+        binary — a heads-up banner says so when you're on a
+        <code>.c</code> file.</li>
+    <li><strong>Full in-browser C path</strong> (Wasm Hello): the page
+        compiles your <code>.c</code> source through <code>cc1</code> +
+        <code>as</code> + <code>ld</code> + <code>Elf2Mac</code>
+        (Retro68's toolchain wasm-built via
+        <a href="https://github.com/khawkins98/wasm-retro-cc" target="_blank">wasm-retro-cc</a>)
+        and the running binary is whatever you just typed.</li>
+  </ul>
+
+  <h3>Layout (Mac OS 8 style)</h3>
+  <ul>
+    <li><strong>Left:</strong> Projects panel — click an entry to switch,
+        or <em>Open project…</em> for a richer picker with descriptions
+        + import from .zip.</li>
+    <li><strong>Center:</strong> Editor with build buttons, file tabs,
+        and Show Assembly toggle.</li>
+    <li><strong>Top-right:</strong> The Mac. Live preview of whatever
+        your edits build.</li>
+    <li><strong>Bottom-right:</strong> Output panel — Build log
+        (cc1 / as / ld / Elf2Mac timings) and Console (DebugStr
+        capture, coming soon).</li>
+  </ul>
+
+  <h3>Save / share your work</h3>
+  <p>
+    <em>Download .zip</em> packages your current project's files for
+    offline editing or sharing. <em>Open project… → Open .zip…</em>
+    accepts a zip back — overwrites the matching project's files in
+    your browser. The two round-trip cleanly.
+  </p>
+
+  <h3>Deeper reading</h3>
+  <ul>
+    <li><a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/README.md" target="_blank">README</a> — three reader paths (what / how / build on)</li>
+    <li><a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md" target="_blank">HOW-IT-WORKS.md</a> — guided tour from URL to running Mac</li>
+    <li><a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/ARCHITECTURE.md" target="_blank">ARCHITECTURE.md</a> — boot pipeline, SharedArrayBuffer layout, chunked disks</li>
+    <li><a href="https://github.com/khawkins98/wasm-retro-cc" target="_blank">wasm-retro-cc</a> — the wasm toolchain itself (sibling repo)</li>
+    <li><a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/LEARNINGS.md" target="_blank">LEARNINGS.md</a> — 7 Key Stories + dated gotcha log</li>
+  </ul>
+
+  <h3>Roadmap</h3>
+  <p>
+    Forward-looking work: multi-file C support + mixed C + .r in a
+    single project (<a href="https://github.com/khawkins98/classic-vibe-mac/issues/100" target="_blank">#100</a>),
+    PowerPC / Mac OS 8-9 investigation
+    (<a href="https://github.com/khawkins98/classic-vibe-mac/issues/98" target="_blank">#98</a>),
+    Musashi 68k harness expansion
+    (<a href="https://github.com/khawkins98/classic-vibe-mac/issues/89" target="_blank">#89</a>),
+    full IDE retool (this one —
+    <a href="https://github.com/khawkins98/classic-vibe-mac/issues/104" target="_blank">#104</a>).
+  </p>
+
+  <p class="cvm-help__credit">
+    Built on Retro68 (Wolfgang Thaller), Infinite Mac (Mihai Parparita),
+    BasiliskII (Christian Bauer + community), Apple System 7.5.5,
+    WinBox (Thomas Wilkerling). See NOTICE for full attribution.
+  </p>
+</div>
+`;
