@@ -54,30 +54,80 @@ memory access).
 | Failure | Signal |
 | --- | --- |
 | `_start` is the PROVIDE fallback RTS | trace shows trampoline RTS popping `0x00000000` to PC |
+| `_start` is in the wrong segment | trace shows trampoline `RTS` landing outside CODE 1's range (cv-mac #92 / wasm-retro-cc#26) |
 | Retro68Relocate faults | illegal-instruction exception with PC inside Retro68Relocate's range |
 | `main()` reached | trace shows a `jsr` to `main`'s address from `_start` |
+| Which resource the binary asks for first | `[GetResource] type='RELA' id=1 → ...` log line |
 | Toolbox traps fired | per-trap log line with trap number + symbolic name |
 | Clean app exit | `ExitToShell` trap fired, done line records it |
 
+## Toolbox stub coverage
+
+Minimal Resource Manager + Memory Manager stubs so the harness can run
+**through** the first Toolbox call rather than dying at it. We're not
+emulating Mac OS — we're faking just enough that libretrocrt's startup
+can complete its first phase.
+
+Stubbed (with semi-real semantics):
+- **Resource Manager:** `GetResource`, `ReleaseResource`, `HomeResFile`,
+  `CurResFile`, `SizeRsrc`, `ResError`, `SetResLoad`, `GetResAttrs`.
+  `GetResource(type, id)` returns a Handle backed by the resource bytes
+  we parsed from the MacBinary input. Repeated calls for the same
+  `(type, id)` return the same Handle (some libretrocrt code does
+  pointer equality on Handles).
+- **Memory Manager:** `NewHandle`, `DisposeHandle`, `HLock`, `HUnlock`,
+  `GetHandleSize`, `SetHandleSize`, `NewPtr`, `DisposePtr`, `BlockMove`.
+  Bump-pointer allocator backed by a 192 KB heap region. No free; no
+  size tracking on Handles.
+- **Stripped semantics:** `StripAddress` (no-op on 32-bit), `BlockMove`
+  (memmove of bytes between regions).
+
+Calling conventions matter: Resource Manager uses Pascal stack args
+(caller reserves return-value slot, pushes args, trap pops args and
+leaves return). Memory Manager uses register convention (D0 = size in,
+A0 = handle out, D0 = result code). The stubs handle both.
+
 ## What's NOT here (yet)
 
-- **No Toolbox stubs.** A-line traps are logged, then `PC += 2` so
-  execution continues without simulating what the real Toolbox would
-  have done. Apps that branch on Toolbox return values will diverge
-  from real-Mac behavior. Sufficient for the "where does startup die"
-  diagnostic that motivated the build; insufficient for end-to-end
-  behavioral checks.
-- **No LoadSeg.** `Retro68Relocate` walks the segment table via
-  `LoadSeg` to find segment base addresses. Without a real LoadSeg
-  stub, `Retro68Relocate` reads wrong addresses and patches garbage.
-  Affects multi-segment apps after the relocator runs.
-- **No Process Manager.** We don't set up Process Manager globals, the
-  Heap Manager, the A5 world's negative globals beyond a zeroed
-  region, etc. The minimal A5 + jump table setup is enough for
-  startup; not enough for a full app.
+- **No OS trap dispatch.** `GetOSTrapAddress`, `GetToolTrapAddress`,
+  `_Unimplemented` — libretrocrt uses these for ROM version detection
+  early in startup. Returning zero from them confuses the relocator's
+  "is StripAddress available?" check.
+- **No low-memory globals.** The Mac has ~1 KB of well-known
+  low-memory globals at fixed addresses (e.g. `ROM85` at `0x028E`,
+  `CurrentA5` at `0x0904`, `MemTop` at `0x0108`). libretrocrt reads
+  these to figure out which ROM family it's running on. We leave the
+  region zero-filled, so the detect logic sees "very old 64K ROM" and
+  picks code paths that may or may not run on our minimal stubs.
+- **No LoadSeg trap dispatcher.** Multi-seg apps patch LoadSeg into the
+  jump table so that calling an unloaded segment loads it from disk
+  and jumps. Our harness pre-loads all segments at fixed addresses but
+  doesn't intercept the LoadSeg trap — calling cross-segment uses the
+  on-disk jump table entries directly, which don't yet point at the
+  real code addresses we loaded.
+- **No QuickDraw, Window Manager, Event Manager, etc.** A `DrawString`
+  call is logged and skipped; no port is set up, no bitmap is painted.
 
-cv-mac #89 tracks the expansion list. The MVP earned its keep on the
-first run; further investment is opportunistic.
+## Current useful diagnostic range
+
+The harness will reliably tell you:
+
+1. Whether the entry trampoline lands inside `.code00001` (the cv-mac
+   #92 / wasm-retro-cc#26 bug)
+2. Whether `_start` runs
+3. Whether `Retro68Relocate` is entered
+4. **Which resource the relocator asks for first** (RELA 1 for
+   multi-seg; CODE for some flat builds)
+
+After the first GetResource, our stub returns a Handle but the
+relocator's subsequent path makes assumptions about low-memory globals
+and trap dispatch that our stubs don't satisfy. Expect the harness to
+drift into low-memory garbage shortly after — the diagnostic value
+ends at the first GetResource line.
+
+cv-mac #89 tracks the expansion list. Each new layer of stub coverage
+is opportunistic — added when a concrete bug needs it, not built
+speculatively.
 
 ## Vendored
 
