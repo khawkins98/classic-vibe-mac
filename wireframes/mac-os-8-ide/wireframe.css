@@ -1,0 +1,372 @@
+/*
+ * Wireframe styles for the Mac OS 8 IDE layout proposal (cv-mac #104).
+ *
+ * Non-load-bearing: this CSS only has to look approximately right at
+ * 1280-1920px desktop widths. No mobile / responsive concerns — those
+ * are deferred to the real implementation.
+ *
+ * Visual reference: Mac OS 8 Internet control panel (icon-list sidebar
+ * on the left, tabbed main content on the right). We extend the System 7
+ * platinum chrome already in cv-mac into the Mac OS 8 era — slightly
+ * crisper bevels, the same striped title bars.
+ */
+
+:root {
+  --platinum: #cccccc;
+  --platinum-light: #dddddd;
+  --highlight: #ffffff;
+  --shadow: #666666;
+  --shadow-dark: #000000;
+  --ink: #000000;
+  --paper: #ffffff;
+  --selection: #0000aa;
+  --accent: #336699;
+  --font-chrome: "Chicago", "ChicagoFLF", "Charcoal", "Geneva",
+    -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Geneva", -apple-system, "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  --font-mono: "Monaco", "Andale Mono", "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--platinum);
+  background-image: radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 4px 4px;
+  overflow: hidden;
+}
+
+/* ── Menu bar ─────────────────────────────────────────────────────── */
+.menubar {
+  position: fixed; top: 0; left: 0; right: 0; height: 22px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--ink);
+  display: flex; align-items: center; padding: 0 8px;
+  font-family: var(--font-chrome); font-size: 12px;
+  z-index: 10;
+}
+.menubar__apple { margin-right: 14px; font-size: 14px; }
+.menubar__item { margin-right: 14px; cursor: default; user-select: none; }
+.menubar__item--right { margin-left: auto; margin-right: 0; font-family: var(--font-mono); font-size: 11px; }
+
+/* ── Window chrome (re-used across all panes) ─────────────────────── */
+.window {
+  background: var(--platinum);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    2px 2px 0 0 rgba(0,0,0,0.35);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.window__titlebar {
+  display: flex; align-items: center;
+  height: 18px; padding: 0 6px;
+  border-bottom: 1px solid var(--ink);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0, var(--ink) 1px,
+    var(--paper) 1px, var(--paper) 2px
+  );
+  font-family: var(--font-chrome); font-size: 12px;
+  flex-shrink: 0;
+}
+.window__close {
+  width: 11px; height: 11px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  margin-right: 8px; flex-shrink: 0;
+  cursor: default;
+}
+.window__title {
+  background: var(--paper);
+  padding: 0 8px;
+  margin: 0 auto;
+  font-weight: normal;
+  font-size: 12px; line-height: 14px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 80%;
+}
+.window__titlebar::after { content: ""; width: 11px; height: 11px; flex-shrink: 0; }
+.window__body {
+  background: var(--paper);
+  padding: 12px 14px;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.window__body--platinum { background: var(--platinum); }
+
+/* Toolbar row below titlebar (Build / Build & Run / Find / Help) */
+.window__toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px;
+  background: var(--platinum);
+  border-bottom: 1px solid var(--shadow);
+  flex-shrink: 0;
+}
+.window__toolbar-spacer { flex: 1 1 auto; }
+
+/* Tab bar (used by editor + output panel) */
+.window__tabs {
+  display: flex;
+  background: var(--platinum);
+  border-bottom: 1px solid var(--shadow);
+  padding: 4px 6px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.window__tab {
+  border: 1px solid var(--shadow);
+  border-bottom: none;
+  background: var(--platinum-light);
+  padding: 3px 10px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  cursor: default;
+  border-radius: 4px 4px 0 0;
+  position: relative; top: 1px;
+}
+.window__tab--active {
+  background: var(--paper);
+  border-bottom: 1px solid var(--paper);
+}
+
+.window__status {
+  padding: 4px 10px;
+  background: var(--platinum);
+  border-top: 1px solid var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--shadow-dark);
+  flex-shrink: 0;
+}
+.window__status code {
+  background: var(--platinum-light);
+  padding: 0 3px;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.btn {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--platinum-light);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  padding: 3px 12px;
+  cursor: default;
+  border-radius: 3px;
+}
+.btn:active {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+.btn--primary {
+  background: linear-gradient(to bottom, #e0e0e0, #b8b8b8);
+  font-weight: bold;
+}
+.btn--small { padding: 2px 8px; font-size: 10px; }
+
+/* ── The IDE grid: 3 cols + bottom row ────────────────────────────── */
+.ide {
+  position: fixed;
+  top: 22px; left: 0; right: 0; bottom: 0;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 20% 1fr 1fr;   /* 1/5  2/5  2/5 */
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  height: calc(100vh - 22px);
+}
+
+/* Left panel: spans both rows */
+.ide__files {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+/* Center editor: spans both rows */
+.ide__editor {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+/* Top right: Mac preview (60% of right column height) */
+.ide__mac {
+  grid-column: 3;
+  grid-row: 1;
+  grid-row-end: span 1;
+}
+/* Bottom right: Output (40% of right column height) */
+.ide__output {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* Right column rows: Mac gets more height than Output */
+.ide {
+  grid-template-rows: 1.5fr 1fr;   /* 60/40 split top-to-bottom */
+}
+
+/* ── Files panel content ──────────────────────────────────────────── */
+.files-body { padding: 0; display: flex; flex-direction: column; }
+.files-list {
+  list-style: none; margin: 0; padding: 6px 0;
+  flex: 1 1 auto; overflow-y: auto;
+  font-family: var(--font-chrome); font-size: 11px;
+}
+.files-list__group {
+  padding: 6px 12px 2px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--shadow);
+  text-transform: uppercase;
+}
+.files-list__item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  cursor: default;
+}
+.files-list__item:hover { background: var(--platinum-light); }
+.files-list__item--active {
+  background: var(--selection);
+  color: var(--paper);
+}
+.files-list__icon { font-size: 14px; flex-shrink: 0; }
+.files-list__add {
+  margin: 6px 12px 8px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--platinum-light);
+  border: 1px dashed var(--shadow);
+  padding: 4px 8px;
+  cursor: default;
+  text-align: left;
+}
+.files-list__footer {
+  border-top: 1px solid var(--shadow);
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--platinum);
+}
+.files-list__footer .btn { text-align: left; }
+
+/* ── Editor content ───────────────────────────────────────────────── */
+.editor-body {
+  margin: 0; padding: 12px 14px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.5;
+  background: var(--paper); color: var(--ink);
+  white-space: pre;
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+.editor-body .kw  { color: #0033cc; font-weight: 600; }
+.editor-body .str { color: #006633; }
+.editor-body .fn  { color: #663399; }
+.editor-body .num { color: #aa3322; }
+
+/* ── Mac preview ──────────────────────────────────────────────────── */
+.mac-body { display: flex; flex-direction: column; gap: 8px; height: 100%; padding: 10px; }
+.mac-canvas {
+  flex: 1 1 auto;
+  background: #000;
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--shadow);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--paper);
+  font-family: var(--font-mono); font-size: 11px;
+}
+.mac-canvas__placeholder {
+  text-align: center; opacity: 0.7;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.mac-canvas__placeholder small { font-size: 9px; opacity: 0.7; }
+.mac-caption {
+  display: flex; align-items: center; gap: 12px;
+  padding: 2px 4px;
+  font-family: var(--font-chrome); font-size: 10px;
+}
+.mac-caption__status { margin-left: auto; color: var(--shadow); font-family: var(--font-mono); }
+.check { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
+
+/* ── Output panel ─────────────────────────────────────────────────── */
+.output-body {
+  margin: 0; padding: 10px 14px;
+  font-family: var(--font-mono); font-size: 10px;
+  background: var(--paper); color: var(--ink);
+  white-space: pre-wrap; word-break: break-word;
+  flex: 1 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* ── Startup picker (rendered inside WinBox modal) ────────────────── */
+.startup { padding: 16px; font-family: var(--font-chrome); }
+.startup h3 { margin: 0 0 4px; font-size: 14px; }
+.startup p { margin: 0 0 12px; font-family: var(--font-body); font-size: 12px; }
+.startup__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.startup__card {
+  display: flex; flex-direction: column; gap: 4px;
+  text-align: left;
+  font-family: var(--font-chrome);
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  padding: 10px;
+  cursor: default;
+}
+.startup__card:hover { background: var(--paper); }
+.startup__card-icon { font-size: 20px; }
+.startup__card strong { font-size: 12px; }
+.startup__card small { font-size: 10px; color: var(--shadow); font-family: var(--font-body); }
+.startup__row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.startup hr { border: none; border-top: 1px solid var(--shadow); margin: 12px 0; }
+
+/* ── WinBox theme overrides (subtle Mac OS 8 tint) ────────────────── */
+.winbox {
+  font-family: var(--font-chrome) !important;
+  border: 1px solid var(--ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    3px 3px 0 0 rgba(0,0,0,0.4) !important;
+}
+.wb-header {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0, var(--ink) 1px,
+    var(--paper) 1px, var(--paper) 2px
+  ) !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--ink) !important;
+  height: 20px !important;
+}
+.wb-title {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  padding: 0 8px !important;
+  font-family: var(--font-chrome) !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+  height: 18px !important;
+  margin: 1px auto !important;
+}
+.wb-body {
+  background: var(--platinum) !important;
+}
