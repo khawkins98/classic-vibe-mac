@@ -165,13 +165,14 @@ variations on a theme.
 | `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
 | `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
 | `wasm-patterns/` | `patterns.c` + `.r` | `Pattern` (8x8 bitmap), `FillRect` with custom + system patterns (white/ltGray/gray/dkGray) | 165 |
+| `wasm-bounce/` | `bounce.c` + `.r` | Hand-built offscreen `BitMap` (NewPtr buffer + SetPortBits), `CopyBits` double-buffer, `TickCount`-paced animation | 180 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
 - **Modal dialogs with editable fields** (`ModalDialog` + DITL items past a single OK)
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **Sound Manager** (`SndPlay`) — period-correct audio feedback
-- **Offscreen GWorld + CopyBits** — the next step past hand-rolled patterns; double-buffered animation pattern
+- **Color QuickDraw `NewGWorld`** — same surface as Bounce but using the modern (System 7+) double-buffer API
 
 ### Adding a wasm-shelf sample
 
