@@ -23,10 +23,14 @@
 const KEY_PAUSE_WHEN_HIDDEN = "cvm.pauseWhenHidden";
 /** localStorage key for the "Show editor" (playground) toggle. */
 const KEY_SHOW_EDITOR = "cvm.showEditor";
+/** localStorage key for the compiler optimization level
+ *  (cv-mac #100 Phase E). One of "O0" (default), "Os", "O2". */
+const KEY_OPT_LEVEL = "cvm.optLevel";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
 const editorListeners = new Set<Listener>();
+const optLevelListeners = new Set<Listener>();
 
 /**
  * Read the current value. Defaults to `true` (sleep when hidden) — the
@@ -109,6 +113,50 @@ export function onShowEditorChange(fn: Listener): () => void {
   };
 }
 
+/**
+ * Compiler optimization level (cv-mac #100 Phase E).
+ *
+ * Persisted via localStorage; defaults to `"O0"` (no optimization) to
+ * match cc1's default and the existing pipeline's behavior — flipping
+ * this on doesn't surprise existing users. Choices:
+ *
+ *   - `O0` (none): straight translation, easiest to debug, biggest binary
+ *   - `Os` (size): GCC's "optimize for size" — usually smallest output
+ *     without giving up too much speed
+ *   - `O2` (speed): GCC's standard "fast" optimization profile
+ *
+ * The setting flows into `compileToBin`'s cc1 args as a single `-O<level>`
+ * argument. Show Assembly's compileToAsm also honors it so the assembly
+ * preview reflects what the build pipeline would emit.
+ */
+export type OptLevel = "O0" | "Os" | "O2";
+
+export function getOptLevel(): OptLevel {
+  try {
+    const raw = localStorage.getItem(KEY_OPT_LEVEL);
+    if (raw === "Os" || raw === "O2") return raw;
+    return "O0";
+  } catch {
+    return "O0";
+  }
+}
+
+export function setOptLevel(value: OptLevel): void {
+  try {
+    localStorage.setItem(KEY_OPT_LEVEL, value);
+  } catch {
+    /* persistence failure — still notify listeners */
+  }
+  for (const fn of optLevelListeners) fn();
+}
+
+export function onOptLevelChange(fn: Listener): () => void {
+  optLevelListeners.add(fn);
+  return () => {
+    optLevelListeners.delete(fn);
+  };
+}
+
 // Wire cross-tab observability once. `addEventListener` is no-op safe to
 // call multiple times only if we use a stable handler — we do.
 if (typeof window !== "undefined") {
@@ -117,6 +165,8 @@ if (typeof window !== "undefined") {
       for (const fn of listeners) fn();
     } else if (ev.key === KEY_SHOW_EDITOR) {
       for (const fn of editorListeners) fn();
+    } else if (ev.key === KEY_OPT_LEVEL) {
+      for (const fn of optLevelListeners) fn();
     }
   });
 }
