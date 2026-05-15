@@ -123,7 +123,8 @@ don't duplicate this in either file._
 | Markdown Viewer (#9) | Reads .md from :Shared:, renders with C Markdown parser | ✅ shipped |
 | Ethernet relay (#15) | Opt-in AppleTalk zone networking via ?zone=; SPSC ring SAB; Cloudflare DO relay in worker/ | ✅ shipped |
 | Epic #12 — Real Mac TCP/IP via relay | Closed after review (architecture wrong + ToS violation) | ❌ closed |
-| Epic #19 — Full in-browser IDE with C compilation | Closed after review (needs OAuth + backend + 4-9 engineer-month GCC port) | ❌ closed |
+| Epic #19 — Full in-browser IDE with C compilation | Original framing closed after review; **capability shipped 2026-05-15 via a different path** (wasm-compile Retro68's existing toolchain instead of porting GCC from scratch). See Epic #19 post-mortem below. | ✅ shipped (different path) |
+| In-browser C compilation (`compileToBin`) | cc1 + as + ld + Elf2Mac wasm-compiled from Retro68, orchestrated from `cc1.ts`; SIZE-resource splice, `--emit-relocs` for runtime relocation; end-to-end Build & Run for `wasm-hello/hello.c` boots cleanly in BasiliskII | ✅ shipped 2026-05-15 (#97) |
 
 For the full issue tracker (open Epics, child issues, roadmap) see
 <https://github.com/khawkins98/classic-vibe-mac/issues>.
@@ -401,3 +402,39 @@ in-browser IDE for classic Mac C is genuinely 4-9 engineer-months
 of work**, dominated by porting GCC + the linker to WASM, _not_ by
 the editor or the UI. If you want to revisit it, frame it as a
 research spike with a ruthless time-box — not as a feature Epic.
+
+### Epic #19 follow-up — we shipped the C compilation anyway, via a different path (2026-05-15)
+
+The closure rationale above was correct **about the path it
+assumed**: porting GCC from scratch into Emscripten was genuinely
+4-9 engineer-months. What the post-mortem missed is that there's a
+much shorter path: **don't reimplement Retro68's toolchain — just
+wasm-compile the existing binaries.** Each tool (cc1, as, ld,
+Elf2Mac) runs as a standalone Emscripten module, orchestrated from
+JavaScript instead of via the GCC driver's fork/exec model. No
+fork/exec emulation needed because each invocation is a fresh
+`Module.callMain([…])`.
+
+That work landed in [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc)
+over ~2 weeks (Phases 2.0 → 2.3d, May 2026) and integrated into
+cv-mac's `compileToBin` in PRs #82 → #97. The final binary boots in
+BasiliskII end-to-end as of 2026-05-15.
+
+A few things still hold from the original closure:
+
+- **OAuth / GitHub Pages backend issue is still real** — we ship
+  `.bin` files as downloads (or hot-load via the in-memory HFS
+  patcher), not commits back to your repo. The "edit in browser,
+  PR to your fork" flow remains out of scope.
+- **In-browser HFS writer was still needed** — solved separately
+  via the template-splice patcher (#46) for Phase 3 hot-loading.
+- **`cc1.wasm` is genuinely ~12 MB** — the size estimate was
+  right; the 4-9 month effort estimate assumed we'd have to
+  fork/exec-emulate it, which turned out unnecessary.
+
+**Meta-lesson worth capturing:** when an Epic gets closed as
+"infeasible," the closure rationale describes a *specific path*
+being infeasible. A different path may exist. The trigger to
+revisit a closed Epic is **"someone found a path the post-mortem
+didn't consider"**, not "we have more engineer-months now." See
+LEARNINGS Key Story #6 for the full retrospective.
