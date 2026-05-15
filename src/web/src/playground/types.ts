@@ -162,6 +162,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVNP",
   },
+  {
+    // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
+    // ladder rung from the TextEdit samples: demonstrates hand-drawn
+    // QuickDraw buttons, PtInRect hit-testing, NumToString display
+    // formatting, and Invert flash press-feedback. Shows the playground
+    // can build classic Mac apps without TextEdit/scrap entanglement.
+    id: "wasm-calculator",
+    label: "Wasm Calculator",
+    files: ["calc.c", "calc.r"],
+    rezFile: "calc.r",
+    outputName: "WasmCalculator.bin",
+    appType: "APPL",
+    appCreator: "CVCA",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
