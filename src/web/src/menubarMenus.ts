@@ -99,20 +99,47 @@ export function mountMenubar(actions: MenubarActions): () => void {
   overlay.hidden = true;
   document.body.appendChild(overlay);
 
+  // Default every menubar trigger to aria-expanded="false". openDropdown
+  // / closeDropdown flip the currently-active one. The aria-haspopup
+  // attribute is set in main.ts's static markup.
+  for (const t of document.querySelectorAll<HTMLElement>("[data-menu]")) {
+    t.setAttribute("aria-expanded", "false");
+  }
+
   let openMenuKey: string | null = null;
   let openTrigger: HTMLElement | null = null;
+  // Snapshot of the items list at openDropdown time. The Windows menu's
+  // items come from a live action (listOpenWindows), and re-querying at
+  // click time could shift indexes if a WinBox opened/closed in between —
+  // making a click fire the wrong action. We snapshot once on open and
+  // bind both render and click to the same list.
+  let openItems: MenuEntry[] = [];
+  // For Escape-to-close: remember what had focus before the menu opened,
+  // so Escape returns focus there instead of leaving it on a stale
+  // menubar trigger.
+  let preOpenFocus: HTMLElement | null = null;
 
-  function closeDropdown(): void {
+  function closeDropdown(opts?: { restoreFocus?: boolean }): void {
     overlay.hidden = true;
     overlay.innerHTML = "";
-    if (openTrigger) openTrigger.classList.remove("menubar__item--open");
+    if (openTrigger) {
+      openTrigger.classList.remove("menubar__item--open");
+      openTrigger.setAttribute("aria-expanded", "false");
+    }
     openMenuKey = null;
     openTrigger = null;
+    openItems = [];
+    if (opts?.restoreFocus && preOpenFocus && document.contains(preOpenFocus)) {
+      try { preOpenFocus.focus(); } catch { /* element became unfocusable */ }
+    }
+    preOpenFocus = null;
   }
 
   function openDropdown(key: string, trigger: HTMLElement): void {
     const items = menuFor(key);
     if (!items) return;
+    openItems = items;
+    preOpenFocus = (document.activeElement as HTMLElement | null) ?? null;
     overlay.innerHTML = items
       .map((it, idx) => {
         if ("separator" in it) {
@@ -137,6 +164,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
     overlay.style.top = `${rect.bottom}px`;
     overlay.hidden = false;
     trigger.classList.add("menubar__item--open");
+    trigger.setAttribute("aria-expanded", "true");
     openMenuKey = key;
     openTrigger = trigger;
   }
@@ -147,8 +175,11 @@ export function mountMenubar(actions: MenubarActions): () => void {
     );
     if (!btn || !openMenuKey) return;
     const idx = Number(btn.dataset.menuAction);
-    const item = menuFor(openMenuKey)[idx];
-    if (item && !("separator" in item) && item.action && !isDisabled(item)) {
+    // Defend against a malformed/missing dataset — Number("") is 0 which
+    // would silently fire the first item.
+    if (!Number.isInteger(idx) || idx < 0 || idx >= openItems.length) return;
+    const item = openItems[idx]!;
+    if (!("separator" in item) && item.action && !isDisabled(item)) {
       const a = item.action;
       // Close BEFORE firing so the action can open a palette that wants focus.
       closeDropdown();
@@ -231,7 +262,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
 
   function onKey(e: KeyboardEvent): void {
     if (e.key === "Escape" && openMenuKey) {
-      closeDropdown();
+      closeDropdown({ restoreFocus: true });
       return;
     }
     // Arrow-key navigation while a dropdown is open. The classic Mac
@@ -293,8 +324,15 @@ export function mountMenubar(actions: MenubarActions): () => void {
     // Only single-character keys are shortcuts (skip arrows, F-keys, etc.).
     if (e.key.length !== 1) return;
     // Skip when focus is in an editable surface — CodeMirror, inputs, etc.
-    const t = e.target as HTMLElement | null;
-    if (isEditableTarget(t)) return;
+    // Check BOTH event target (some events lift target to document.body)
+    // and the active element (the real focus owner). Either being editable
+    // is enough to defer to local keybindings.
+    if (
+      isEditableTarget(e.target as HTMLElement | null) ||
+      isEditableTarget(document.activeElement as HTMLElement | null)
+    ) {
+      return;
+    }
     const target = e.key.toUpperCase();
     // Walk every menu's schema looking for the shortcut. Static menus
     // only; the Windows menu's dynamic entries don't carry shortcuts.
