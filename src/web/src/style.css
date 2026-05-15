@@ -1697,6 +1697,125 @@ body.cvm-paused .emulator-canvas {
   background: var(--paper) !important;
 }
 
+/* --- About palette (Apple menu) ------------------------------------- */
+.cvm-about {
+  padding: 16px 18px 14px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.cvm-about__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+.cvm-about__tagline {
+  margin: 0 0 12px;
+  font-style: italic;
+  color: var(--ink);
+}
+.cvm-about__lede {
+  margin: 0 0 12px;
+}
+.cvm-about h3 {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.cvm-about__links {
+  margin: 4px 0 8px 18px;
+  padding: 0;
+}
+.cvm-about__links li {
+  margin: 2px 0;
+}
+.cvm-about__credit {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--shadow);
+  border-top: 1px solid var(--shadow);
+  padding-top: 8px;
+}
+
+/* --- Preferences palette (Edit menu) -------------------------------- */
+.cvm-prefs {
+  padding: 14px 18px;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+.cvm-prefs__section {
+  margin-bottom: 18px;
+}
+.cvm-prefs__heading {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: bold;
+  border-bottom: 1px solid var(--shadow);
+  padding-bottom: 3px;
+}
+.cvm-prefs__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px 0;
+}
+.cvm-prefs__row--check {
+  align-items: center;
+}
+.cvm-prefs__label {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cvm-prefs__label small {
+  color: var(--shadow);
+  font-size: 10.5px;
+}
+.cvm-prefs__select {
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  padding: 2px 4px;
+  min-width: 130px;
+}
+
+/* Apple + About + Prefs WinBoxes pick up the same Mac OS 8 chrome via
+   the shared .cvm-mac-winbox class. Explicit overrides keep the borders
+   crisp at the awkward viewport sizes where WinBox's defaults bleed. */
+.cvm-about-winbox,
+.cvm-prefs-winbox {
+  border: 1px solid var(--ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
+}
+.cvm-about-winbox .wb-header,
+.cvm-prefs-winbox .wb-header {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ink) 0, var(--ink) 1px,
+    var(--paper) 1px, var(--paper) 2px
+  ) !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid var(--ink) !important;
+  height: 20px !important;
+}
+.cvm-about-winbox .wb-title,
+.cvm-prefs-winbox .wb-title {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  padding: 0 8px !important;
+  font-family: var(--font-chrome) !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+  height: 18px !important;
+  margin: 1px auto !important;
+}
+.cvm-about-winbox .wb-body,
+.cvm-prefs-winbox .wb-body {
+  background: var(--paper) !important;
+}
+
 /* --- Shared Mac OS 8 window behaviours for WinBox palettes ---------- */
 /*
  * All our WinBoxes (.cvm-picker-winbox, .cvm-help-winbox,
