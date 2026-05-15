@@ -571,108 +571,158 @@ export interface CompileToBinResult {
   stages?: CompileToBinStages;
 }
 
+/** A single source file passed to {@link compileToBin}. Files with a
+ *  `.c` extension are compiled to objects and linked; `.h` files are
+ *  co-mounted into MEMFS so cc1's `#include` can find them. Other
+ *  extensions are ignored. */
+export interface CompileToBinSource {
+  filename: string;
+  content: string;
+}
+
+export interface CompileToBinOptions {
+  /** All source files for the build. At least one `.c` file required. */
+  sources: CompileToBinSource[];
+  /** Override the file name used for diagnostics labelling when no
+   *  per-source stderr lookup can pinpoint the failing source. Defaults
+   *  to the first `.c` file in {@link sources}. */
+  primaryName?: string;
+}
+
 /**
- * Compile a single C translation unit all the way to a structurally-valid
+ * Compile one or more C translation units all the way to a structurally-valid
  * single-fork MacBinary II APPL — same pipeline `spike/wasm-cc1/test/full-pipeline.mjs`
- * proves Node-side.
+ * proves Node-side, extended for multi-file projects (cv-mac #100 Phase A).
  *
- * The four wasm tools are loaded lazily on first call. Subsequent calls
- * reuse the cached Modules and overwrite their MEMFS scratch files. Each
- * tool gets its own MEMFS; we shuttle files via `FS.readFile` → `FS.writeFile`
- * between stages.
+ * Each `.c` source gets its own fresh cc1 + as Module (cc1 isn't re-entrant
+ * — see LEARNINGS Key Story #3), produces a `<basename>.o`, and feeds into
+ * a single ld + Elf2Mac stage. `.h` siblings are co-mounted into every
+ * cc1's MEMFS for `#include` resolution.
  *
- * `sourceName` flows into cc1's `.file` directive and into the names of
- * temporary MEMFS files. The sibling-file plumbing (project `.c`/`.h`
- * companions) mirrors `compileToAsm`'s contract — see CompileToAsmOptions.
+ * Memory cost scales linearly with the number of `.c` files (~12 MB extra
+ * heap per cc1 Module while compiling, freed after each finishes). Build
+ * time is also linear, dominated by the cc1 stage (~50-200 ms per file).
  */
 export async function compileToBin(
   baseUrl: string,
-  source: string,
-  sourceName: string,
-  options?: CompileToAsmOptions,
+  options: CompileToBinOptions,
 ): Promise<CompileToBinResult> {
   const t0 = performance.now();
   const stages: CompileToBinStages = { cc1Ms: 0, asMs: 0, ldMs: 0, elf2macMs: 0 };
   const allDiags: Diagnostic[] = [];
   const stderrParts: string[] = [];
 
-  // Normalize the source filename. Same rules as compileToAsm.
-  const safeName = safeRelativePath(sourceName) ?? "in.c";
-
-  // ── Stage 1: cc1 ────────────────────────────────────────────────────
-  const cc1 = await loadCc1Tool(baseUrl);
-  const cc1In = `/tmp/${safeName}`;
-  const cc1Out = `/tmp/out.s`;
-  for (const p of [cc1In, cc1Out]) {
-    try { cc1.Module.FS.unlink(p); } catch {}
-  }
-  // Sibling files (project .c/.h) — mirror compileToAsm's logic.
-  const tmpDirs = new Set<string>(["/tmp"]);
-  if (options?.siblings) {
-    for (const sib of options.siblings) {
-      const sibSafe = safeRelativePath(sib.name);
-      if (!sibSafe || sibSafe === safeName) continue;
-      const sibPath = `/tmp/${sibSafe}`;
-      mkdirP(cc1.Module, sibPath, tmpDirs);
-      cc1.Module.FS.writeFile(sibPath, sib.content);
-    }
-  }
-  mkdirP(cc1.Module, cc1In, tmpDirs);
-  cc1.Module.FS.writeFile(cc1In, source);
-  const cc1Start = performance.now();
-  const cc1Rc = callMainSafe(cc1, [
-    "-quiet",
-    "-isystem", "/sysroot/gcc-include",
-    "-isystem", "/sysroot/include",
-    "-mcpu=68020",
-    cc1In,
-    "-o", cc1Out,
-  ]);
-  stages.cc1Ms = performance.now() - cc1Start;
-  const cc1Stderr = cc1.stderr.join("\n");
-  if (cc1Stderr) stderrParts.push(`[cc1]\n${cc1Stderr}`);
-  allDiags.push(...parseCc1Stderr(cc1Stderr, sourceName));
-  if (cc1Rc !== 0) {
+  // Partition sources by extension. .c → compile target; .h → header.
+  const cSources = options.sources.filter((s) => /\.c$/i.test(s.filename));
+  const hSources = options.sources.filter((s) => /\.h$/i.test(s.filename));
+  if (cSources.length === 0) {
     return {
       ok: false,
-      diagnostics: allDiags.length ? allDiags : [{
-        file: sourceName, line: 1, column: 1, severity: "error",
-        message: `cc1 exited rc=${cc1Rc}`,
+      diagnostics: [{
+        file: options.primaryName ?? "(no source)", line: 1, column: 1,
+        severity: "error",
+        message: `compileToBin requires at least one .c source file.`,
       }],
-      rawStderr: stderrParts.join("\n\n"),
+      rawStderr: "",
       failedStage: 1,
       totalMs: performance.now() - t0,
       stages,
     };
   }
-  const sBytes = cc1.Module.FS.readFile(cc1Out);
-  const asmText = new TextDecoder().decode(sBytes);
+  const primaryName =
+    options.primaryName ??
+    (safeRelativePath(cSources[0]!.filename) ?? "in.c");
 
-  // ── Stage 2: as ─────────────────────────────────────────────────────
-  const as = await loadAsTool(baseUrl);
-  for (const p of ["/tmp/in.s", "/tmp/out.o"]) {
-    try { as.Module.FS.unlink(p); } catch {}
+  // Collected .o bytes by basename, to feed into ld in stage 3.
+  const objects: Array<{ name: string; bytes: Uint8Array }> = [];
+  /** Concatenated assembly from the first compiled source (handy for the
+   *  Show Assembly preview when multi-file compiling). */
+  let asmText: string | undefined;
+
+  // ── Stage 1 + 2: compile + assemble each .c source ───────────────────
+  //
+  // cc1 / as both carry static state across callMain — see LEARNINGS Key
+  // Story #3. We use a fresh Module per source so multi-file compiles
+  // don't crash on the second cc1 invocation. The wasm bytes come from
+  // the browser's HTTP cache so the extra fetch is essentially free.
+  for (const c of cSources) {
+    const safe = safeRelativePath(c.filename) ?? "in.c";
+    const baseNoExt = safe.replace(/\.c$/i, "");
+
+    // ── cc1 → .s
+    const cc1 = await loadCc1Tool(baseUrl);
+    const tmpDirs = new Set<string>(["/tmp"]);
+    // Co-mount every source (headers AND the other .c files, so siblings
+    // can #include things across the project).
+    for (const s of options.sources) {
+      const sSafe = safeRelativePath(s.filename);
+      if (!sSafe) continue;
+      const path = `/tmp/${sSafe}`;
+      mkdirP(cc1.Module, path, tmpDirs);
+      cc1.Module.FS.writeFile(path, s.content);
+    }
+    const cc1In = `/tmp/${safe}`;
+    const cc1Out = `/tmp/${baseNoExt}.s`;
+    const cc1Start = performance.now();
+    const cc1Rc = callMainSafe(cc1, [
+      "-quiet",
+      "-isystem", "/sysroot/gcc-include",
+      "-isystem", "/sysroot/include",
+      "-mcpu=68020",
+      cc1In,
+      "-o", cc1Out,
+    ]);
+    stages.cc1Ms += performance.now() - cc1Start;
+    const cc1Stderr = cc1.stderr.join("\n");
+    if (cc1Stderr) stderrParts.push(`[cc1 ${c.filename}]\n${cc1Stderr}`);
+    allDiags.push(...parseCc1Stderr(cc1Stderr, c.filename));
+    if (cc1Rc !== 0) {
+      return {
+        ok: false,
+        diagnostics: allDiags.length ? allDiags : [{
+          file: c.filename, line: 1, column: 1, severity: "error",
+          message: `cc1 exited rc=${cc1Rc} on ${c.filename}`,
+        }],
+        rawStderr: stderrParts.join("\n\n"),
+        failedStage: 1,
+        totalMs: performance.now() - t0,
+        stages,
+      };
+    }
+    const sBytes = cc1.Module.FS.readFile(cc1Out);
+    if (asmText === undefined) asmText = new TextDecoder().decode(sBytes);
+
+    // ── as → .o
+    const as = await loadAsTool(baseUrl);
+    const asIn = `/tmp/${baseNoExt}.s`;
+    const asOut = `/tmp/${baseNoExt}.o`;
+    as.Module.FS.writeFile(asIn, sBytes);
+    const asStart = performance.now();
+    const asRc = callMainSafe(as, [
+      "-march=68020", asIn, "-o", asOut,
+    ]);
+    stages.asMs += performance.now() - asStart;
+    const asStderr = as.stderr.join("\n");
+    if (asStderr) stderrParts.push(`[as ${c.filename}]\n${asStderr}`);
+    if (asRc !== 0) {
+      return {
+        ok: false, asm: asmText,
+        diagnostics: [...allDiags, {
+          file: c.filename, line: 1, column: 1, severity: "error",
+          message: `as exited rc=${asRc}: ${asStderr.split("\n")[0] ?? "(no message)"}`,
+        }],
+        rawStderr: stderrParts.join("\n\n"),
+        failedStage: 2,
+        totalMs: performance.now() - t0,
+        stages,
+      };
+    }
+    const oBytes = as.Module.FS.readFile(asOut);
+    objects.push({ name: `${baseNoExt}.o`, bytes: oBytes });
   }
-  as.Module.FS.writeFile("/tmp/in.s", sBytes);
-  const asStart = performance.now();
-  const asRc = callMainSafe(as, ["-march=68020", "/tmp/in.s", "-o", "/tmp/out.o"]);
-  stages.asMs = performance.now() - asStart;
-  const asStderr = as.stderr.join("\n");
-  if (asStderr) stderrParts.push(`[as]\n${asStderr}`);
-  if (asRc !== 0) {
-    return {
-      ok: false, asm: asmText,
-      diagnostics: [...allDiags, {
-        file: sourceName, line: 1, column: 1, severity: "error",
-        message: `as exited rc=${asRc}: ${asStderr.split("\n")[0] ?? "(no message)"}`,
-      }],
-      rawStderr: stderrParts.join("\n\n"),
-      failedStage: 2,
-      totalMs: performance.now() - t0,
-      stages,
-    };
-  }
-  const oBytes = as.Module.FS.readFile("/tmp/out.o");
+  // Mark hSources as intentionally walked-but-not-compiled (silence the
+  // unused-binding linter without complicating the loop).
+  void hSources.length;
 
   // ── Stage 3: ld ─────────────────────────────────────────────────────
   //
@@ -705,10 +755,13 @@ export async function compileToBin(
   // workarounds compose to keep the binary correct. See LEARNINGS
   // "2026-05-15 PM — canonical-style cleanup attempt failed".
   const ld = await loadLdTool(baseUrl);
-  for (const p of ["/tmp/in.o", "/tmp/out.gdb"]) {
+  for (const o of objects) {
+    const p = `/tmp/${o.name}`;
     try { ld.Module.FS.unlink(p); } catch {}
+    ld.Module.FS.writeFile(p, o.bytes);
   }
-  ld.Module.FS.writeFile("/tmp/in.o", oBytes);
+  try { ld.Module.FS.unlink("/tmp/out.gdb"); } catch {}
+  const objPaths = objects.map((o) => `/tmp/${o.name}`);
   const ldStart = performance.now();
   const ldRc = callMainSafe(ld, [
     // `retro68-multiseg.ld` is the multi-segment ld script that
@@ -740,7 +793,10 @@ export async function compileToBin(
     "--emit-relocs",
     "-o", "/tmp/out.gdb",
     "/sysroot/lib/start.c.obj",
-    "/tmp/in.o",
+    // All user .o files (one per .c source); cv-mac #100 Phase A.
+    // For single-file projects this is one entry; multi-file projects
+    // (e.g. wasm-hello-multi) link multiple objects together.
+    ...objPaths,
     "--start-group",
     "/sysroot/lib/libretrocrt.a",
     "/sysroot/lib/libInterface.a",
@@ -756,7 +812,7 @@ export async function compileToBin(
     return {
       ok: false, asm: asmText,
       diagnostics: [...allDiags, {
-        file: sourceName, line: 1, column: 1, severity: "error",
+        file: primaryName, line: 1, column: 1, severity: "error",
         message: `ld exited rc=${ldRc}: ${ldStderr.split("\n")[0] ?? "(no message)"}`,
       }],
       rawStderr: stderrParts.join("\n\n"),
@@ -788,7 +844,7 @@ export async function compileToBin(
     return {
       ok: false, asm: asmText,
       diagnostics: [...allDiags, {
-        file: sourceName, line: 1, column: 1, severity: "error",
+        file: primaryName, line: 1, column: 1, severity: "error",
         message: `Elf2Mac exited rc=${e2mRc}: ${e2mStderr.split("\n")[0] ?? "(no message)"}`,
       }],
       rawStderr: stderrParts.join("\n\n"),
@@ -804,7 +860,7 @@ export async function compileToBin(
     return {
       ok: false, asm: asmText,
       diagnostics: [...allDiags, {
-        file: sourceName, line: 1, column: 1, severity: "error",
+        file: primaryName, line: 1, column: 1, severity: "error",
         message: `Elf2Mac returned 0 but no /tmp/out.bin: ${(e as Error).message}`,
       }],
       rawStderr: stderrParts.join("\n\n"),
