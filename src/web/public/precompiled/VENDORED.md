@@ -1,6 +1,6 @@
 # Vendored precompiled binaries
 
-> **2026-05-15 — all `.bin` artefacts removed.** Every project in the
+> **2026-05-15 — most `.bin` artefacts removed.** Every project in the
 > playground now compiles fully in the browser; the CI-precompiled
 > splice path (Reader, MacWeather, Hello Mac) was retired in #117 and
 > the prebuilt demos toolbar (Hello/QuickDraw Lines/Click Counter/Mac
@@ -10,6 +10,12 @@
 > bisect probes, `lines.bin` / `counter.bin` / `clock.bin`, and the
 > `*.code.bin` splice forks) are accessible via git history if you
 > need them.
+>
+> `hello-toolbox.bin` is kept here as a unit-test fixture — see
+> `tests/unit/hfs-patcher.test.mjs`. It exercises parseMacBinary +
+> patchEmptyVolumeWithBinary against a known-good MacBinary II APPL
+> and a real hfsutils round-trip. The Phase 1 PCC commentary below
+> documents what's in the bytes.
 
 > **2026-05-14 — Phase 2.0 derisk landed.** `hello-toolbox-retro68.bin`
 > (documented below) is the first vendored artefact produced by the
