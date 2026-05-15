@@ -44,31 +44,18 @@ const REPO_ROOT = resolve(__dirname, "..", "..");
 const PUBLIC_DIR = resolve(__dirname, "public");
 
 const SEED_FILES: SeedSpec[] = [
-  ...["reader.c", "reader.r", "html_parse.c", "html_parse.h"].map((f) => ({
-    project: "reader",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "reader", f),
-  })),
-  ...[
-    "macweather.c",
-    "macweather.r",
-    "weather_parse.c",
-    "weather_parse.h",
-    "weather_glyphs.c",
-  ].map((f) => ({
-    project: "macweather",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "macweather", f),
-  })),
-  ...["hello.c", "hello.r"].map((f) => ({
-    project: "hello-mac",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "hello-mac", f),
-  })),
-  // wasm-hello — the in-browser compile-and-run demo (cv-mac #64).
-  // C only; no .r resources; no CMake / CI build. The playground's
-  // Build & Run path uses compileToBin() to produce the MacBinary
-  // directly in the user's browser.
+  // Legacy splice-path projects (reader / macweather / hello-mac) used
+  // to seed source bundles here so the playground could let users edit
+  // their .r resource forks. Removed 2026-05-15 (cv-mac #100) — the
+  // playground now only seeds projects that build end-to-end in the
+  // browser, so the visible projects are all fully editable. The
+  // source dirs at src/app/{reader,macweather,hello-mac}/ are still
+  // canonical sources for CI's boot-disk build.
+  //
+  // wasm-hello — first project that compiles end-to-end in the
+  // browser (cv-mac #64). Single hello.c, no .r resources, no CMake
+  // / CI build. The playground's Build & Run path uses compileToBin()
+  // to produce the MacBinary directly in the user's browser.
   ...["hello.c"].map((f) => ({
     project: "wasm-hello",
     filename: f,
