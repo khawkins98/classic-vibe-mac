@@ -63,16 +63,34 @@ int main(void)
     InitMenus();
     TEInit();
     InitDialogs(0);
+    InitCursor();
     FlushEvents(everyEvent, 0);
 
     /* Draw to the screen port (the desktop) — no window needed. */
     MoveTo(100, 100);
     DrawString(kHelloStr);
 
-    /* Spin until the user clicks, so the playground screenshot has
-     * time to capture the drawn string before the app exits. */
-    while (!Button())
-        ;
+    /* Idle until the user clicks. *Don't* use `while (!Button())` — that
+     * naive spin polls the live mouse state, which can still read as
+     * "pressed" on entry because the second click of the double-click
+     * that launched us is bleeding through. The loop would exit
+     * immediately and main would return before the user ever sees the
+     * drawn string. (We learned this the hard way running the first
+     * in-browser-built binary on classic-vibe-mac's deployed playground
+     * — see cv-mac LEARNINGS "2026-05-15 — Double-click bleed-through".)
+     *
+     * Instead: drain the event queue once, then sit in WaitNextEvent
+     * filtered to fresh mouseDowns. Any leftover mouseUp from the
+     * launch is consumed by FlushEvents above; the next mouseDown
+     * that satisfies the filter is genuinely new. SystemTask runs via
+     * WNE under cooperative multitasking, so the rest of the Mac stays
+     * responsive while we wait. */
+    {
+        EventRecord ev;
+        long sleepTicks = 0x7fffffff; /* "wait forever" until an event */
+        while (!WaitNextEvent(mDownMask, &ev, sleepTicks, NULL))
+            ;
+    }
 
     return 0;
 }

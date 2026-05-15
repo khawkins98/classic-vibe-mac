@@ -97,3 +97,29 @@ test("compileToBin produces a MacBinary II APPL", async ({ page }) => {
   expect(result.stages!.ldMs).toBeGreaterThan(0);
   expect(result.stages!.elf2macMs).toBeGreaterThan(0);
 });
+
+test("compileToBin survives repeat calls (cc1 re-entrancy regression guard)", async ({ page }) => {
+  // cv-mac #64 / 2026-05-15: cc1 (and its sibling toolchain binaries) are
+  // not safe to re-invoke on a cached Emscripten Module — `decode_options`'
+  // statics persist across exits and cause "output filename specified
+  // twice" on the second `callMain`. The bridge now instantiates a fresh
+  // Module per call. This test calls compileToBin twice in a row and
+  // asserts both succeed; a regression to module-caching would fail here.
+  test.setTimeout(180_000);
+  await page.goto(process.env.CVM_BASE_URL ?? "/");
+  const results = await page.evaluate(async (src) => {
+    const mod = await import(
+      /* @vite-ignore */ `${location.origin}/src/playground/cc1.ts`
+    );
+    const r1 = await mod.compileToBin("/", src, "hello.c");
+    const r2 = await mod.compileToBin("/", src, "hello.c");
+    return [
+      { ok: r1.ok, failedStage: r1.failedStage, binLen: r1.bin?.length ?? 0 },
+      { ok: r2.ok, failedStage: r2.failedStage, binLen: r2.bin?.length ?? 0 },
+    ];
+  }, HELLO_SOURCE);
+  expect(results[0].ok).toBe(true);
+  expect(results[1].ok).toBe(true);
+  // Both calls should produce identically-sized output for the same source.
+  expect(results[0].binLen).toBe(results[1].binLen);
+});
