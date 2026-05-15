@@ -38,12 +38,28 @@ export interface MenubarActions {
   downloadCurrentZip: () => void;
   resetLayout: () => void;
   rebootEmulator: () => void;
+  /** Provide a list of currently open WinBox windows (docked + palettes)
+   *  so the Windows menu can list them dynamically. Caller raises a
+   *  window by clicking the corresponding item. */
+  listOpenWindows: () => Array<{ title: string; focus: () => void }>;
 }
 
 /** Wire dropdown menus to existing menubar buttons (created in
  *  main.ts's root.innerHTML). Returns a cleanup function. */
 export function mountMenubar(actions: MenubarActions): () => void {
-  const menus = buildMenuSchema(actions);
+  // Static menus built once; the Windows menu is rebuilt each open
+  // from actions.listOpenWindows() since it depends on live state.
+  const staticMenus = buildMenuSchema(actions);
+  function menuFor(key: string): MenuEntry[] {
+    if (key === "windows") {
+      const wins = actions.listOpenWindows();
+      if (wins.length === 0) {
+        return [{ label: "(no open windows)", disabled: true }];
+      }
+      return wins.map((w) => ({ label: w.title, action: w.focus }));
+    }
+    return staticMenus[key] ?? [];
+  }
   const overlay = document.createElement("div");
   overlay.className = "cvm-menu-dropdown";
   overlay.setAttribute("role", "menu");
@@ -62,7 +78,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
   }
 
   function openDropdown(key: string, trigger: HTMLElement): void {
-    const items = menus[key];
+    const items = menuFor(key);
     if (!items) return;
     overlay.innerHTML = items
       .map((it, idx) => {
@@ -94,7 +110,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
     );
     if (!btn || !openMenuKey) return;
     const idx = Number(btn.dataset.menuAction);
-    const item = menus[openMenuKey][idx];
+    const item = menuFor(openMenuKey)[idx];
     if (item && !("separator" in item) && item.action && !item.disabled) {
       const a = item.action;
       // Close BEFORE firing so the action can open a palette that wants focus.
