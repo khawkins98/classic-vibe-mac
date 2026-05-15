@@ -4,14 +4,107 @@ A running log of things we've learned building classic-vibe-mac — gotchas,
 dead ends, surprises, and decisions worth remembering. The goal is to save
 the next person (or future-you) from rediscovering the same lessons.
 
+---
+
+## Key stories — read these first
+
+The handful of entries below are the *meta*-lessons that shape how every
+subsequent piece of work on classic-vibe-mac should go. If you're new to
+the codebase (or just back after a break) and only have time for one
+file, this is the section to read.
+
+They're narrative on purpose: the cost of skipping these isn't "you'll
+miss a small gotcha", it's "you'll spend half a day discovering one of
+these patterns the hard way and then ship the same fix that would have
+been free if you'd known the pattern existed".
+
+### 1. The m68k-runner harness story — *structural checks lie; build the harness early*
+
+We spent ~7 hours one afternoon shipping six PRs that each fixed a real
+toolchain bug and each one looked structurally clean to every test we
+had — but the binary still silently exited at app launch on the
+deployed BasiliskII. Every failure was *structural-pass-but-runtime-fail*.
+The deploy-and-eyes-on cycle was 15-30 minutes per iteration; we ran
+~10 of them before pivoting to building [a local m68k boot tracer](#2026-05-15--the-m68k-runner-harness-built-late-paid-for-itself-within-an-hour-now-the-backbone-of-toolchain-testing)
+(`tools/m68k-runner/`). The MVP took ~90 minutes; it diagnosed the next
+bug in its trace within 30 seconds of finishing the build. **General
+rule:** when iteration cost is X minutes and you've done it N times
+without convergence, tooling that takes N×X minutes to build has already
+paid for itself in expected future iterations. We hit that threshold at
+N=3 and didn't build until N≈7.
+
+### 2. Ship-to-staging is the boot test — *headless can't simulate the runtime*
+
+Before the harness existed, the only way to know whether a wasm-built
+binary would actually run on the embedded BasiliskII was to deploy and
+click. Headless Playwright probes of the emulator gave inconclusive
+screenshots; structural inspectors passed for every broken binary in
+the long chain. [The decision](#2026-05-15--in-browser-c-compile-and-run-ship-to-staging-is-the-boot-test-strategy)
+to ship-to-staging-with-eyes was right *given the tooling we had at the
+time*, but the right next move was always going to be replacing
+ship-to-staging with the harness. **General rule:** when the
+verification environment doesn't faithfully simulate the production
+runtime, prefer staging-with-eyes over piling more layers onto the test
+harness — *but recognise that as a temporary state* and plan the tooling
+that closes the loop locally.
+
+### 3. cc1.wasm (and the Retro68 toolchain in general) is not re-entrant
+
+GCC's `main()` mutates static globals (most notably `decode_options`'
+"output file already set" flag) and never resets them on exit.
+Emscripten can't simulate process re-creation; the heap and statics
+persist across `callMain` returns. **A second `Module.callMain([…,
+"-o", "/tmp/out.s"])` on the same Module instance sees the prior call's
+`-o` state and errors with "output filename specified twice".** This
+was silently breaking every Show Assembly compile after the first since
+#80 — the asm pane just kept showing stale-but-valid output, so users
+didn't notice. [The fix](#2026-05-15--cc1wasm-and-the-retro68-toolchain-in-general-is-not-re-entrant):
+instantiate a fresh Module per call; cache the wasm bytes and sysroot
+blobs (cheap), not the Modules (expensive but unavoidable). **General
+rule:** assume single-shot for C-runtime wasm binaries until proven
+re-entrant. The Emscripten wrapper makes the API *look* re-entrant; the
+underlying program almost certainly isn't.
+
+### 4. PROVIDE() in a Retro68 ld script silently overrides input-object symbols
+
+Retro68's stock ld scripts (both `retro68-flat.ld` and the multi-seg
+script Elf2Mac generates dynamically) define `_start` via `PROVIDE(_start
+= .);` as a "fallback to a safe spot" — a bare `RTS`. The intent is
+that when an input object defines `_start`, PROVIDE skips. In practice,
+on bare-ld + `-T script` invocations (vs the compiler-driver path
+that Retro68 normally uses), **PROVIDE wins even with `start.c.obj`
+explicitly linked** — the script's PROVIDE fires during section
+evaluation before archive scanning has fully unified symbols, and the
+trampoline's `LONG(_start - _entry_trampoline - 6)` resolves to the
+fallback's address. App launches, trampoline `RTS`-es to the fallback's
+single-byte function, app exits without ever calling `main`.
+
+We hit this **twice** — once on the [flat
+script](#2026-05-15--link-startcobj-first-before-any-archive-else-main-never-runs)
+(fixed in PR [#86](https://github.com/khawkins98/classic-vibe-mac/pull/86)
+/ [wasm-retro-cc#23](https://github.com/khawkins98/wasm-retro-cc/pull/23))
+and again on the multi-seg copy (which had the same PROVIDE line; fixed
+in PR [#90](https://github.com/khawkins98/classic-vibe-mac/pull/90) /
+[wasm-retro-cc#25](https://github.com/khawkins98/wasm-retro-cc/pull/25)
+after the harness pinpointed the trampoline offset). **General rule:**
+when patching a Retro68 ld script in your toolchain, **audit every ld
+script in the bundle for the same `PROVIDE(_start)` line** — don't
+assume the fix to one carries over to the others.
+
+---
+
 ## How to use this file
 
 - Add an entry whenever you hit something non-obvious: a quirk of Retro68, a
   CORS issue with the Infinite Mac CDN, an HFS tool that didn't behave as
   expected, a System 7 API gotcha, etc.
 - Date each entry. Group by topic when patterns emerge.
-- Keep entries short — a paragraph or two. Link to commits, PRs, or external
-  docs for depth.
+- **If the lesson is foundational to *how* you'd debug things, not just
+  one specific fix, also write it as a narrative under "Key stories"
+  above.** Examples: "we should have built tooling earlier", "structural
+  checks lie about behaviour", "this whole class of bug recurs".
+- Keep regular entries short — a paragraph or two. Link to commits, PRs,
+  or external docs for depth.
 - It's fine to record negative results ("tried X, didn't work because Y").
   Those are often the most valuable.
 
@@ -23,6 +116,10 @@ the next person (or future-you) from rediscovering the same lessons.
 **Finding:** what we learned
 **Action:** what we did about it (or chose not to)
 ```
+
+For "Key stories" entries, drop the strict Context/Finding/Action
+structure and write narrative paragraphs — they're memos to future-you,
+not bug reports.
 
 ---
 
@@ -1133,6 +1230,50 @@ future work), but we need one of these to actually trigger auto-launch:
      (no real automation hook in BasiliskII WASM, so this is the weakest option).
 Option 1 or 2 is the path forward. Logged so the next agent doesn't spend a
 day debugging "why doesn't my app launch."
+
+### 2026-05-15 — The m68k-runner harness: built late, paid for itself within an hour, now the backbone of toolchain testing
+
+**Context.** From the morning through afternoon of 2026-05-15 we shipped six PRs (cv-mac #82–#88, wasm-retro-cc #22–#25) attempting to make wasm-built `.bin` files actually boot in BasiliskII. Each one fixed a real bug — cc1 re-entrancy, missing `start.c.obj`, PROVIDE overrides, missing libgcc, missing SIZE resource, flat-vs-multi-seg ld script — and each one looked structurally clean to every test we had: `inspect_macbinary.py` passed, `npx playwright test` was green, `npx tsc --noEmit` was clean, the bundle deployed without warnings. The bug only revealed itself when Ken hard-refreshed the deployed Pages site, double-clicked the WasmHello app, and described what he saw on screen — a 15-30 minute round trip per iteration. We ran ~10 of those.
+
+**The trap.** Every failure was *structural-pass-but-runtime-fail*. The toolchain produced a binary whose shape — type, creator, CODE 0/CODE 1 byte layout, resource fork header magic, jump table size, A5 world dimensions — looked right at every layer except *did the CPU actually do something useful when this was launched on a real Mac*. None of our checks tested that.
+
+By PR #87 we'd already been bitten three times in a row by this pattern. We should have built the harness then. Instead the sunk-cost logic of "the next fix is probably the one" kept the deploy-and-eyes-on cycle going. Each individual fix felt close enough to the answer that building tooling felt like overhead.
+
+**The trigger.** When Ken asked "is there no way to simulate building binaries on our local and simulating execution without having to actually go through this whole loading them up inside of an emulator?" — and followed up explicitly with "should we pivot to local testing now?" — that broke the inertia. We parked the live debugging, filed [cv-mac #89](https://github.com/khawkins98/classic-vibe-mac/issues/89) with the full design rationale, and built the MVP in ~90 minutes.
+
+**Build vs. payoff.**
+
+  - Vendored [Karl Stenerud's Musashi](https://github.com/kstenerud/Musashi) (~4.4 MB of MIT-licensed 68k CPU emulator) + `softfloat/`.
+  - Wrote `tools/m68k-runner/runner.c` — 240 lines that parse MacBinary II, set up an A5 world from CODE 0, point the m68k PC at the entry trampoline, run for a cycle budget, and log every instruction + every A-line trap.
+  - Configured Musashi's `M68K_INSTRUCTION_HOOK = M68K_OPT_SPECIFY_HANDLER` so the per-instruction callback links directly into our hook.
+  - `make` builds in ~5 seconds. `./m68k-run path/to/hello.bin --trace --max=100` runs in milliseconds.
+
+**Round 1.** First binary I ran through the harness — the freshly-deployed multi-seg bundle, the one whose eyes-on test showed silent-exit — produced this trace within seconds of finishing the build:
+
+```
+[trace] 00200006  6100    sp=00ffffec [sp]=0020000a   ← BSR pushes return addr
+[trace] 0020000a  0697    sp=00ffffec [sp]=00200010   ← ADDI added 6 (PROVIDE
+                                                          fallback offset),
+                                                          should have been 0x258c
+[trace] 00200010  4e75    sp=00fffff0 [sp]=00000000   ← RTS pops 0 (not _start)
+[trace] 00000000  00ff    sp=00ffffec [sp]=27000000   ← PC = 0, executing garbage
+```
+
+That trace immediately revealed: the multi-seg ld script's `PROVIDE(_start = .)` line was *still* winning over libretrocrt's `_start`, the same bug wasm-retro-cc#23 patched in the flat script but didn't repeat in the multi-seg copy. **The harness paid for its build cost (~90 min) on its first run** — what would have been the next 30-minute eyes-on cycle became 30 seconds.
+
+**Forward value.** Every subsequent toolchain change can now be Musashi-tested before any deploy. Future Retro68 upgrades, ld script changes, libgcc updates, SIZE-resource changes, even C++-runtime additions — all become testable against a known-good baseline trace in seconds. The deploy-and-eyes-on loop is still ground truth for "does it visibly do the right thing on the user's screen" (we wouldn't catch a `DrawString`-to-wrong-port bug without it), but it's no longer the *only* loop. The harness rules out 80%+ of the failure space before we burn a deploy on it.
+
+**The general rule for next time.** When iteration cost is **X minutes** and you've done it **N times** without convergence, tooling that takes **N × X minutes** to build has already paid for itself in expected future iterations. Don't wait until N is much larger. We hit that threshold around N=3 (PR #87) and didn't build until N≈7. The cost of *not* building tooling compounds non-linearly with how many distinct bug layers exist — each new layer was undetectable until the previous one was fixed, so the first ~4 PRs felt like they should have closed the loop but the 5th, 6th, and 7th were the ones that actually mattered, and we couldn't tell which would be the last from the inside.
+
+**Auxiliary benefits** that emerged from this build:
+
+  1. **Traces are the dispositive evidence in PR descriptions.** [wasm-retro-cc#25](https://github.com/khawkins98/wasm-retro-cc/pull/25)'s body has 4 lines of trace showing exactly which instruction goes wrong — far more informative than "binary still crashes type-3" or "still silent exit", and lets a reviewer audit the fix without needing to run anything.
+  2. **The harness surfaces audit gaps.** Building the harness *and asking it* "what does CODE 1's trampoline immediate look like?" immediately revealed that the multi-seg script also had the PROVIDE trap. Without the trace, that script would have remained the suspect-but-unverified piece for another deploy cycle.
+  3. **The Musashi-MVP exit reasons map cleanly to "where in startup we got":** *trampoline jumps to PC=0* means PROVIDE won; *Retro68Relocate range fault* means relocations are broken; *trap @ InitGraf* means we're past startup and into Toolbox. Each is a distinct, immediately-actionable signal.
+
+**Mature state.** Today's MVP has no Toolbox stubs (A-line traps are logged and skipped), no LoadSeg, no Process Manager — sufficient for startup-time diagnosis (the failure modes that motivated the build), insufficient for full behavioral checks. [cv-mac #89](https://github.com/khawkins98/classic-vibe-mac/issues/89) tracks the expansion list: LoadSeg stub, the ~12 most-used Toolbox traps, a minimal heap simulator, OCR-like assertions on captured `DrawString` calls. Each expansion is opportunistic — pulled in when a concrete bug needs it, not built speculatively.
+
+**This entry is the story of the harness because the *meta*-lesson matters more than the bug-by-bug LEARNINGS above.** If a future agent reads only one entry in this file before starting toolchain work, this one should be it: **build the harness early; structural checks lie; eyes-on is ground truth but expensive; tooling that closes the loop in seconds rewards a few hours of investment many times over.**
 
 ### 2026-05-15 — Missing SIZE resource crashes libretrocrt startup with type-3
 **Context:** After landing #86 (the ld-script + start.c.obj + libgcc fixes from wasm-retro-cc#22/#23), eyes-on test on deployed Pages showed a *new* failure mode: the app launches and immediately quits with a type-3 (illegal instruction) dialog. Same crash regardless of `main`'s body — including `int main(){ return 0; }` and `int main(){ while(1); return 0; }` produce identical type-3 dialogs with different binary SHAs (the compile sees source, the runtime can't survive startup).
