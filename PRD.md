@@ -308,9 +308,17 @@ content here.
   Closed via Epic #19 review; see graveyard.
 - Cloud sync of editor state. The user's red line: no shared
   store, no relay.
-- Full GCC port to WASM. ~4-9 engineer-months of work, deferred
-  indefinitely. Resource-fork edits via WASM-Rez cover ~70% of
-  the playground promise at ~5% of the cost.
+- ~~Full GCC port to WASM.~~ **Update (2026-05-15):** the
+  *compilation* part of this shipped after all — but via a different
+  path than the closure rationale assumed. Instead of porting GCC's
+  fork/exec model (~4-9 engineer-months), we wasm-compile Retro68's
+  existing cc1/as/ld/Elf2Mac binaries as standalone Emscripten
+  modules and orchestrate them from JavaScript (~2 weeks of focused
+  work in [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc)).
+  End-to-end Build & Run for in-browser C projects works as of
+  cv-mac #97. The OAuth / commit-back side of Epic #19 remains out
+  of scope. See LEARNINGS Key Story #6 for the
+  closed-as-infeasible-but-actually-possible retrospective.
 
 ---
 
@@ -412,18 +420,26 @@ the full reasoning is in
   iCab 2.x is actively-licensed shareware. Replaced with #14
   (Reader URL bar) + #15 (peer-to-peer AppleTalk).
 - **[Epic #19](https://github.com/khawkins98/classic-vibe-mac/issues/19)
-  — Full in-browser IDE with C compilation (closed).** Phase 2C
-  needed GitHub OAuth `repo` scope (full read/write on every
-  repo, only achievable via a token-exchange relay = backend);
-  Phase 3 silently assumed an in-browser HFS writer that doesn't
-  exist anywhere in the stack; Option 2A (full Retro68 → WASM)
-  is 4-9 engineer-months. Replaced with #21 (this Epic),
-  resource-fork-only via WASM-Rez — covers ~70% of the emotional
-  promise with ~5% of 2A's effort.
+  — Full in-browser IDE with C compilation (closed in 2026-04;
+  capability shipped 2026-05-15 via a different path).** The
+  original closure rationale held for the auth side (Phase 2C
+  needed GitHub OAuth `repo` scope, achievable only via a
+  token-exchange relay) and the HFS side (Phase 3 silently
+  assumed an in-browser HFS writer that didn't exist). What
+  turned out wrong was Option 2A's effort estimate: porting GCC
+  from scratch to WASM via fork/exec emulation is 4-9
+  engineer-months, but **wasm-compiling Retro68's existing
+  binaries as standalone Emscripten modules and orchestrating
+  them from JavaScript is ~2 weeks**. We did that in
+  [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc),
+  vendored into cv-mac as `compileToBin`, end-to-end Build &
+  Run shipped 2026-05-15 (cv-mac #97). LEARNINGS Key Story #6
+  captures the meta-lesson on closed-as-infeasible Epics.
 
-The lesson, to save the next person re-deriving it: **a full
-in-browser IDE for classic Mac C is genuinely 4-9 engineer-months
-of work**, dominated by porting GCC + the linker to WASM, *not*
+The original lesson — **a full in-browser IDE for classic Mac C
+via the path Epic #19 evaluated (porting GCC's fork/exec model
+into Emscripten) is genuinely 4-9 engineer-months of work** —
+holds, dominated by porting GCC + the linker to WASM, *not*
 by the editor or the UI. If you want to revisit it, frame it as a
 research spike with a ruthless time-box — not as a feature Epic.
 
