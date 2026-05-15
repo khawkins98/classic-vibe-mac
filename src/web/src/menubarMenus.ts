@@ -312,6 +312,36 @@ export function mountMenubar(actions: MenubarActions): () => void {
           }
           break;
         }
+        default: {
+          // Type-ahead: a single printable letter (no modifiers) while a
+          // menu is open jumps focus to the next item whose label starts
+          // with that letter. Classic Mac menubar behaviour — try it in
+          // 1997's Finder and the same thing happens.
+          if (e.key.length === 1 && /[a-z0-9]/i.test(e.key)) {
+            e.preventDefault();
+            const items = focusableItems();
+            if (items.length === 0) break;
+            const ch = e.key.toLowerCase();
+            const curIdx = items.indexOf(
+              document.activeElement as HTMLButtonElement,
+            );
+            // Search starting AFTER the currently-focused item so repeated
+            // presses of the same letter cycle through siblings.
+            const start = curIdx === -1 ? 0 : curIdx + 1;
+            for (let off = 0; off < items.length; off++) {
+              const candidate = items[(start + off) % items.length]!;
+              const label = candidate
+                .querySelector(".cvm-menu-dropdown__label")
+                ?.textContent?.trim()
+                .toLowerCase() ?? "";
+              if (label.startsWith(ch)) {
+                candidate.focus();
+                return;
+              }
+            }
+          }
+          break;
+        }
       }
     }
     // Global Cmd-key (Mac) / Ctrl-key (other) dispatch. We honour
