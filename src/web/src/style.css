@@ -744,6 +744,44 @@ body.cvm-paused .emulator-canvas {
   white-space: nowrap;
 }
 
+/* Optimization-level picker in the icon toolbar (cv-mac #100 Phase E).
+   Lives at the far right of the toolbar so it doesn't crowd the main
+   build buttons. Vertical-stack label + select matches the iconbtn
+   visual rhythm without trying to mimic the button bevel. */
+.cvm-pg-opt {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  margin-left: auto;
+  padding: 4px 4px 0;
+  cursor: pointer;
+  user-select: none;
+}
+.cvm-pg-opt__label {
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--shadow);
+  text-transform: uppercase;
+}
+.cvm-pg-opt__select {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  padding: 2px 6px;
+  cursor: pointer;
+  min-width: 110px;
+}
+.cvm-pg-opt__select:focus-visible {
+  outline: 2px solid var(--selection);
+  outline-offset: 1px;
+}
+
 /* Hide the editor's project dropdown in IDE layout — the files panel
    owns project switching now. The element stays in the DOM because
    editor.ts queries it by id and Playwright tests reference it.
