@@ -37,6 +37,7 @@ import {
   spliceResourceFork,
   triggerDownload,
   fetchPrecompiled,
+  makeRetro68DefaultSizeFork,
 } from "./build";
 import { compileToAsm, compileToBin } from "./cc1";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
@@ -1392,6 +1393,20 @@ async function runBuildInBrowserC(
     };
   }
 
+  // Splice a default `SIZE` resource (-1) onto the wasm-built binary's
+  // resource fork. Without it, the Process Manager gives the app a tiny
+  // default heap and libretrocrt's `Retro68Relocate` faults during
+  // startup with a type-3 illegal-instruction dialog — verified on
+  // deployed Pages with `int main(){ return 0; }`. The 10-byte default
+  // (1 MB preferred + minimum, flags 0x0080) matches the Retro68
+  // reference binary `hello-toolbox-retro68.bin`. See cv-mac LEARNINGS
+  // "2026-05-15 — Missing SIZE resource crashes libretrocrt startup
+  // with type-3".
+  const finalBin = spliceResourceFork({
+    dataForkBin: r.bin,
+    resourceFork: makeRetro68DefaultSizeFork(),
+  });
+
   // Identity stamp for every in-browser build. Mirrors the
   // `[prebuilt-demo] ...` line from the static-bin path. Lets us
   // confirm at a glance "did this Build click actually produce a
@@ -1399,17 +1414,19 @@ async function runBuildInBrowserC(
   // particularly useful when debugging service-worker cache hits or
   // wasm-toolchain regressions.
   // Copy into a fresh ArrayBuffer-backed Uint8Array for SubtleCrypto.
-  // The cc1 bridge's `r.bin` may be backed by an Emscripten-allocated
+  // The cc1 bridge's bin may be backed by an Emscripten-allocated
   // SharedArrayBuffer / WASM heap; SubtleCrypto.digest is typed to
-  // accept only ArrayBuffer-backed BufferSource.
-  const copy = new Uint8Array(r.bin.byteLength);
-  copy.set(r.bin);
+  // accept only ArrayBuffer-backed BufferSource. Hash the
+  // SIZE-spliced final bin (what we hand the emulator), not the raw
+  // pipeline output — same as the prebuilt-demo path does.
+  const copy = new Uint8Array(finalBin.byteLength);
+  copy.set(finalBin);
   const buf = await crypto.subtle.digest("SHA-256", copy);
   const shaHex = Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
   console.info(
-    `[build-c] ${proj.id}/${cFile}: ${r.bin.byteLength}B  ` +
+    `[build-c] ${proj.id}/${cFile}: ${finalBin.byteLength}B  ` +
       `sha256=${shaHex.slice(0, 16)}…  ` +
       `cc1=${r.stages?.cc1Ms.toFixed(0)}ms ` +
       `as=${r.stages?.asMs.toFixed(0)}ms ` +
@@ -1419,7 +1436,7 @@ async function runBuildInBrowserC(
 
   return {
     ok: true,
-    bytes: r.bin,
+    bytes: finalBin,
     totalMs: performance.now() - t0,
     diagnostics: r.diagnostics,
   };
