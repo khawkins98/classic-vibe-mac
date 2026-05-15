@@ -675,6 +675,21 @@ export async function compileToBin(
   const oBytes = as.Module.FS.readFile("/tmp/out.o");
 
   // ── Stage 3: ld ─────────────────────────────────────────────────────
+  //
+  // Link recipe (eyes-on-debugged 2026-05-15 on the deployed playground;
+  // see wasm-retro-cc#22 and LEARNINGS "2026-05-15 — cc1.wasm is not
+  // re-entrant" for the full trail):
+  //
+  //   1. `start.c.obj` *first*, before any .a — defines `_start` so the
+  //      ld script's `PROVIDE(_start = .)` fallback (a bare RTS) doesn't
+  //      win. Without this, the entry trampoline jumps to the RTS, main
+  //      never runs, and the app exits immediately after launch.
+  //   2. `--start-group … --end-group` around all archives so
+  //      cross-archive references (libretrocrt → libc → libretrocrt;
+  //      libretrocrt → libgcc; …) resolve through iterative scanning.
+  //   3. `libgcc.a` included — `__udivsi3` / `__mulsi3` (soft-fp/-divide
+  //      helpers for m68k 32-bit math) live only here; libretrocrt's
+  //      syscalls.c transitively needs them.
   const ld = await loadLdTool(baseUrl);
   for (const p of ["/tmp/in.o", "/tmp/out.gdb"]) {
     try { ld.Module.FS.unlink(p); } catch {}
@@ -686,10 +701,15 @@ export async function compileToBin(
     "-L", "/sysroot/lib",
     "--no-warn-rwx-segments",
     "-o", "/tmp/out.gdb",
+    "/sysroot/lib/start.c.obj",
     "/tmp/in.o",
+    "--start-group",
     "/sysroot/lib/libretrocrt.a",
     "/sysroot/lib/libInterface.a",
     "/sysroot/lib/libc.a",
+    "/sysroot/lib/libm.a",
+    "/sysroot/lib/libgcc.a",
+    "--end-group",
   ]);
   stages.ldMs = performance.now() - ldStart;
   const ldStderr = ld.stderr.join("\n");
