@@ -31,10 +31,27 @@ export interface SampleProject {
   label: string;
   /** Filenames to expose in the file dropdown, ORDERED by intended reveal. */
   files: string[];
-  /** Phase 2: the .r file the playground compiles. Must be present in `files`. */
-  rezFile: string;
-  /** Phase 2: name under public/precompiled/ (without leading slash). */
-  precompiledName: string;
+  /**
+   * Phase 2: the `.r` file the playground compiles via wasm-rez, and
+   * whose output splices on top of the precompiled `.code.bin`.
+   *
+   * When `null`, this project has *no* resource fork to compile —
+   * Build & Run uses the in-browser C toolchain (cc1 → as → ld →
+   * Elf2Mac via `compileToBin()`) to produce a complete MacBinary
+   * directly from the project's `.c` source. See cv-mac #64,
+   * wasm-retro-cc #15.
+   */
+  rezFile: string | null;
+  /**
+   * Phase 2: name under `public/precompiled/` (without leading slash)
+   * for the CI-built data-fork-bearing `.code.bin`.
+   *
+   * When `null`, this project doesn't have a CI-built code blob —
+   * the in-browser toolchain emits the complete `.bin` and we hot-load
+   * it directly. Mutually exclusive with the splice path: a project
+   * with `rezFile: null` must also have `precompiledName: null`.
+   */
+  precompiledName: string | null;
   /** Phase 2: filename used for the Build button's download. */
   outputName: string;
   /** Doc-only: Mac OS HFS Type code. */
@@ -91,6 +108,25 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "HelloMac.bin",
     appType: "APPL",
     appCreator: "CVHM",
+  },
+  {
+    // wasm-hello — first project that compiles end-to-end in the
+    // browser (cv-mac #64 / wasm-retro-cc #15). Single hello.c,
+    // no .r resources, no CI artefact. The Build & Run path runs
+    // cc1 → as → ld → Elf2Mac client-side and hot-loads the result.
+    id: "wasm-hello",
+    label: "Wasm Hello",
+    files: ["hello.c"],
+    rezFile: null,
+    precompiledName: null,
+    outputName: "WasmHello.bin",
+    appType: "APPL",
+    // Type/Creator come from Elf2Mac's defaults today (APPL / ????).
+    // Tracked separately if we want a project-specific creator code;
+    // for now ???? is fine because the Finder Desktop DB only
+    // disambiguates apps by creator at icon-binding time, and we
+    // don't ship a custom icon for this demo.
+    appCreator: "????",
   },
 ];
 

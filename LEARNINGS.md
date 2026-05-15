@@ -1134,6 +1134,39 @@ future work), but we need one of these to actually trigger auto-launch:
 Option 1 or 2 is the path forward. Logged so the next agent doesn't spend a
 day debugging "why doesn't my app launch."
 
+### 2026-05-15 — In-browser C compile-and-run: ship-to-staging is the boot-test strategy
+**Context:** cv-mac #64's north star — "write C in a browser tab, click Compile & Run, watch it boot on a 68k Mac." After cv-mac #80/#81/#82 + wasm-retro-cc #18/#19/#20, the JS-side compile path is real (`compileToBin` produces a structurally-valid MacBinary II APPL from `.c` source via cc1 → as → ld → Elf2Mac, all in the user's tab). What's not yet known: whether the 896-byte single-segment output actually boots on the embedded BasiliskII.
+**Finding:** Headless Playwright probing of the boot path was inconclusive. The flow:
+  1. Intercept the prebuilt-demo `.bin` fetch and substitute our wasm-built binary.
+  2. Click the demo button — playground patches the bytes into the empty HFS template ("Apps" volume) and reboots the emulator.
+  3. Wait for "Hello, World! loaded" status (mount confirmed).
+  4. Screenshot the canvas — expecting to see an "Apps" disk icon appear.
+
+  The mount fires correctly (status row flips), but the "Apps" disk never visibly renders in the headless screenshot regardless of how long we wait. The same flow with the *known-working* `hello-toolbox-retro68.bin` shows the same blank state in our probe — so the issue is headless capture, not the binary. Likely cause: Finder's desktop-redraw on disk-mount needs an event pump cycle that the headless tab isn't generating, or the canvas readback in Playwright captures stale frames after a worker reboot.
+**Action:** **Stop probing headlessly.** Take the cheapest dispositive path: ship the in-browser C compile path to the deployed Pages playground (cv-mac #83 onwards) and click "Build & Run" with eyes on the screen. Failure modes the user sees are unambiguous (type-3 dialog, blank desktop, or visible "Hello, World!"). If real-user boot succeeds, the multi-segment ld script and SIZE resource (documented in wasm-retro-cc LEARNINGS "Phase 2.3d") become nice-to-have polish for larger programs rather than blockers. If it fails, the visible failure mode points at the specific fix.
+
+Rule of thumb crystallised from this: when the verification environment doesn't faithfully simulate the production runtime, prefer staging-with-eyes over piling more layers onto the test harness. Visual evidence on real hardware is the ground truth a deeper headless probe is approximating anyway.
+
+### 2026-05-15 — In-browser C toolchain bundle: split sysroot blobs for path-aware fetching
+**Context:** Vendoring wasm-retro-cc#20's bundle into `src/web/public/wasm-cc1/`. The bundle holds four wasm tools (cc1, as, ld, Elf2Mac) + the Retro68 sysroot. Show Assembly only needs cc1 + headers; full Build .c needs all four tools + the lib archives + the ld script. The naive "one sysroot blob with everything" design would push the Show Assembly fetch cost up by ~1 MB brotli for libs it never reads.
+**Finding:** Split the sysroot into two blobs at pack time — `sysroot.bin` (headers: gcc-include + include minus c++/) and `sysroot-libs.bin` (libretrocrt + libInterface + libc + libm + retro68-flat.ld). Each blob has its own JSON index. The cv-mac bridge fetches only what the current operation needs:
+  - `compileToAsm` (Show Assembly) → `sysroot.bin` only.
+  - `compileToBin` (Build .c) → `sysroot.bin` + `sysroot-libs.bin`.
+
+  Both paths run independently; their respective lazy-load promises don't fight. Browser HTTP cache hits the same URL for shared assets (notably `cc1.wasm`), so a user who opens Show Assembly first and then clicks Build .c re-uses the cached compiler.
+**Action:** Documented in the bundle's README under "Why two sysroot blobs". The bridge's `loadHeadersBlob` / `loadLibsBlob` cache promises live in `cc1.ts` module scope so multiple `compileToBin` calls within a session re-use the parsed blob without re-fetching or re-parsing.
+
+### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
+**Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
+**Finding:** Two distinct header files coexist in the Retro68 SDK:
+  - `/usr/m68k-apple-macos/include/Strings.h` — Mac Toolbox `StringHandle`, `EqualString`, etc.
+  - `/usr/m68k-apple-macos/include/strings.h` — BSD-style `strcasecmp`, `strncasecmp`.
+
+  Newlib's `string.h` does `#include <strings.h>` (lowercase, BSD) on line 24. On a case-sensitive filesystem (Linux/Emscripten MEMFS) the lookup resolves to the lowercase variant; on macOS HFS+ (case-insensitive by default) the two files collapse into a single entry — whichever case won extraction-time order. The packed sysroot on our build host (macOS) had `Strings.h` (the Toolbox version) and *no* `strings.h`. MEMFS being case-sensitive then refused the lowercase include.
+**Action:** wasm-retro-cc's `build-show-asm-bundle.mjs` now emits a **lowercase alias entry** for any path whose lowercase form isn't already a distinct entry — same byte range in the blob, ~38 alias entries on the headers blob, ~1.7 KB JSON overhead. The on-disk content for `Strings.h` is actually the BSD strings.h (the Toolbox one was lost to the case-collision); fully correct fix would be re-extracting the sysroot on a case-sensitive filesystem. The alias workaround is forward-compatible — it costs nothing once the underlying extraction stops collapsing.
+
+Long-term reminder: any extraction or packaging step that runs on macOS HFS+ should be checked for case collisions on identifiers known to differ only in case (Toolbox Pascal names vs lowercase C convention).
+
 ### 2026-05-07 — Infinite Mac WASM artifacts are vendored in git, not released
 **Context:** Scaffolding the web frontend; PRD assumed we'd pull pre-built
 `BasiliskII.wasm` from "Infinite Mac releases."
