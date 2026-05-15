@@ -46,6 +46,7 @@ import {
 import { openHelp } from "./helpPalette";
 import { openAbout } from "./aboutPalette";
 import { openPreferences } from "./preferencesPalette";
+import { mountMenubar } from "./menubarMenus";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -96,20 +97,30 @@ const today = new Intl.DateTimeFormat("en-US", {
 root.innerHTML = /* html */ `
   <div class="menubar" role="navigation" aria-label="Menu bar">
     <button type="button"
-            id="cvm-menubar-apple"
+            data-menu="apple"
             class="menubar__apple menubar__item--interactive"
-            title="About classic-vibe-mac">${appleLogoSvg}</button>
-    <span class="menubar__item">File</span>
+            aria-haspopup="menu"
+            title="Apple menu">${appleLogoSvg}</button>
     <button type="button"
-            id="cvm-menubar-edit"
+            data-menu="file"
             class="menubar__item menubar__item--interactive"
-            title="Preferences">Edit</button>
-    <span class="menubar__item">View</span>
-    <span class="menubar__item">Special</span>
+            aria-haspopup="menu">File</button>
     <button type="button"
-            id="cvm-menubar-help"
+            data-menu="edit"
             class="menubar__item menubar__item--interactive"
-            title="Open the Help palette">Help</button>
+            aria-haspopup="menu">Edit</button>
+    <button type="button"
+            data-menu="view"
+            class="menubar__item menubar__item--interactive"
+            aria-haspopup="menu">View</button>
+    <button type="button"
+            data-menu="special"
+            class="menubar__item menubar__item--interactive"
+            aria-haspopup="menu">Special</button>
+    <button type="button"
+            data-menu="help"
+            class="menubar__item menubar__item--interactive"
+            aria-haspopup="menu">Help</button>
     <span class="menubar__item menubar__item--right">${today}</span>
   </div>
 
@@ -226,7 +237,7 @@ npm run dev</pre>
 // synchronous so the IDs inside each pane body (#cvm-files-list,
 // #cvm-playground, #emulator-canvas-mount, #cvm-output-buildlog, etc.)
 // exist by the time the subsequent document.getElementById queries run.
-mountIdePanes();
+const idePanes = mountIdePanes();
 
 const configEl = document.getElementById("config");
 if (configEl) {
@@ -569,13 +580,27 @@ if (filesOpenBtn) {
   });
 }
 
-// Menubar wiring (cv-mac #104 Phase 6+).
-//   Apple → About palette
-//   Edit  → Preferences palette
-//   Help  → Help palette
-const appleMenuBtn = document.getElementById("cvm-menubar-apple");
-if (appleMenuBtn) appleMenuBtn.addEventListener("click", () => openAbout());
-const editMenuBtn = document.getElementById("cvm-menubar-edit");
-if (editMenuBtn) editMenuBtn.addEventListener("click", () => openPreferences());
-const helpMenuBtn = document.getElementById("cvm-menubar-help");
-if (helpMenuBtn) helpMenuBtn.addEventListener("click", () => openHelp());
+// Menubar dropdown menus (cv-mac #104 Phase 6+). One overlay component
+// in menubarMenus.ts handles all five menus; we hand it the actions it
+// can invoke from menu items.
+mountMenubar({
+  openAbout,
+  openPreferences,
+  openHelp,
+  openProjectPicker: () => openProjectPicker({
+    currentProjectId: activeProjectId(),
+    onPick: (pid) => switchProject(pid),
+    onOpenZip: () => { void handleOpenZip(); },
+  }),
+  openZipPicker: () => { void handleOpenZip(); },
+  downloadCurrentZip: () => {
+    // The Playground toolbar exposes the canonical download trigger;
+    // dispatch a click rather than re-implementing the build/zip flow.
+    document.getElementById("cvm-pg-download")?.click();
+  },
+  resetLayout: () => idePanes.reset(),
+  rebootEmulator: () => {
+    // Future: emulatorHandle.reboot({ kind: "currentSecondary" }). For
+    // now this is wired as disabled in the menu schema.
+  },
+});
