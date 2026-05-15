@@ -203,6 +203,19 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVSW",
   },
+  {
+    // wasm-patterns — QuickDraw pattern gallery (cv-mac #125). Fills
+    // the Bitmaps / Pattern coverage gap. Renders a 4×3 grid of
+    // labelled swatches, each filled with a distinct 8x8 dither
+    // pattern (system white/ltGray/gray/dkGray + eight hand-rolled).
+    id: "wasm-patterns",
+    label: "Wasm Patterns",
+    files: ["patterns.c", "patterns.r"],
+    rezFile: "patterns.r",
+    outputName: "WasmPatterns.bin",
+    appType: "APPL",
+    appCreator: "CVPT",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */

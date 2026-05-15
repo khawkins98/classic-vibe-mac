@@ -124,6 +124,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-scrollwin", f),
   })),
+  // wasm-patterns — QuickDraw 8x8 dither-pattern gallery (#125).
+  // Fills the Bitmaps / Pattern coverage gap. Hand-rolled patterns +
+  // QuickDraw's system globals (gray/ltGray/dkGray/white).
+  ...["patterns.c", "patterns.r"].map((f) => ({
+    project: "wasm-patterns",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-patterns", f),
+  })),
 ];
 
 
