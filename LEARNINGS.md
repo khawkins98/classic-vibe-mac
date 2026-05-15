@@ -113,6 +113,20 @@ when patching a Retro68 ld script in your toolchain, **audit every ld
 script in the bundle for the same `PROVIDE(_start)` line** — don't
 assume the fix to one carries over to the others.
 
+### 7. Three short process patterns from the 2026-05-14 pivot
+
+Salvaged from issue #64 (the old cross-repo roadmap tracker, now
+closed) before its body went into archive. Generic enough to apply
+beyond the specific incident that produced them:
+
+**(a) CI verification should fail on the same property the runtime fails on.** Our original CI guard for the PCC pipeline checked "type=APPL, rsrc>0" — those properties held even on a broken binary. The runtime failure mode (any Toolbox call destabilises the system) was downstream of structural shape. Once we replaced the guard with "below_a5 > 0 + DATA + RELA exist," CI started failing on the right property. **Rule:** when CI passes but runtime fails, the CI guard isn't watching the property that actually matters. Tighten the guard to fail on the same shape the runtime is sensitive to.
+
+**(b) Don't infer infrastructure from screenshots — read the integration source instead.** A 2026-05-14 round-trip on the wrong-emulator hypothesis was triggered by reading a disk-volume label ("Mini vMac Boot") as the emulator's identity. The actual emulator (BasiliskII) was a one-grep find away in `emulator-worker.ts`. **Rule:** when in doubt about what something *actually is*, read the code that integrates it, not the visual artifact.
+
+**(c) Three fixes that each shift the failure mode without flipping the outcome is a strong pivot signal.** On the archived PCC pipeline (wasm-retro-cc Phase 1), three legitimate bugs were found and fixed (PRs #5/#6/#7) — each fix moved the failure from type-3 to CHK to type-10 depending on heap state, but no fix produced a working binary. After the third, we pivoted to Phase 2 (Retro68 GCC → WASM) instead of pursuing a fourth fix. **Rule:** when you've shipped multiple correct individual fixes and the failure keeps shifting without converging, that's evidence the structural approach is wrong, not that the next bug is the last one. Don't let three justified fixes in a row become five. The same pattern recurred in cv-mac #82–#97 — see Key Story #5 for the resolution (canonical-build diff). The pattern is general.
+
+(Process notes that overlap with Key Stories above and aren't repeated here: "compare against known-working reference" — see Key Story #5; "bisect probes pay for themselves even when they fail" — implicit in Key Story #1's harness story.)
+
 ---
 
 ## How to use this file
