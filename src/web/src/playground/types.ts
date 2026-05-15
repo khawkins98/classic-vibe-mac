@@ -189,6 +189,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVSC",
   },
+  {
+    // wasm-scrollwin — scrolling list demo (cv-mac #125). Fills the
+    // Controls coverage gap flagged in the third review pass. New
+    // Toolbox surface: NewControl(scrollBarProc), TrackControl with
+    // a live actionProc, GetControlValue / SetControlValue,
+    // SetControlMinimum / Maximum.
+    id: "wasm-scrollwin",
+    label: "Wasm ScrollWin",
+    files: ["scrollwin.c", "scrollwin.r"],
+    rezFile: "scrollwin.r",
+    outputName: "WasmScrollWin.bin",
+    appType: "APPL",
+    appCreator: "CVSW",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
