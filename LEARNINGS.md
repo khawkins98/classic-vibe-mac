@@ -1275,6 +1275,46 @@ That trace immediately revealed: the multi-seg ld script's `PROVIDE(_start = .)`
 
 **This entry is the story of the harness because the *meta*-lesson matters more than the bug-by-bug LEARNINGS above.** If a future agent reads only one entry in this file before starting toolchain work, this one should be it: **build the harness early; structural checks lie; eyes-on is ground truth but expensive; tooling that closes the loop in seconds rewards a few hours of investment many times over.**
 
+### 2026-05-15 — `_start` ended up in `.code00002` because file-form ld selectors don't match standalone `.o` files
+
+**Context.** After fixing the multi-seg-PROVIDE bug ([wasm-retro-cc#25](https://github.com/khawkins98/wasm-retro-cc/pull/25)), the binary still crashed at launch — CHK error in BasiliskII's bomb dialog. The Musashi harness once again earned its keep: dumped the linker map and showed `.text._start 0x00002554 0x4c /sysroot/lib/start.c.obj` placed under `.code00002`, not `.code00001`.
+
+**Why that's fatal.** The entry trampoline (laid out at the top of `.code00001` by the ld script) does a relative `BSR+ADDI+RTS` to reach `_start`. The relative jump assumes target is in the same segment. When `_start` lives in `.code00002`, the trampoline computes an address as if it were in CODE 1, hits unmapped memory, dies.
+
+**Root cause.** The script's `.code00001` filters for the entry code are archive-form:
+
+```
+*/libretrocrt.a:start.c.obj(.text)
+*/libretrocrt.a:start.c.obj(.text.*)
+```
+
+These match `start.c.obj` *only when ld sees it as an archive member*. Our pipeline (and cv-mac's `compileToBin`) extracts a standalone `/sysroot/lib/start.c.obj` and passes it explicitly on the ld command line — so ld treats it as a standalone object, and archive-form filters don't match. `.text._start` falls through every selector until `.code00002`'s catch-all `*(.text.*)` claims it.
+
+The link map shape gives this away: archive-loaded files appear as `libretrocrt.a(start.c.obj)`; standalone-loaded files appear as `/sysroot/lib/start.c.obj` — *no parentheses*. Same source object, different formatting; the script's selector syntax distinguishes them.
+
+**What didn't work.** Tried adding file-path-form selectors (`*/start.c.obj(.text.*)`, `*start.c.obj(.text.*)`, `/sysroot/lib/start.c.obj(.text.*)`) inside the same SECTIONS block. None matched — the link map didn't even list them. GNU ld silently ignored file-path-form selectors that have no archive separator when mixed with archive-form selectors in the same script. Disorienting; the manual implies either form should work. In practice, **don't mix**.
+
+**Fix that worked.** Switch to **section-name** selectors, which are file-agnostic:
+
+```
+*(.text._start)
+*(.text._start.*)
+```
+
+Added above the archive catch-all in `.code00001`. Pulls `.text._start` whether `start.c.obj` reaches ld as an archive member or as a standalone object.
+
+Shipped as [wasm-retro-cc#26](https://github.com/khawkins98/wasm-retro-cc/pull/26). cv-mac vendored bundle re-synced.
+
+**Diagnostic gotcha caught along the way.** When you ask ld for a link map via `-Map=/tmp/link.map` while running ld through Emscripten's `Module.callMain`, the map gets written to the **Module's MEMFS**, not the host's `/tmp`. I lost a round of diagnosis reading a stale host-side `/tmp/link.map` from a previous run, thinking my filter changes had no effect. Always `Module.FS.readFile("/tmp/link.map")` and write it back to the host fs before reading.
+
+**General rules added.**
+
+1. **For runtime-required symbols that must land in a specific output section, prefer section-name selectors (`*(.text._start)`) over file-name selectors.** File-name selectors are fragile to how the object reaches ld.
+2. **The link map's input-section listing is authoritative about which selectors matched.** If a selector you wrote doesn't appear there, ld silently rejected it. Don't trust the script syntax; trust the map.
+3. **Don't mix archive-form and file-path-form selectors inside the same SECTIONS block.** Pick one. Section-name selectors avoid the question entirely.
+
+**Pattern.** The Musashi harness diagnosed this in ~30 seconds (read the map, see the symbol address, compare against segment boundaries). Without it: another 30-minute deploy + eyes-on cycle, then guessing. This is the second time in a single afternoon the harness paid for itself. Reinforces the meta-lesson above.
+
 ### 2026-05-15 — Missing SIZE resource crashes libretrocrt startup with type-3
 **Context:** After landing #86 (the ld-script + start.c.obj + libgcc fixes from wasm-retro-cc#22/#23), eyes-on test on deployed Pages showed a *new* failure mode: the app launches and immediately quits with a type-3 (illegal instruction) dialog. Same crash regardless of `main`'s body — including `int main(){ return 0; }` and `int main(){ while(1); return 0; }` produce identical type-3 dialogs with different binary SHAs (the compile sees source, the runtime can't survive startup).
 
