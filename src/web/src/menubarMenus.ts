@@ -63,6 +63,11 @@ export interface MenubarActions {
    *  so the Windows menu can list them dynamically. Caller raises a
    *  window by clicking the corresponding item. */
   listOpenWindows: () => Array<{ title: string; focus: () => void }>;
+  /** Provide the most recently switched-to projects (most recent first,
+   *  current project excluded). The Apple menu lists them under About
+   *  as the classic System 7 Apple-menu pattern. Caller switches via
+   *  the item's action. */
+  listRecentProjects: () => Array<{ label: string; switchTo: () => void }>;
 }
 
 // "⌘" on macOS, "Ctrl-" elsewhere. Mac-only `navigator.platform` is
@@ -80,8 +85,9 @@ const SHORTCUT_PREFIX = IS_MAC ? "⌘" : "Ctrl-"; // ⌘ or Ctrl-
 /** Wire dropdown menus to existing menubar buttons (created in
  *  main.ts's root.innerHTML). Returns a cleanup function. */
 export function mountMenubar(actions: MenubarActions): () => void {
-  // Static menus built once; the Windows menu is rebuilt each open
-  // from actions.listOpenWindows() since it depends on live state.
+  // Static menus built once; the Apple + Windows menus are rebuilt
+  // each open because they depend on live state (recent project list
+  // and current WinBox stack respectively).
   const staticMenus = buildMenuSchema(actions);
   function menuFor(key: string): MenuEntry[] {
     if (key === "windows") {
@@ -90,6 +96,22 @@ export function mountMenubar(actions: MenubarActions): () => void {
         return [{ label: "(no open windows)", disabled: true }];
       }
       return wins.map((w) => ({ label: w.title, action: w.focus }));
+    }
+    if (key === "apple") {
+      const recent = actions.listRecentProjects();
+      const base: MenuEntry[] = [
+        { label: "About classic-vibe-mac…", action: actions.openAbout },
+      ];
+      if (recent.length === 0) return base;
+      // Classic System 7 Apple-menu shape: About at top, then a divider,
+      // then a list of recents (truncated by the caller). The caller
+      // can cap at e.g. 5 entries in localStorage; we render whatever
+      // they hand us.
+      return [
+        ...base,
+        { separator: true },
+        ...recent.map((r) => ({ label: r.label, action: r.switchTo })),
+      ];
     }
     return staticMenus[key] ?? [];
   }
@@ -471,7 +493,8 @@ export function mountMenubar(actions: MenubarActions): () => void {
 
 function buildMenuSchema(a: MenubarActions): Record<string, MenuEntry[]> {
   return {
-    apple: [{ label: "About classic-vibe-mac…", action: a.openAbout }],
+    // apple — dynamic; built by menuFor("apple") so the Recent Projects
+    // list reflects live state. No static schema entry needed.
     file: [
       { label: "Open Project…", action: a.openProjectPicker, shortcut: "O" },
       { label: "Open .zip…", action: a.openZipPicker },
