@@ -108,6 +108,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-calculator", f),
   })),
+  // wasm-scribble — mouse-tracking draw demo (#125). StillDown /
+  // GetMouse / LineTo loop. Different Toolbox surface from the
+  // TextEdit + Calculator samples.
+  ...["scribble.c", "scribble.r"].map((f) => ({
+    project: "wasm-scribble",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-scribble", f),
+  })),
 ];
 
 

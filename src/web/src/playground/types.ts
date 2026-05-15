@@ -176,6 +176,19 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVCA",
   },
+  {
+    // wasm-scribble — mouse-tracking draw demo (cv-mac #125). Yet
+    // another Toolbox surface: StillDown / GetMouse polling with
+    // MoveTo+LineTo per pixel — the classic Mac drag-to-draw loop
+    // from Inside Mac: Macintosh Toolbox Essentials ch. 1.
+    id: "wasm-scribble",
+    label: "Wasm Scribble",
+    files: ["scribble.c", "scribble.r"],
+    rezFile: "scribble.r",
+    outputName: "WasmScribble.bin",
+    appType: "APPL",
+    appCreator: "CVSC",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
