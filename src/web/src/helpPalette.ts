@@ -54,8 +54,10 @@ const HELP_HTML = /* html */ `
 
   <h3>Quick start</h3>
   <ol>
-    <li>Pick a project on the left: <strong>Reader</strong>, <strong>MacWeather</strong>,
-        <strong>Hello Mac</strong>, or <strong>Wasm Hello</strong>.</li>
+    <li>Pick a project on the left: <strong>Wasm Hello</strong>,
+        <strong>Wasm Hello Multi</strong>,
+        <strong>Wasm Hello Window</strong>, or
+        <strong>Wasm Snake</strong>.</li>
     <li>Edit the source in the center editor. Edits save automatically
         to your browser (IndexedDB).</li>
     <li>Click <em>Build &amp; Run</em>. The page compiles your changes
@@ -65,30 +67,25 @@ const HELP_HTML = /* html */ `
         <em>Output</em> panel (bottom right).</li>
   </ol>
 
-  <h3>Two compile paths</h3>
-  <ul>
-    <li><strong>Splice path</strong> (Reader, MacWeather, Hello Mac,
-        Pixel Pad, Markdown Viewer): in-browser WASM-Rez recompiles the
-        <code>.r</code> resource fork; the <code>.c</code> data fork
-        comes from CI's precompiled <code>.code.bin</code>. Edits to
-        <code>.c</code> save locally but don't change the running
-        binary — a heads-up banner says so when you're on a
-        <code>.c</code> file.</li>
-    <li><strong>Full in-browser C path</strong> (Wasm Hello): the page
-        compiles your <code>.c</code> source through <code>cc1</code> +
-        <code>as</code> + <code>ld</code> + <code>Elf2Mac</code>
-        (Retro68's toolchain wasm-built via
-        <a href="https://github.com/khawkins98/wasm-retro-cc" target="_blank">wasm-retro-cc</a>)
-        and the running binary is whatever you just typed.</li>
-  </ul>
+  <h3>How it compiles</h3>
+  <p>
+    Everything compiles in your browser. Your <code>.c</code> source
+    runs through <code>cc1</code> + <code>as</code> + <code>ld</code> +
+    <code>Elf2Mac</code> (Retro68's toolchain, wasm-built via
+    <a href="https://github.com/khawkins98/wasm-retro-cc" target="_blank">wasm-retro-cc</a>);
+    any <code>.r</code> resource files alongside them go through
+    in-browser WASM-Rez and the two forks are spliced into a single
+    classic-Mac binary. The running app is always whatever you just
+    typed — no CI step in the loop.
+  </p>
 
   <h3>Layout (Mac OS 8 style)</h3>
   <ul>
-    <li><strong>Left:</strong> Projects panel — click an entry to switch,
-        or <em>Open project…</em> for a richer picker with descriptions
-        + import from .zip.</li>
-    <li><strong>Center:</strong> Editor with build buttons, file tabs,
-        and Show Assembly toggle.</li>
+    <li><strong>Left:</strong> Project pane — dropdown to switch
+        projects + the file list for the active one. <em>Open project…</em>
+        opens a richer picker with descriptions + import from .zip.</li>
+    <li><strong>Center:</strong> Editor with build buttons, optimisation
+        level, and Show Assembly toggle.</li>
     <li><strong>Top-right:</strong> The Mac. Live preview of whatever
         your edits build.</li>
     <li><strong>Bottom-right:</strong> Output panel — Build log

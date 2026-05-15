@@ -1,5 +1,16 @@
 # Vendored precompiled binaries
 
+> **2026-05-15 — all `.bin` artefacts removed.** Every project in the
+> playground now compiles fully in the browser; the CI-precompiled
+> splice path (Reader, MacWeather, Hello Mac) was retired in #117 and
+> the prebuilt demos toolbar (Hello/QuickDraw Lines/Click Counter/Mac
+> Clock) was retired in #120. The historical record below is kept for
+> the diagnostic trail that produced the Phase 2.0 derisk; the actual
+> binaries (`hello-toolbox-retro68.bin`, the `hello-bare`/`hello-initgraf*`
+> bisect probes, `lines.bin` / `counter.bin` / `clock.bin`, and the
+> `*.code.bin` splice forks) are accessible via git history if you
+> need them.
+
 > **2026-05-14 — Phase 2.0 derisk landed.** `hello-toolbox-retro68.bin`
 > (documented below) is the first vendored artefact produced by the
 > Phase 2 Retro68 GCC build path. It compiles the same `hello_toolbox.c`
