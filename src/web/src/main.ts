@@ -50,6 +50,7 @@ import {
   peekZipTarget,
   summariseImport,
 } from "./zipImport";
+import { openHelp } from "./helpPalette";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -104,6 +105,10 @@ root.innerHTML = /* html */ `
     <span class="menubar__item">Edit</span>
     <span class="menubar__item">View</span>
     <span class="menubar__item">Special</span>
+    <button type="button"
+            id="cvm-menubar-help"
+            class="menubar__item menubar__item--interactive"
+            title="Open the Help palette">Help</button>
     <span class="menubar__item menubar__item--right">${today}</span>
   </div>
 
@@ -691,4 +696,10 @@ if (filesOpenBtn) {
       },
     });
   });
+}
+
+// Menubar "Help" → Help palette (cv-mac #104 Phase 6).
+const helpMenuBtn = document.getElementById("cvm-menubar-help");
+if (helpMenuBtn) {
+  helpMenuBtn.addEventListener("click", () => openHelp());
 }
