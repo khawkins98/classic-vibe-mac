@@ -104,10 +104,12 @@ function buildPreviewSection(): {
   section.appendChild(header);
   section.appendChild(body);
 
-  // Inject after the first .window inside the left pane, or at the end.
-  const leftPane = document.querySelector(".cvm-split-pane--left");
-  if (leftPane) {
-    leftPane.appendChild(section);
+  // Inject the Pixel Pad preview alongside the Mac (top-right cell in the
+  // #104 IDE grid). The user just drew on the Mac; the preview belongs
+  // visually next to the source.
+  const macPane = document.querySelector(".cvm-ide__mac");
+  if (macPane) {
+    macPane.appendChild(section);
   } else {
     document.body.appendChild(section);
   }
