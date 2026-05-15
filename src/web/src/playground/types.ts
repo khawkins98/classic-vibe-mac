@@ -148,6 +148,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVTE",
   },
+  {
+    // wasm-notepad — Wasm TextEdit + a real menu bar (cv-mac #125).
+    // Adds MBAR 128 with Apple / File / Edit, ALRT 128 for About, and
+    // wires Cut/Copy/Paste through TECut/TECopy/TEPaste. Demonstrates
+    // MenuSelect / MenuKey dispatch + the Apple-glyph rainbow menu.
+    // One step further toward a mini word processor.
+    id: "wasm-notepad",
+    label: "Wasm Notepad",
+    files: ["notepad.c", "notepad.r"],
+    rezFile: "notepad.r",
+    outputName: "WasmNotepad.bin",
+    appType: "APPL",
+    appCreator: "CVNP",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
