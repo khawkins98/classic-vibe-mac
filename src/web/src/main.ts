@@ -125,6 +125,11 @@ root.innerHTML = /* html */ `
             data-menu="help"
             class="menubar__item menubar__item--interactive"
             aria-haspopup="menu">Help</button>
+    <button type="button"
+            id="cvm-menubar-version"
+            class="menubar__item menubar__item--interactive menubar__item--right"
+            title="classic-vibe-mac build ${BUNDLE_VERSION.slice(0, 8)} — click to open About"
+            aria-label="Build version">cv-mac ${BUNDLE_VERSION.slice(0, 8)}</button>
     <span class="menubar__item menubar__item--right">${today}</span>
   </div>
 
@@ -716,6 +721,14 @@ if (filesOpenBtn) {
 // Menubar dropdown menus (cv-mac #104 Phase 6+). One overlay component
 // in menubarMenus.ts handles all five menus; we hand it the actions it
 // can invoke from menu items.
+
+// Click the right-aligned "cv-mac <hash>" build stamp to open the
+// About box. Same handler as Apple → About, just discoverable from
+// anywhere on the screen.
+document.getElementById("cvm-menubar-version")?.addEventListener("click", () => {
+  openAbout();
+});
+
 mountMenubar({
   openAbout,
   openPreferences,
