@@ -46,7 +46,7 @@ This README serves three different visitors:
 
 ## What it looks like
 
-![Live deployed page: a Mac OS 7/8-style IDE with a top menubar (Apple / File / Edit / View / Special / Windows / Help, with a "cv-mac <hash>" build stamp and clock on the right), and four draggable WinBox panes. Left: Project picker with the current source files. Centre: Playground — Build / Build & Run / Download / Reset toolbar above a CodeMirror editor showing the bundled C source for the current sample. Right: Macintosh — System 7.5.5 booted in BasiliskII running Reader, MacWeather, Hello Mac, and Mini vMac Doc. Bottom right: Output panel with a Build Log tab capturing per-stage timings. Every WinBox carries Mac OS 8 Platinum chrome (striped titlebar with recessed paper title field, Platinum scrollbars).](public/screenshot-deployed.png)
+![Live deployed page: a Mac OS 7/8-style IDE with a top menubar (Apple / File / Edit / View / Special / Windows / Help, with a "cv-mac <hash>" build stamp and clock on the right), and four draggable WinBox panes. Left: Project picker with the current source files. Centre: Playground — Build / Build & Run / Download / Reset toolbar above a CodeMirror editor showing the bundled C source for the current sample. Right: Macintosh — System 7.5.5 booted in BasiliskII running the bundled apps from Startup Items (Reader, MacWeather, Hello Mac, Pixel Pad, Markdown Viewer). Bottom right: Output panel with a Build Log tab capturing per-stage timings. Every WinBox carries Mac OS 8 Platinum chrome (striped titlebar with recessed paper title field, Platinum scrollbars).](public/screenshot-deployed.png)
 
 The deployed page is three things on one screen, all running in the
 visitor's tab:
@@ -131,18 +131,17 @@ CI, plus one in-browser-compile-only proof of concept:
 - **Markdown Viewer** (`CVMD`) — reads `.md` files from `:Shared:`
   on the boot disk and renders them with a simple Markdown parser in
   C. Add your own `.md` files via the shared folder.
-- **Wasm shelf** — nine in-browser-compile-only sample apps the
+- **Wasm shelf** — 21 in-browser-compile-only sample apps the
   playground picker surfaces. No CMake, no CI step. The user picks
   one, edits, clicks Build & Run, and the browser's wasm toolchain
   produces the `.bin` from C source alone and hot-loads it into the
   running Mac. The progression climbs in Toolbox surface, not in
-  scale: *Wasm Hello* (DrawString) → *Wasm Hello Multi* (multi-file
-  link) → *Wasm Hello Window* (WIND resource) → *Wasm Snake*
-  (TickCount game loop) → *Wasm TextEdit* (TEHandle) → *Wasm Notepad*
-  (MBAR + Cmd-key menus + scrap) → *Wasm Calculator* (hand-drawn
-  FrameRoundRect buttons + PtInRect) → *Wasm Scribble* (StillDown /
-  GetMouse / LineTo) → *Wasm ScrollWin* (NewControl + TrackControl).
-  Full inventory + coverage matrix in
+  scale, from *Wasm Hello* (DrawString only) up through a small word
+  processor, a clock with `GetDateTime`, a file-I/O demo built on
+  `StandardGetFile` / `FSWrite`, a modern double-buffer demo via
+  `NewGWorld`, multiple-window dispatch with `SelectWindow`, region-
+  driven cursor swap via `GetCursor`, and more. Full inventory +
+  coverage matrix in
   [`src/app/README.md` § "Wasm-shelf samples"](./src/app/README.md#wasm-shelf-samples).
 
 The first five coexist on the same boot disk; **the Wasm-shelf samples
