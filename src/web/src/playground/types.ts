@@ -230,6 +230,19 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVBO",
   },
+  {
+    // wasm-dialog — ModalDialog with an editable text field (cv-mac
+    // #125). Fills the "Modal dialogs with editable fields" gap. Click
+    // the button → modal with prompt + edit-text + OK/Cancel; OK reads
+    // the typed answer and draws "Hello, <name>!" back into the window.
+    id: "wasm-dialog",
+    label: "Wasm Dialog",
+    files: ["dialog.c", "dialog.r"],
+    rezFile: "dialog.r",
+    outputName: "WasmDialog.bin",
+    appType: "APPL",
+    appCreator: "CVDL",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
