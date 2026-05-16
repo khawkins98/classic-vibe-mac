@@ -157,6 +157,11 @@ const HELP_HTML = /* html */ `
       <tr><td><kbd>⌘G</kbd> · <kbd>⇧⌘G</kbd></td><td>Next / previous match</td></tr>
       <tr><td><kbd>⌘⌥F</kbd></td><td>Find &amp; replace</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Close the search panel</td></tr>
+      <tr><td>hover a Toolbox call</td>
+          <td>Inside-Macintosh-style signature + blurb in a tooltip</td></tr>
+      <tr><td><kbd>⌘-click</kbd> a Toolbox call</td>
+          <td>Open the pinned <em>Toolbox Reference</em> window
+              (also at <em>Help → Toolbox Reference…</em>)</td></tr>
       <tr><th colspan="2">Windows</th></tr>
       <tr><td>double-click titlebar</td>
           <td>Shade (collapse to titlebar) / unshade</td></tr>
