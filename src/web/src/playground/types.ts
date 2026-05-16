@@ -413,7 +413,10 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     // header library cvm_log.h that any user project can pull in.
     id: "wasm-debug-console",
     label: "Debug Console demo",
-    files: ["console.c", "console.r", "cvm_log.h"],
+    // cvm_log.h isn't bundled — it's mounted as a system header by
+    // cc1.ts (#include <cvm_log.h>) so any project can use it without
+    // a per-project copy.
+    files: ["console.c", "console.r"],
     rezFile: "console.r",
     outputName: "DebugConsole.bin",
     appType: "APPL",

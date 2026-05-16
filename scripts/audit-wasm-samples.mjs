@@ -90,6 +90,21 @@ async function mountSysroot(Module, which) {
     mkdirPInMem(Module, full, made);
     Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
   }
+  // cv-mac-only system headers — drop into /sysroot/include/ after the
+  // Retro68 blob unpacks. Mirrors the runtime path in
+  // src/web/src/playground/cc1.ts. Keeps the audit faithful to what
+  // the in-browser pipeline does (so #include <cvm_log.h> works here
+  // too).
+  if (which === "headers") {
+    const cvmHeaders = ["cvm_log.h"];
+    const cvmDir = join(APP_DIR, "wasm-debug-console");
+    for (const name of cvmHeaders) {
+      const full = `/sysroot/include/${name}`;
+      mkdirPInMem(Module, full, made);
+      const body = readFileSync(join(cvmDir, name));
+      Module.FS.writeFile(full, body);
+    }
+  }
 }
 
 async function loadTool(mjsName, mount) {
