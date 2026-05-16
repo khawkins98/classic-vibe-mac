@@ -36,6 +36,7 @@ import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator
 import { startWeatherPoller } from "./weather-poller";
 import { startSharedPoller } from "./shared-poller";
 import { startDrawingWatcher } from "./drawing-watcher";
+import { startConsoleWatcher } from "./console-watcher";
 import {
   isPauseWhenHiddenEnabled,
   onPauseWhenHiddenChange,
@@ -688,6 +689,17 @@ async function boot(
     setStopDrawingWatcher(stopDrawingWatcher);
   } catch (err) {
     console.warn("[emulator] drawing-watcher failed to start:", err);
+  }
+
+  try {
+    // ConsoleWatcher polls /Shared/__cvm_console.log every 1s and
+    // surfaces new lines in the Output panel's Console tab. The
+    // emulator-side Mac app writes via cvm_log() from <cvm_log.h>.
+    // setInterval-based, no stop handle — it's safe to leave running
+    // across reboots since the worker queue absorbs duplicate polls.
+    startConsoleWatcher({ worker });
+  } catch (err) {
+    console.warn("[emulator] console-watcher failed to start:", err);
   }
 
   // ── Phase 4: render loop. ──
