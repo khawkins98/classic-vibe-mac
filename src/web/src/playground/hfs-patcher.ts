@@ -152,6 +152,12 @@ export function parseMacBinary(bin: Uint8Array): MacBinaryView {
   };
 }
 
+// `.js` suffix on this import so the unit-test transpile (which runs
+// `tsc` with `--module ES2020 --moduleResolution node`, no bundler)
+// resolves the sibling correctly. Vite/TypeScript both accept either
+// form in the browser build, so this is safe.
+import { buildIconResourceFork } from "./floppy-icon.js";
+
 // ── Volume rename (drVN + catalog rec0 + rec1 thread record) ──────────
 
 /** Maximum HFS volume name length (drVN is a Pascal string in a
@@ -711,6 +717,14 @@ export interface PatchOptions {
    *  thdCName, all of which HFS requires to agree (cv-mac #220). ≤27
    *  Mac-Roman bytes. Leave undefined to keep the template's "Apps". */
   volumeName?: string;
+  /** Install a custom 3.5" floppy-disk icon on the volume root so the
+   *  Mac OS Finder shows it as a floppy instead of the generic
+   *  removable-cartridge icon (cv-mac #244). Wires up the canonical
+   *  Mac trick: invisible `Icon\r` file at the volume root carrying
+   *  an `ICN#` resource at ID -16455, plus the HasCustomIcon bit
+   *  flipped in the root dir's DInfo.frFlags. Adds ~666 bytes to
+   *  the disk image and one extra catalog record. */
+  installCustomFloppyIcon?: boolean;
   /** Additional non-MacBinary files to drop at the volume root alongside the
    *  main app. Useful for shipping a small diagnostic README the user can
    *  open in TeachText. Each filename MUST sort AFTER the main file's
@@ -837,7 +851,7 @@ function injectFileAtRoot(
  * character case-folds higher than the main filename's first character.)
  */
 export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
-  const { templateBytes, macBinary, extraFiles } = opts;
+  const { templateBytes, macBinary, extraFiles, installCustomFloppyIcon } = opts;
 
   // Defensive copy. We're going to write into the disk extensively.
   const disk = new Uint8Array(templateBytes.length);
@@ -855,8 +869,23 @@ export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
     renameVolume(disk, opts.volumeName);
   }
 
-  // 2. Inject the main file.
-  injectFileAtRoot(disk, {
+  // 2. Assemble all files to inject into one list, then SORT by
+  //    case-insensitive HFS-key order. HFS requires catalog records
+  //    sorted by parentID + name; the append-only leaf insertion
+  //    assumes monotonic key order. Pre-this-PR the contract was
+  //    "caller pre-sorts"; now that we may auto-add Icon\r in any
+  //    project, sorting here removes that footgun.
+  type FileInjection = {
+    filename: string;
+    type: number;
+    creator: number;
+    finderFlags: number;
+    dataFork: Uint8Array;
+    resourceFork: Uint8Array;
+  };
+  const files: FileInjection[] = [];
+
+  files.push({
     filename,
     type: mb.type,
     creator: mb.creator,
@@ -865,22 +894,102 @@ export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
     resourceFork: mb.rsrcLen > 0 ? mb.resourceFork : new Uint8Array(),
   });
 
-  // 3. Inject extras (e.g. README.txt).  Catalog is append-only, so caller
-  //    must have sorted extras by HFS key order.
   if (extraFiles && extraFiles.length > 0) {
     for (const extra of extraFiles) {
-      injectFileAtRoot(disk, {
+      files.push({
         filename: extra.filename,
         type: extra.type,
         creator: extra.creator,
         finderFlags: extra.finderFlags ?? 0,
         dataFork: extra.dataFork,
-        resourceFork: new Uint8Array(), // plain documents have no rsrc fork
+        resourceFork: new Uint8Array(),
       });
     }
   }
 
+  if (installCustomFloppyIcon) {
+    // The canonical Mac volume-icon trick: an INVISIBLE file at the
+    // root, literally named `Icon\r` (with a literal 0x0d CR suffix),
+    // carrying an ICN# resource at ID -16455. Filename, location, and
+    // resource ID are all conventions the Finder hard-codes.
+    //
+    // Finder flags:
+    //   kIsInvisible (bit 14, 0x4000) — hide from the Finder so the
+    //                                   icon file doesn't clutter the
+    //                                   volume listing
+    //   kNameLocked  (bit 12, 0x1000) — prevent accidental rename
+    files.push({
+      filename: "Icon\r",
+      type: 0,
+      creator: 0,
+      finderFlags: 0x5000,
+      dataFork: new Uint8Array(),
+      resourceFork: buildIconResourceFork(),
+    });
+  }
+
+  // Case-insensitive HFS-key sort. HFS uses Mac Roman case-folding,
+  // which is identical to ASCII tolower() for the byte ranges our
+  // filenames occupy (A–Z → a–z). Non-ASCII (rare in our filenames)
+  // would need a proper Mac Roman fold table; punted until needed.
+  files.sort((a, b) => {
+    const an = a.filename.toLowerCase();
+    const bn = b.filename.toLowerCase();
+    return an < bn ? -1 : an > bn ? 1 : 0;
+  });
+
+  // 3. Inject each file at the root in sorted order.
+  for (const f of files) {
+    injectFileAtRoot(disk, f);
+  }
+
+  // 4. If installing the custom floppy icon, flip the HasCustomIcon
+  //    bit (frFlags bit 10 = 0x0400) in the root dir's DInfo. The
+  //    Finder only consults the Icon\r file when this bit is set —
+  //    without it, the icon file is just dead weight at the root.
+  if (installCustomFloppyIcon) {
+    setRootDirHasCustomIcon(disk);
+  }
+
   return disk;
+}
+
+/**
+ * Set the HasCustomIcon bit (frFlags bit 10, mask 0x0400) in the root
+ * directory's DInfo. The Finder uses this bit to decide whether to
+ * look for a custom icon at this directory (i.e. read the `Icon\r`
+ * file's resource fork at `ICN#`/-16455 and friends). Without the
+ * bit, the custom icon resource is ignored.
+ *
+ * The cdrDirRec data layout (offsets from cdrType=0):
+ *   0:    cdrType (=1)
+ *   1:    cdrResrv2
+ *   2-3:  dirFlags
+ *   4-5:  dirVal
+ *   6-9:  dirDirID
+ *   10-13: dirCrDat
+ *   14-17: dirMdDat
+ *   18-21: dirBkDat
+ *   22-37: dirUsrInfo (DInfo, 16 bytes):
+ *     22-29: frRect (8 bytes)
+ *     30-31: frFlags ← target field
+ *     32-35: frLocation
+ *     36-37: frView
+ *   38-53: dirFndrInfo (DXInfo, 16 bytes)
+ */
+function setRootDirHasCustomIcon(disk: Uint8Array): void {
+  const catalogDiskOffset = allocBlockToDiskOffset(
+    TEMPLATE_LAYOUT.catalogFirstAllocBlock,
+  );
+  const leafOffset =
+    catalogDiskOffset + TEMPLATE_LAYOUT.catalogLeafNodeIndex * NODE_SIZE;
+  const rec0 = leafOffset + 14; // rec0 always starts at offset 14
+  const keyLength = disk[rec0]!;
+  const dataOff = rec0 + 1 + keyLength;
+  const frFlagsOff = dataOff + 30;
+  const dv = new DataView(disk.buffer, disk.byteOffset, disk.byteLength);
+  const cur = dv.getUint16(frFlagsOff, false);
+  dv.setUint16(frFlagsOff, cur | 0x0400, false);
 }
 
 // ── Test helpers (export so unit tests in tests/unit can reach them) ───
