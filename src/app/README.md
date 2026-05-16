@@ -51,6 +51,8 @@ src/app/
 ├── wasm-snake/             ├── snake.c + snake.r
 ├── wasm-textedit/          ├── textedit.c + textedit.r
 ├── wasm-notepad/           ├── notepad.c + notepad.r
+├── wasm-stickynote/        ├── stickynote.c + stickynote.r
+├── wasm-clock/             ├── clock.c + clock.r
 ├── wasm-calculator/        ├── calc.c + calc.r
 ├── wasm-scribble/          ├── scribble.c + scribble.r
 ├── wasm-scrollwin/         ├── scrollwin.c + scrollwin.r
@@ -167,12 +169,14 @@ variations on a theme.
 | `wasm-snake/` | `snake.c` + `.r` | `TickCount` game loop, `WaitNextEvent` keyboard, `EraseRect`+`PaintRect` grid | 230 |
 | `wasm-textedit/` | `textedit.c` + `.r` | `TENew`/`TEClick`/`TEKey`/`TEUpdate`/`TEIdle`/`TESelect` | 130 |
 | `wasm-notepad/` | `notepad.c` + `.r` | `MBAR`/`MenuSelect`/`MenuKey`, `TECut`/`TECopy`/`TEPaste` (system scrap), `StopAlert` dialogs | 180 |
+| `wasm-stickynote/` | `stickynote.c` + `.r` | Pale-yellow `RGBBackColor` + `EraseRect` paper, single TextEdit field, draggable noGrowDocProc window — the colour-QuickDraw entry in the TextEdit ladder | 150 |
+| `wasm-clock/` | `clock.c` + `.r` | `GetDateTime` + `SecondsToDate`, 60-tick idle redraw, `FrameOval`/`MoveTo`/`LineTo`/`FillOval` analog face, hand-rolled 60-entry sin/cos table (no libm) | 190 |
 | `wasm-calculator/` | `calc.c` + `.r` | Hand-drawn `FrameRoundRect` buttons, `PtInRect` hit-test, `NumToString` display, `InvertRoundRect` press feedback | 170 |
 | `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
 | `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
 | `wasm-patterns/` | `patterns.c` + `.r` | `Pattern` (8x8 bitmap), `FillRect` with custom + system patterns (white/ltGray/gray/dkGray) | 165 |
 | `wasm-bounce/` | `bounce.c` + `.r` | Hand-built offscreen `BitMap` (NewPtr buffer + SetPortBits), `CopyBits` double-buffer, `TickCount`-paced animation | 180 |
-| `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetIText` / `SelIText` | 180 |
+| `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetDialogItemText` / `SelectDialogItemText` (modern Universal Headers names — in-browser libInterface dropped the legacy aliases) | 180 |
 | `wasm-sound/` | `sound.c` + `.r` | `SysBeep(duration)` — the simplest, oldest Sound Manager entry-point | 140 |
 | `wasm-color/` | `color.c` + `.r` | Color QuickDraw `RGBColor`, `RGBForeColor`, `PaintRect` — the 1990 Macintosh II 6-colour palette | 140 |
 
@@ -181,6 +185,7 @@ variations on a theme.
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **`SndPlay` on an `'snd '` resource** — the richer Sound Manager path past SysBeep
 - **`NewGWorld`** — the modern (System 7+) double-buffer API that wraps the offscreen-BitMap pattern Bounce shows by hand
+- **Multi-style TextEdit** (`TEStyleNew` + per-run formatting) — the missing rung between Notepad and a real word processor
 
 ### Adding a wasm-shelf sample
 
