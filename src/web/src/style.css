@@ -2392,3 +2392,85 @@ body.cvm-paused .emulator-canvas {
   border-top: 1px solid var(--shadow);
   border-left: 1px solid var(--shadow);
 }
+
+/* --- CodeMirror Find/Replace panel (Mac OS 8 dialog look) ------------ */
+/*
+ * CodeMirror's search() extension renders an inline panel with one
+ * input (or two in replace mode) plus a row of action buttons and
+ * three checkboxes (match case / regex / by word). We restyle it to
+ * feel like a Mac OS 8 floating dialog: Platinum bar, Chicago labels,
+ * beveled buttons.
+ *
+ * Triggered by ⌘F to open, ⌘G next, ⇧⌘G prev, ⌘⌥F replace, Esc close.
+ */
+.cm-editor .cm-panels.cm-panels-top {
+  background: var(--platinum);
+  border-bottom: 1px solid var(--shadow);
+  font-family: var(--font-chrome);
+}
+.cm-editor .cm-search {
+  padding: 4px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  font-size: 12px;
+}
+.cm-editor .cm-search input[type="text"],
+.cm-editor .cm-search input[type="search"] {
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 160px;
+  outline: none;
+}
+.cm-editor .cm-search input[type="text"]:focus,
+.cm-editor .cm-search input[type="search"]:focus {
+  /* Mac OS 8 didn't have focus rings; just a darker border. */
+  border-color: var(--shadow-dark);
+}
+.cm-editor .cm-search button {
+  background: var(--platinum);
+  color: var(--ink);
+  border: 0;
+  border-top: 1px solid var(--highlight);
+  border-left: 1px solid var(--highlight);
+  border-right: 1px solid var(--shadow);
+  border-bottom: 1px solid var(--shadow);
+  padding: 2px 8px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 0;
+}
+.cm-editor .cm-search button:active {
+  /* Inverted bevel — the pressed-in look. */
+  border-top-color: var(--shadow);
+  border-left-color: var(--shadow);
+  border-right-color: var(--highlight);
+  border-bottom-color: var(--highlight);
+}
+.cm-editor .cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--ink);
+  font-size: 11px;
+}
+.cm-editor .cm-search label input[type="checkbox"] {
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  accent-color: var(--ink);
+}
+/* The close [×] button at the top-right of the panel — render as a
+   small bordered square instead of CodeMirror's default plain X. */
+.cm-editor .cm-search [name="close"] {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 4px;
+  font-weight: bold;
+}
