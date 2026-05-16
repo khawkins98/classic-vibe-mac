@@ -58,7 +58,8 @@ import {
   triggerDownload,
   makeRetro68DefaultSizeFork,
 } from "./build";
-import { compileToAsm, compileToBin } from "./cc1";
+import { compileToAsm } from "./cc1";
+import { getToolchain, DEFAULT_TOOLCHAIN_ID } from "./toolchain";
 import { getOptLevel, onOptLevelChange } from "../settings";
 import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
 import {
@@ -1562,7 +1563,13 @@ async function runBuildInBrowserC(
     };
   }
 
-  const r = await compileToBin(baseUrl, {
+  // Compile through the backend abstraction (cv-mac #100 Phase C).
+  // Today there's exactly one backend (retro68-68k); future PowerPC /
+  // other-target backends register additional entries in toolchain.ts
+  // and the IDE picks one via the project's preferred id (or the
+  // default). No call-site change needed when adding backends.
+  const toolchain = getToolchain(DEFAULT_TOOLCHAIN_ID, baseUrl);
+  const r = await toolchain.compile({
     sources,
     primaryName: cFile,
     optLevel: getOptLevel(),
