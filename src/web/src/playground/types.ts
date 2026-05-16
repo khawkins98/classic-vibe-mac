@@ -246,6 +246,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVFL",
   },
   {
+    // wasm-gworld — modern System 7+ offscreen double-buffer via
+    // NewGWorld + GetGWorldPixMap + LockPixels + CopyBits. The clean
+    // upgrade path from wasm-bounce's hand-rolled NewPtr-backed BitMap.
+    // Four shapes (square, circle, diamond, triangle) bounce around a
+    // 320×200 scene, redrawn into the GWorld and blitted to the window
+    // each frame — flicker-free animation the modern way.
+    id: "wasm-gworld",
+    label: "Wasm GWorld",
+    files: ["gworld.c", "gworld.r"],
+    rezFile: "gworld.r",
+    outputName: "WasmGWorld.bin",
+    appType: "APPL",
+    appCreator: "CVGW",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display

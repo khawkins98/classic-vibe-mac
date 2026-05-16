@@ -92,6 +92,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "File I/O round-trip. Open pops StandardGetFile to pick any TEXT file from any mounted volume; Save pops StandardPutFile and writes the TextEdit contents via FSpCreate + FSWrite + SetEOF. First sample on the shelf that touches the filesystem.",
   },
+  "wasm-gworld": {
+    emoji: "🌀",
+    description:
+      "Modern offscreen double-buffer via NewGWorld. Four shapes (square / circle / diamond / triangle) bounce around a 320×200 scene; each frame redraws into the GWorld and CopyBits-blits to the window — flicker-free, the clean System 7+ way. The upgrade path from wasm-bounce's hand-rolled NewPtr+SetPortBits BitMap.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
