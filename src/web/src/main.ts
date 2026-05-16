@@ -48,6 +48,7 @@ import {
   summariseImport,
 } from "./zipImport";
 import { openHelp } from "./helpPalette";
+import { openToolboxReference } from "./playground/toolbox-reference-window";
 import { openAbout } from "./aboutPalette";
 import { openPreferences } from "./preferencesPalette";
 import { mountMenubar } from "./menubarMenus";
@@ -861,6 +862,11 @@ mountMenubar({
   openAbout,
   openPreferences,
   openHelp,
+  // Help → Toolbox Reference… opens the pinned WinBox with a sensible
+  // first entry. The user can browse from there via the See-Also links;
+  // most Toolbox programs touch InitGraf early, so it's a friendly
+  // landing page.
+  openToolboxReference: () => openToolboxReference("InitGraf"),
   openProjectPicker: () => openProjectPicker({
     currentProjectId: activeProjectId(),
     onPick: (pid) => switchProject(pid),
