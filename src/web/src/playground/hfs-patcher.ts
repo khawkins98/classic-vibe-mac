@@ -152,6 +152,200 @@ export function parseMacBinary(bin: Uint8Array): MacBinaryView {
   };
 }
 
+// ── Volume rename (drVN + catalog rec0 + rec1 thread record) ──────────
+
+/** Maximum HFS volume name length (drVN is a Pascal string in a
+ *  28-byte field — 1 length byte + 27 name bytes). HFS also caps
+ *  catalog filenames at 31 bytes; the volume-name field is the
+ *  binding constraint here. */
+const MAX_VOLUME_NAME_BYTES = 27;
+
+/**
+ * Rename the volume in-place: patches MDB drVN, then patches the
+ * catalog root-directory record (leaf node 1 rec0)'s key name and
+ * the root-dir thread record (rec1)'s thdCName, then reflows rec1
+ * if rec0's keyLength changed.
+ *
+ * Why all three: HFS keeps the volume name in three places that all
+ * have to agree, or various consumers get confused:
+ *   - MDB drVN — what the Finder/OS shows on the desktop
+ *   - Catalog leaf rec0 (parentID=1 + name) — the root directory's
+ *     own entry; tools like hfsutils' `hls` look it up by name and
+ *     fail with "Expected volume X not found" if it doesn't match
+ *     drVN
+ *   - Catalog leaf rec1 (the thread record for the root dir) — its
+ *     thdCName field also stores the root's name; some Disk First
+ *     Aid checks compare it against drVN
+ *
+ * NB: Must run BEFORE any `injectFileAtRoot` call, because injection
+ * appends records after rec1 — reflowing rec1 after that is much
+ * more work (would need to walk + shift every subsequent record).
+ * The convenient ordering happens naturally in
+ * patchEmptyVolumeWithBinary below.
+ *
+ * Mac Roman 1-byte encoding only (ASCII works as a subset). Names
+ * longer than 27 bytes throw.
+ */
+export function renameVolume(disk: Uint8Array, newName: string): void {
+  const nameBytes = new TextEncoder().encode(newName);
+  if (nameBytes.length > MAX_VOLUME_NAME_BYTES) {
+    throw new Error(
+      `HFS volume name too long: ${nameBytes.length} > ${MAX_VOLUME_NAME_BYTES} ('${newName}')`,
+    );
+  }
+  if (nameBytes.length === 0) {
+    throw new Error("HFS volume name cannot be empty");
+  }
+
+  // ── 1. MDB drVN (offset 36, Pascal string in 28-byte field) ──
+  const m = TEMPLATE_LAYOUT.mdbOffset;
+  disk[m + 36] = nameBytes.length;
+  for (let i = 0; i < 27; i++) {
+    disk[m + 37 + i] = i < nameBytes.length ? nameBytes[i]! : 0;
+  }
+  // Alternate MDB sync — patchMdb already does a full 512-byte copy
+  // of the primary MDB sector to the alternate MDB sector after
+  // every modification, so subsequent patchMdb calls will pick this
+  // up. But our caller may not invoke patchMdb (e.g. if zero files
+  // are injected), so mirror the drVN field explicitly here too.
+  const altMdbOff = disk.length - 2 * 512;
+  if (altMdbOff > 0) {
+    disk[altMdbOff + 36] = nameBytes.length;
+    for (let i = 0; i < 27; i++) {
+      disk[altMdbOff + 37 + i] = i < nameBytes.length ? nameBytes[i]! : 0;
+    }
+  }
+
+  // ── 2. Catalog leaf rec0 key (root-dir directory record) ──
+  const dv = new DataView(disk.buffer, disk.byteOffset, disk.byteLength);
+  const catalogDiskOffset = allocBlockToDiskOffset(
+    TEMPLATE_LAYOUT.catalogFirstAllocBlock,
+  );
+  const leafOffset =
+    catalogDiskOffset + TEMPLATE_LAYOUT.catalogLeafNodeIndex * NODE_SIZE;
+
+  const numRecs = dv.getUint16(leafOffset + 10, false);
+  if (numRecs < 2) {
+    throw new Error(
+      `catalog leaf has ${numRecs} records, expected at least 2 (rec0 dir + rec1 thread)`,
+    );
+  }
+
+  // Read existing offsets (descending trailer at end of node).
+  const trailerEnd = leafOffset + NODE_SIZE;
+  const offsets: number[] = [];
+  for (let i = 0; i <= numRecs; i++) {
+    offsets.push(dv.getUint16(trailerEnd - 2 * (i + 1), false));
+  }
+  const rec0Off = offsets[0]!;
+  const rec1Off = offsets[1]!;
+
+  // Compute old key length: byte 0 of rec0 is keyLength.
+  const oldKeyLength = disk[leafOffset + rec0Off]!;
+  const oldRec0Size = 1 + oldKeyLength + (rec1Off - rec0Off - 1 - oldKeyLength);
+  // Rec0 data record (cdrDirRec) is 70 bytes; verify by subtracting.
+  const dirDataSize = rec1Off - rec0Off - 1 - oldKeyLength;
+
+  // Compute new key bytes:
+  //   1 reserved + 4 parentID + 1 nameLen + N name + optional pad
+  // The key area's byte count (after the leading keyLength byte) is
+  // 1 + 4 + 1 + N = 6 + N; total record area before data = 1 + (6 + N)
+  // + optional pad. Per hfsutils convention, keyLength INCLUDES the
+  // trailing pad byte (so that 1 + keyLength is always even and the
+  // data record starts on an even-byte boundary).
+  const keyDataBytes = 1 + 4 + 1 + nameBytes.length;
+  const keyNeedsPad = (1 + keyDataBytes) % 2 !== 0;
+  const newKeyLength = keyDataBytes + (keyNeedsPad ? 1 : 0);
+  const newRec0Size = 1 + newKeyLength + dirDataSize;
+  const delta = newRec0Size - oldRec0Size;
+
+  // Bounds check the leaf node has room.
+  const oldFreePtr = offsets[numRecs]!;
+  const newFreePtr = oldFreePtr + delta;
+  const newTrailerBytes = 2 * (numRecs + 1);
+  if (newFreePtr + newTrailerBytes > NODE_SIZE) {
+    throw new Error(
+      `volume rename would overflow leaf node: freePtr=${oldFreePtr} delta=${delta} trailer=${newTrailerBytes} > node size ${NODE_SIZE}`,
+    );
+  }
+
+  // Preserve the existing dir-record data (the 70 bytes after rec0's
+  // key) before we shift things around.
+  const dirData = disk.slice(
+    leafOffset + rec0Off + 1 + oldKeyLength,
+    leafOffset + rec0Off + 1 + oldKeyLength + dirDataSize,
+  );
+
+  // Capture all records FROM rec1 onward so we can shift them.
+  // rec1 lives at rec1Off; everything from there to oldFreePtr is
+  // record bytes; copy out, then write back at shifted offset.
+  const tailLen = oldFreePtr - rec1Off;
+  const tailBytes = disk.slice(
+    leafOffset + rec1Off,
+    leafOffset + rec1Off + tailLen,
+  );
+
+  // ── Write new rec0 ──
+  let p = leafOffset + rec0Off;
+  disk[p++] = newKeyLength;
+  disk[p++] = 0; // reserved
+  dv.setUint32(p, 1, false); // parentID = 1 (root dir's parent)
+  p += 4;
+  disk[p++] = nameBytes.length;
+  for (const b of nameBytes) disk[p++] = b;
+  if (keyNeedsPad) disk[p++] = 0;
+  // Restore the dir-record data (cdrDirRec) — same 70 bytes that were
+  // there before. We are NOT modifying the dirNameLen inside the
+  // cdrDirRec because the dir record doesn't store its own name (the
+  // name lives in the key); only the data fields (CNID, valence,
+  // dates, finder info) stay.
+  disk.set(dirData, p);
+  p += dirDataSize;
+
+  // ── Write rec1 (and any further records) at the shifted offset ──
+  // The tail we captured is byte-for-byte identical EXCEPT we need to
+  // update the thread record's thdCName inside it, which still says
+  // the old name.
+  //
+  // rec1 layout (positions WITHIN tailBytes):
+  //   0:        keyLength
+  //   1:        reserved
+  //   2..5:     parentID (= 2)
+  //   6:        nameLen (= 0 for thread records)
+  //   7:        pad (since 1+1+4+1=7 is odd → +1 pad)
+  //   8:        cdrType (= 3)
+  //   9:        cdrResrv2
+  //   10..17:   thdResrv[8]
+  //   18..21:   thdParID (= 1)
+  //   22..53:   thdCName — Pascal string padded to 32 bytes
+  //     22:     nameLen (= 4 in stock template, "Apps")
+  //     23+:    name bytes, zero-padded
+  //
+  // Update thdCName to match newName.
+  tailBytes[22] = nameBytes.length;
+  for (let i = 0; i < 31; i++) {
+    tailBytes[23 + i] = i < nameBytes.length ? nameBytes[i]! : 0;
+  }
+  disk.set(tailBytes, leafOffset + rec0Off + newRec0Size);
+
+  // ── Zero out the gap between old freePtr and new freePtr if delta
+  //    is negative (shrinking name). When delta > 0 (growing name)
+  //    the new freePtr is past the old; no gap to clear, and the
+  //    tail bytes we wrote already cover the expanded region. ──
+  if (delta < 0) {
+    for (let i = newFreePtr; i < oldFreePtr; i++) {
+      disk[leafOffset + i] = 0;
+    }
+  }
+
+  // ── Update offset trailer ──
+  // New offsets[i] for i > 0 shifts by delta.
+  for (let i = 0; i <= numRecs; i++) {
+    const newOffset = i === 0 ? rec0Off : offsets[i]! + delta;
+    dv.setUint16(trailerEnd - 2 * (i + 1), newOffset, false);
+  }
+}
+
 // ── MDB read/update ────────────────────────────────────────────────────
 
 interface MdbView {
@@ -482,13 +676,19 @@ function bumpRootDirValence(disk: Uint8Array, catalogDiskOffset: number): void {
   //   cdrType(1) cdrResrv2(1) dirFlags(2) dirVal(2) dirDirID(4)
   //   dirCrDat(4) dirMdDat(4) dirBkDat(4) dirUsrInfo(16) dirFndrInfo(16)
   //   dirResrv(16)
-  // For our template name "Apps" (4 bytes) the key spans bytes:
-  //   1 (keyLength) + 1 (reserved) + 4 (parentID) + 1 (nameLen) + 4 (name)
-  //   = 11 → keyLength=11. (1+11) = 12 even, no pad. Data starts at offset 12.
-  // Empirically the ground-truth has keyLength=11 (`0b`).
-  // dirFlags at +14, dirVal at +16, dirDirID at +18, dirCrDat at +22,
-  // dirMdDat at +26.
-  const dataOff = rec0 + 12;
+  //
+  // The data area starts at byte (1 + keyLength) from rec0 — past the
+  // keyLength byte itself and all of its key payload (incl. any pad
+  // byte). This was hardcoded to `rec0 + 12` (the offset that's true
+  // for "Apps", which gives keyLength=11) until cv-mac #220 added the
+  // renameVolume function — after a rename the keyLength changes
+  // ("Wasm Hello" → keyLength=17 → data at rec0+18), and a hardcoded
+  // 12 ends up scribbling into the key area. Compute it dynamically.
+  //
+  // dirFlags at dataOff+2, dirVal at dataOff+4, dirDirID at dataOff+6,
+  // dirCrDat at dataOff+10, dirMdDat at dataOff+14.
+  const keyLength = disk[rec0]!;
+  const dataOff = rec0 + 1 + keyLength;
   const dirVal = dv.getUint16(dataOff + 4, false);
   dv.setUint16(dataOff + 4, dirVal + 1, false);
   // dirMdDat refresh.
@@ -505,6 +705,12 @@ export interface PatchOptions {
   /** Filename to give the file at the volume root. Falls back to the
    *  MacBinary header's filename if omitted. ≤31 Mac-Roman bytes. */
   filename?: string;
+  /** Rename the volume from the template's default "Apps" to something
+   *  project-specific (e.g. "Wasm Sound"). Updates MDB drVN AND the
+   *  catalog root-directory record's key name AND its thread record's
+   *  thdCName, all of which HFS requires to agree (cv-mac #220). ≤27
+   *  Mac-Roman bytes. Leave undefined to keep the template's "Apps". */
+  volumeName?: string;
   /** Additional non-MacBinary files to drop at the volume root alongside the
    *  main app. Useful for shipping a small diagnostic README the user can
    *  open in TeachText. Each filename MUST sort AFTER the main file's
@@ -641,6 +847,14 @@ export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
   const mb = parseMacBinary(macBinary);
   const filename = opts.filename ?? mb.filename;
 
+  // 1.5. Rename the volume BEFORE any file injection — see renameVolume's
+  //      doc comment for why this ordering matters (injection appends
+  //      records after rec1, which renameVolume needs to be able to
+  //      shift safely).
+  if (opts.volumeName) {
+    renameVolume(disk, opts.volumeName);
+  }
+
   // 2. Inject the main file.
   injectFileAtRoot(disk, {
     filename,
@@ -682,4 +896,6 @@ export const __test = {
   readMdb,
   patchMdb,
   parseMacBinary,
+  renameVolume,
+  MAX_VOLUME_NAME_BYTES,
 };
