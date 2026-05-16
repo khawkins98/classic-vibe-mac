@@ -21,7 +21,8 @@ import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
 import JSZip from "jszip";
 
-import { SAMPLE_PROJECTS, type SampleProject } from "./types";
+import { SAMPLE_PROJECTS, TOOLCHAIN_VERSION, type SampleProject } from "./types";
+import type { Diagnostic } from "./preprocessor";
 import {
   initPersistence,
   isPersistent,
@@ -1257,6 +1258,28 @@ async function runBuildInBrowserC(
     }
   }
 
+  // Cache check: if the same set of source contents at the same opt
+  // level was just compiled, reuse the cached final bin. This makes
+  // back-to-back Build & Run clicks instant when nothing has changed,
+  // and lets Path B's .r-only edit cycle skip cc1 entirely —
+  // runBuildMixedCAndR calls us under the hood, so a user who only
+  // edits the .r fork gets the cached C binary served straight back.
+  const cacheKey = await computeCBuildCacheKey(sources, getOptLevel());
+  const cached = cBuildCache.get(cacheKey);
+  if (cached) {
+    console.info(
+      `[build-c] cache hit ${cFile}: ${cached.bytes.byteLength}B ` +
+        `(skipped cc1+as+ld+Elf2Mac; saved ~${cached.savedMs}ms)`,
+    );
+    setEditorDiagnostics(view, cached.diagnostics, activeFile);
+    return {
+      ok: true,
+      bytes: cached.bytes,
+      totalMs: performance.now() - t0,
+      diagnostics: cached.diagnostics,
+    };
+  }
+
   const r = await compileToBin(baseUrl, {
     sources,
     primaryName: cFile,
@@ -1323,12 +1346,69 @@ async function runBuildInBrowserC(
       `elf2mac=${r.stages?.elf2macMs.toFixed(0)}ms`,
   );
 
+  // Cache the (sources, opt-level) → final-bin mapping. A subsequent
+  // identical-source build short-circuits the entire compileToBin
+  // chain (~1-2s on a warm cache, the dominant cost of Build & Run).
+  cBuildCache.set(cacheKey, {
+    bytes: finalBin,
+    diagnostics: r.diagnostics,
+    savedMs: r.totalMs,
+  });
+  cBuildCacheTrim();
+
   return {
     ok: true,
     bytes: finalBin,
     totalMs: performance.now() - t0,
     diagnostics: r.diagnostics,
   };
+}
+
+// ── In-memory build-artefact cache (C side) ────────────────────────────
+//
+// Keyed on TOOLCHAIN_VERSION + opt level + a SHA-256 of every .c/.h
+// source's filename + content. Values are the final SIZE-spliced
+// MacBinary bytes + the cc1 diagnostics from that compile.
+//
+// Bounded to MAX_ENTRIES via simple insertion-order eviction (Map's
+// iteration order is insertion order; oldest goes first). For a
+// single-tab session with at most ~15 samples + the user typing edits,
+// memory is bounded by ~15 × ~20 KB = 300 KB.
+interface CBuildCacheEntry {
+  bytes: Uint8Array;
+  diagnostics: Diagnostic[];
+  /** Wall-time the cached compile took. Surfaces in the cache-hit log
+   *  line so the user sees roughly how much was skipped. */
+  savedMs: number;
+}
+const cBuildCache = new Map<string, CBuildCacheEntry>();
+const CACHE_MAX_ENTRIES = 16;
+
+function cBuildCacheTrim(): void {
+  while (cBuildCache.size > CACHE_MAX_ENTRIES) {
+    const oldest = cBuildCache.keys().next().value;
+    if (oldest === undefined) break;
+    cBuildCache.delete(oldest);
+  }
+}
+
+async function computeCBuildCacheKey(
+  sources: Array<{ filename: string; content: string }>,
+  optLevel: string,
+): Promise<string> {
+  // Sort by filename for determinism, then concat name+NUL+content+NUL.
+  const sorted = [...sources].sort((a, b) =>
+    a.filename.localeCompare(b.filename),
+  );
+  const parts: string[] = [TOOLCHAIN_VERSION, optLevel];
+  for (const s of sorted) {
+    parts.push(s.filename, s.content);
+  }
+  const enc = new TextEncoder();
+  const buf = enc.encode(parts.join("\0"));
+  const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+  const arr = Array.from(new Uint8Array(hashBuf));
+  return arr.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 // Re-export for use elsewhere (e.g. tests).
