@@ -100,6 +100,15 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-notepad", f),
   })),
+  // wasm-stickynote — small floating sticky-note window (#125). Smaller
+  // than wasm-notepad: no menubar, no scrap. Pale-yellow paper field
+  // and a single TextEdit exercising RGBBackColor / RGBForeColor —
+  // colour QuickDraw is unique to this project in the wasm-* shelf.
+  ...["stickynote.c", "stickynote.r"].map((f) => ({
+    project: "wasm-stickynote",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-stickynote", f),
+  })),
   // wasm-calculator — 4-function calculator (#125). Different surface
   // from the TextEdit ladder: hand-drawn buttons + PtInRect hit-testing
   // + NumToString display. No TextEdit, no scrap.
