@@ -81,7 +81,7 @@ import {
 import { compileToAsm } from "./cc1";
 import { getToolchain, DEFAULT_TOOLCHAIN_ID } from "./toolchain";
 import { getOptLevel, onOptLevelChange } from "../settings";
-import { patchEmptyVolumeWithBinary } from "./hfs-patcher";
+import { patchEmptyVolumeWithBinary, type ExtraFile } from "./hfs-patcher";
 import {
   showBuildExplainer,
   showBuildExplainerIfFirstTime,
@@ -1032,12 +1032,59 @@ export async function mountPlayground(
         );
       }
       const tmplBytes = new Uint8Array(await tmplResp.arrayBuffer());
+
+      // ★★★★★★ tier: fetch any binary resource files declared in
+      // `proj.binaryAssets` and pass them through to the patcher's
+      // `extraFiles` with the resource fork populated (#251 infra +
+      // #233 6-star tier first consumer).
+      //
+      // Naming convention: a host-side `icons.rsrc.bin` file becomes
+      // an on-disk Mac file named `Icons` (the `.rsrc.bin` suffix is
+      // dropped — `.rsrc` indicates "this is a resource-fork-only file"
+      // and `.bin` is the host-filesystem-format marker; classic Mac
+      // doesn't see either). The app opens it via `OpenResFile("Icons")`.
+      const extraFiles: ExtraFile[] = [];
+      for (const assetPath of proj.binaryAssets ?? []) {
+        const r = await fetch(
+          `${baseUrl}sample-projects/${proj.id}/${assetPath}`,
+        );
+        if (!r.ok) {
+          throw new Error(
+            `${proj.id}/${assetPath} fetch failed: HTTP ${r.status}`,
+          );
+        }
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        // Strip the .rsrc.bin suffix so the file appears as a clean
+        // name on the Mac desktop. "icons.rsrc.bin" → "Icons".
+        const macName = assetPath
+          .replace(/\.rsrc\.bin$/i, "")
+          .replace(/^./, (c) => c.toUpperCase());
+        extraFiles.push({
+          filename: macName,
+          type: 0x72737263, // 'rsrc'
+          creator: 0x52534544, // 'RSED' (ResEdit) — generic
+          dataFork: new Uint8Array(),
+          resourceFork: bytes,
+        });
+      }
+
+      // The empty-secondary.dsk template's catalog leaf node was
+      // sized for "one app per disk" (plus an Icon\r file). Adding
+      // any extraFile beyond that overflows the leaf — see error
+      // text in hfs-patcher.ts:appendCatalogLeafRecord. Until the
+      // template gets a multi-leaf catalog, projects with
+      // binaryAssets skip the custom floppy icon (#244 chrome) so
+      // the leaf has room for the asset file's record. Visual loss
+      // is acceptable; the feature payoff is the whole point of
+      // the 6-star tier.
+      const installIcon = extraFiles.length === 0;
       const patched = patchEmptyVolumeWithBinary({
         templateBytes: tmplBytes,
         macBinary: result.bytes!,
         filename: fname,
         volumeName: volName,
-        installCustomFloppyIcon: true,
+        installCustomFloppyIcon: installIcon,
+        extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
       });
       setStatus(statusEl, "Mounting disk…", "info");
       // Hand to emulator reboot — main.ts wired this up.
