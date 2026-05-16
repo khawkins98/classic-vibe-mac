@@ -78,21 +78,6 @@ const appleLogoSvg = /* html */ `
   </svg>
 `;
 
-// Tiny 1-bit-style document icon for the "desktop" decoration. Drawn as
-// SVG with crisp edges so it reads as pixel art at 32×32.
-const docIconSvg = /* html */ `
-  <svg viewBox="0 0 32 32" shape-rendering="crispEdges" aria-hidden="true"
-       focusable="false" class="desktop-icon__glyph">
-    <rect x="6" y="3" width="17" height="26" fill="#fff" stroke="#000" stroke-width="1" />
-    <polygon points="23,3 23,9 29,9" fill="#fff" stroke="#000" stroke-width="1" />
-    <line x1="23" y1="3" x2="29" y2="9" stroke="#000" stroke-width="1" />
-    <line x1="9" y1="14" x2="20" y2="14" stroke="#000" />
-    <line x1="9" y1="17" x2="20" y2="17" stroke="#000" />
-    <line x1="9" y1="20" x2="20" y2="20" stroke="#000" />
-    <line x1="9" y1="23" x2="16" y2="23" stroke="#000" />
-  </svg>
-`;
-
 const today = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
@@ -138,113 +123,10 @@ root.innerHTML = /* html */ `
     <span class="menubar__item menubar__item--right">${today}</span>
   </div>
 
-  <div class="desktop-icon" aria-hidden="true">
-    ${docIconSvg}
-    <span class="desktop-icon__label">Read Me</span>
-  </div>
-
   <!-- IDE work surface: four docked WinBox panes (Project / Editor /
        Macintosh / Output). Built dynamically by mountIdePanes() below,
        which constructs each pane as a draggable + resizable + shadeable
-       WinBox positioned to tile the viewport. The previous CSS-grid
-       layout was retired with this commit. -->
-
-  <!-- Below-the-fold marketing content: Read Me + Emulator Config.
-       Pre-#104 these lived inside the left pane alongside the Mac.
-       With the IDE layout the editor is primary, so the marketing
-       content moves below the grid — discoverable via scroll, but
-       not competing for editor space. -->
-  <div class="cvm-below-fold">
-
-      <section class="window" aria-labelledby="title-readme">
-        <header class="window__titlebar">
-          <span class="window__close" aria-hidden="true"></span>
-          <h2 class="window__title" id="title-readme">Read Me &mdash; SimpleText</h2>
-        </header>
-        <div class="window__body">
-          <h1>classic-vibe-mac</h1>
-          <p>
-            A GitHub template for building a classic Macintosh app in C and
-            serving it, running, in a browser. Push your source. The template
-            cross-compiles it for the 68k Mac, packs the binary into an HFS
-            disk image, and boots it inside System&nbsp;7.5.5 on a
-            WebAssembly Basilisk&nbsp;II.
-          </p>
-          <p>
-            It is, more or less, a 1993 Macintosh that lives at a URL.
-          </p>
-
-          <h2>What it does</h2>
-          <ul>
-            <li>Cross-compiles C to a 68k Mac binary using
-              <a href="https://github.com/autc04/Retro68">Retro68</a>, in
-              GitHub Actions.</li>
-            <li>Packs the binary into a bootable HFS System&nbsp;7.5.5 disk
-              with <code>hfsutils</code>; the Finder auto-launches it
-              on boot.</li>
-            <li>Hosts a Vite + TypeScript page that mounts Basilisk&nbsp;II
-              (GPL-2.0, vendored from
-              <a href="https://github.com/mihaip/infinite-mac">Infinite Mac</a>'s
-              Apache-2.0 build) and boots System&nbsp;7.5.5.</li>
-            <li>Ships two demo apps side-by-side:
-              <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/reader">Reader</a>
-              (a tiny HTML viewer that reads from <code>:Shared:</code> on
-              the boot disk) and
-              <a href="https://github.com/khawkins98/classic-vibe-mac/tree/main/src/app/macweather">MacWeather</a>
-              (live forecast data via a JS poller, rendered with 1-bit
-              QuickDraw glyphs).</li>
-            <li>Three-layer testing: host C unit tests, Playwright end-to-end,
-              and AI vision assertions on canvas screenshots.</li>
-          </ul>
-
-          <h2>Make your own</h2>
-          <p>
-            Fork the repo (or click <em>Use this template</em>), drop your C
-            source into <code>src/app/</code>, and push. CI handles the rest.
-          </p>
-          <pre>git clone https://github.com/your-fork/classic-vibe-mac.git
-cd classic-vibe-mac
-npm install
-npm run dev</pre>
-
-          <h2>How this works</h2>
-          <p>
-            Curious about the stack? See
-            <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HOW-IT-WORKS.md">HOW-IT-WORKS.md</a>
-            &mdash; a guided tour of how the page above goes from "static
-            files on GitHub Pages" to "1993 Macintosh running your edited
-            app", plus what you can build with this stack and where it
-            stops compared to other paths into classic Mac development.
-          </p>
-
-          <h2>Status</h2>
-          <p>
-            The pipeline runs end-to-end. Two apps ship on the boot disk
-            and the Finder auto-launches them. Reader renders HTML; MacWeather
-            renders the live forecast. See
-            <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/PRD.md">PRD.md</a>
-            for what's still on the list.
-          </p>
-        </div>
-      </section>
-
-      <section class="window window--narrow" aria-labelledby="title-config">
-        <header class="window__titlebar">
-          <span class="window__close" aria-hidden="true"></span>
-          <h2 class="window__title" id="title-config">Emulator Config</h2>
-        </header>
-        <div class="window__body">
-          <p>
-            For the curious. The config object below is what the
-            BasiliskII loader is handed at boot — the chunked HFS
-            disk URL, the canvas dimensions, the shared-folder
-            mapping, the weather fallback coords, etc.
-          </p>
-          <pre id="config"></pre>
-        </div>
-      </section>
-
-  </div><!-- /.cvm-below-fold -->
+       WinBox positioned to tile the viewport. -->
 `;
 
 // Build the four docked IDE panes as WinBox windows. This is intentionally
@@ -252,11 +134,6 @@ npm run dev</pre>
 // #cvm-playground, #emulator-canvas-mount, #cvm-output-buildlog, etc.)
 // exist by the time the subsequent document.getElementById queries run.
 const idePanes = mountIdePanes();
-
-const configEl = document.getElementById("config");
-if (configEl) {
-  configEl.textContent = JSON.stringify(emulatorConfig, null, 2);
-}
 
 // "Pause when tab is hidden" lives in the Preferences palette now
 // (Edit menu). The emulator-loader subscribes to onPauseWhenHiddenChange
