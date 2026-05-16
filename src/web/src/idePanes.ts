@@ -167,13 +167,12 @@ function outputHtml(): string {
            role="tabpanel"
            aria-label="Console"
            hidden>
-        <p class="cvm-output__hint">
-          <strong>Coming soon.</strong> The Console tab will capture
-          <code>DebugStr</code> and <code>DrawString</code> output from
-          your running Mac app — useful for in-tab debugging without
-          looking at the canvas. Tracked in
-          <a href="https://github.com/khawkins98/classic-vibe-mac/issues/104">#104</a>.
-        </p>
+        <!-- Live tail of /Shared/__cvm_console.log. The Mac app calls
+             cvm_log() from <cvm_log.h> to append lines; console-watcher
+             polls the file via the emulator worker and surfaces the
+             new tail here every ~1s. Empty until the first cvm_log()
+             fires (or watcher initializes). -->
+        <pre id="cvm-output-console" class="cvm-output__log"></pre>
       </div>
     </div>
   `;
