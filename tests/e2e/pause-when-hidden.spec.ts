@@ -45,13 +45,22 @@ test.describe("sleep-when-hidden", () => {
   test("settings checkbox is on by default and persists", async ({ page }) => {
     await page.goto("/");
 
-    const cb = page.locator("#cvm-pause-when-hidden");
+    // The "pause when tab is hidden" toggle moved from the main chrome
+    // into the Preferences palette (Edit menu → Preferences…). Open the
+    // palette first via the module's exported entry-point — same dev-only
+    // dynamic-import trick the compileToBin tests use.
+    await page.evaluate(async () => {
+      const mod = await import(
+        /* @vite-ignore */ `${location.origin}/src/preferencesPalette.ts`
+      );
+      mod.openPreferences();
+    });
+
+    const cb = page.locator("#cvm-prefs-pause");
     await expect(cb).toBeAttached();
     await expect(cb).toBeChecked();
 
     await cb.uncheck({ force: true });
-    // The custom checkbox hides the native input; we drive it via .check()/.uncheck()
-    // which works on the underlying input. Confirm the setting was persisted.
     const stored = await page.evaluate(() =>
       localStorage.getItem("cvm.pauseWhenHidden"),
     );
