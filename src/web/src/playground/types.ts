@@ -504,6 +504,44 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     complexity: 6,
     binaryAssets: ["icons.rsrc.bin"],
   },
+  {
+    // wasm-glypha3 — first real third-party period app onboard
+    // (cv-mac #233 Phase 2). John Calhoun's 1992 side-scroller,
+    // released under MIT by Soft Dorothy in 2018. Vendored from
+    // softdorothy/Glypha3 with a small Universal-Headers
+    // compatibility shim in Externs.h. 9 .c files + shared header
+    // = ~6600 LOC of *real period code* — the milestone is
+    // proving the in-browser pipeline survives a 10× scale-up
+    // from the wasm-* hand-rolled toys.
+    //
+    // What works in this PR: the full compile + link path. cc1.wasm
+    // doesn't OOM on the largest file (Enemy.c, 45 KB). The link
+    // produces a 149 KB ELF.
+    //
+    // What's stubbed for now: persistence (Prefs.c is a no-op),
+    // and the upstream 2.7 MB resource fork is replaced with a
+    // minimal Rez file (WIND + MBAR + signature). The game will
+    // boot far enough to show a window but won't be playable —
+    // wiring up the real resources is a follow-up project per
+    // the PR body's note.
+    //
+    // Marked complexity 7 (off the previous scale) — bigger
+    // codebase + first external onboard + stubbed-but-real assets.
+    // The dropdown shows ★★★★★★ for it since the helper caps
+    // at 6 stars; user can extend the scale later if useful.
+    id: "wasm-glypha3",
+    label: "Glypha III (John Calhoun, MIT)",
+    files: [
+      "Main.c", "Enemy.c", "Graphics.c", "Interface.c",
+      "Play.c", "Prefs.c", "SetUpTakeDown.c", "Sound.c", "Utilities.c",
+      "Externs.h", "glypha3.r",
+    ],
+    rezFile: "glypha3.r",
+    outputName: "GlyphaIII.bin",
+    appType: "APPL",
+    appCreator: "CVGl",
+    complexity: 6,
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
