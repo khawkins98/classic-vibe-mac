@@ -24,6 +24,12 @@
  */
 import type { Diagnostic } from "./preprocessor";
 import { timeFetch } from "./fetchStats";
+// cvm_log.h is sourced from the wasm-debug-console demo project; we
+// inline it at build time so the playground's cc1 can offer it as a
+// system header (#include <cvm_log.h>) from ANY project without
+// per-project bundling. The demo still bundles a sibling copy so the
+// API surface is visible in the editor.
+import CVM_LOG_H from "../../../app/wasm-debug-console/cvm_log.h?raw";
 
 interface Cc1Module {
   FS: {
@@ -182,6 +188,14 @@ async function loadModule(baseUrl: string): Promise<Cc1Module> {
       blob.subarray(entry.o, entry.o + entry.l),
     );
   }
+  // cv-mac-only system headers — dropped into /sysroot/include/ after the
+  // Retro68 blob unpacks so they're discoverable via #include <name.h>
+  // from any playground project, with no per-project bundling required.
+  // Currently just cvm_log.h (the Debug Console output channel). New
+  // additions get an entry below + an import at the top of this file.
+  const cvmIncludePath = "/sysroot/include/cvm_log.h";
+  mkdirP(Module, cvmIncludePath, madeDirs);
+  Module.FS.writeFile(cvmIncludePath, CVM_LOG_H);
   return Module;
 }
 

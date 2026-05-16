@@ -193,8 +193,10 @@ const SEED_FILES: SeedSpec[] = [
   })),
   // wasm-debug-console — exercises the Output panel's Console tab
   // via cvm_log() (writes to /Shared/__cvm_console.log; the watcher
-  // surfaces new lines in near-real-time).
-  ...["console.c", "console.r", "cvm_log.h"].map((f) => ({
+  // surfaces new lines in near-real-time). cvm_log.h is mounted as
+  // a system header by cc1.ts, so it isn't bundled as a project
+  // file.
+  ...["console.c", "console.r"].map((f) => ({
     project: "wasm-debug-console",
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-debug-console", f),
