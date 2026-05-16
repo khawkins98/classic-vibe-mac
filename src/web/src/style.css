@@ -1849,8 +1849,122 @@ body.cvm-paused .emulator-canvas {
 .cvm-about-winbox .wb-body,
 .cvm-prefs-winbox .wb-body,
 .cvm-explainer-winbox .wb-body,
-.cvm-asm-winbox .wb-body {
+.cvm-asm-winbox .wb-body,
+.cvm-buildprogress-winbox .wb-body {
   background: var(--paper) !important;
+}
+
+/* Build-progress dialog — Mac OS 8 "File Copy"-style window. The
+   chrome (border, header stripes, paper title field) is shared with
+   the other Mac palettes via .cvm-mac-winbox; only the body layout
+   is unique here. */
+.cvm-buildprogress {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  box-sizing: border-box;
+}
+.cvm-buildprogress__current {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cvm-buildprogress__step {
+  font-weight: bold;
+  font-size: 12px;
+  color: var(--ink);
+}
+.cvm-buildprogress__bar {
+  height: 12px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  overflow: hidden;
+  position: relative;
+}
+.cvm-buildprogress__bar-fill {
+  position: absolute;
+  inset: 0;
+  /* Period-correct barber-pole — same stripe geometry as the loader
+     bar (style.css:399) but animated so the user sees motion while
+     the build is busy. */
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--ink) 0,
+    var(--ink) 4px,
+    var(--platinum-light) 4px,
+    var(--platinum-light) 8px
+  );
+  background-size: 16px 16px;
+  animation: cvm-buildprogress-barber 600ms linear infinite;
+}
+@keyframes cvm-buildprogress-barber {
+  from { background-position: 0 0; }
+  to   { background-position: 16px 0; }
+}
+.cvm-buildprogress__bar--idle .cvm-buildprogress__bar-fill {
+  animation: none;
+  opacity: 0.6;
+}
+.cvm-buildprogress__elapsed {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink);
+  opacity: 0.75;
+}
+.cvm-buildprogress__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cvm-buildprogress__item {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.cvm-buildprogress__item--pending {
+  opacity: 0.45;
+}
+.cvm-buildprogress__item--active .cvm-buildprogress__label {
+  font-weight: bold;
+}
+.cvm-buildprogress__item--error .cvm-buildprogress__marker {
+  font-weight: bold;
+}
+.cvm-buildprogress__marker {
+  text-align: center;
+}
+.cvm-buildprogress__timing {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.7;
+}
+.cvm-buildprogress__message {
+  font-size: 11px;
+  color: var(--ink);
+  padding: 6px 8px;
+  background: var(--platinum-light);
+  border: 1px solid var(--ink);
 }
 /* The Show Assembly palette body is mostly the read-only CM mount,
    which has its own background; tighten the surrounding padding so
