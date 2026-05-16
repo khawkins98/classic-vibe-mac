@@ -274,14 +274,87 @@ function timestampHHMMSS(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+function isAtBottom(): boolean {
+  if (!buildLogEl) return false;
+  return (
+    buildLogEl.scrollTop + buildLogEl.clientHeight >=
+    buildLogEl.scrollHeight - 8
+  );
+}
+function scrollToBottomIfNeeded(wasAtBottom: boolean): void {
+  if (wasAtBottom && buildLogEl) {
+    buildLogEl.scrollTop = buildLogEl.scrollHeight;
+  }
+}
+
 function appendBuildLog(line: string): void {
   if (!buildLogEl) return;
-  const wasAtBottom =
-    buildLogEl.scrollTop + buildLogEl.clientHeight >=
-    buildLogEl.scrollHeight - 8;
-  buildLogEl.textContent += `[${timestampHHMMSS()}] ${line}\n`;
-  if (wasAtBottom) buildLogEl.scrollTop = buildLogEl.scrollHeight;
+  const wasAtBottom = isAtBottom();
+  buildLogEl.append(
+    document.createTextNode(`[${timestampHHMMSS()}] ${line}\n`),
+  );
+  scrollToBottomIfNeeded(wasAtBottom);
 }
+
+/** Append a clickable diagnostic line. Clicking dispatches a
+ *  `cvm:jump-to-source` event the editor listens for (see editor.ts);
+ *  it switches the editor to `file` if needed and moves the cursor
+ *  to `line`. */
+function appendBuildLogDiagnostic(
+  file: string,
+  line: number,
+  column: number,
+  severity: "error" | "warning" | "info",
+  message: string,
+): void {
+  if (!buildLogEl) return;
+  const wasAtBottom = isAtBottom();
+  const ts = document.createTextNode(`[${timestampHHMMSS()}] `);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `cvm-buildlog__diag cvm-buildlog__diag--${severity}`;
+  btn.dataset.cvmJumpFile = file;
+  btn.dataset.cvmJumpLine = String(line);
+  btn.dataset.cvmJumpColumn = String(column);
+  btn.textContent = `${file}:${line}:${column}: ${severity}: ${message}`;
+  buildLogEl.append(ts, btn, document.createTextNode("\n"));
+  scrollToBottomIfNeeded(wasAtBottom);
+}
+
+// Click-to-jump from the build log to the source line. Editor listens
+// for `cvm:jump-to-source` on the window. We dispatch on click; if no
+// editor is mounted (e.g. emulator-only failure), the event no-ops.
+if (buildLogEl) {
+  buildLogEl.addEventListener("click", (e) => {
+    const btn = (e.target as Element).closest<HTMLButtonElement>(
+      "[data-cvm-jump-file]",
+    );
+    if (!btn) return;
+    const file = btn.dataset.cvmJumpFile!;
+    const lineN = Number(btn.dataset.cvmJumpLine ?? "1");
+    const columnN = Number(btn.dataset.cvmJumpColumn ?? "1");
+    window.dispatchEvent(
+      new CustomEvent("cvm:jump-to-source", {
+        detail: { file, line: lineN, column: columnN },
+      }),
+    );
+  });
+}
+
+// Cross-module API: anyone (editor.ts in particular) can post a
+// diagnostic into the build log via this event. Decoupling lets us
+// keep the build log as a UI concern in main.ts without piping a
+// handle into mountPlayground.
+window.addEventListener("cvm:buildlog-diagnostic", ((e: Event) => {
+  const d = (e as CustomEvent<{
+    file: string;
+    line: number;
+    column: number;
+    severity: "error" | "warning" | "info";
+    message: string;
+  }>).detail;
+  appendBuildLogDiagnostic(d.file, d.line, d.column, d.severity, d.message);
+}) as EventListener);
 
 const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]"];
 if (buildLogEl) {
