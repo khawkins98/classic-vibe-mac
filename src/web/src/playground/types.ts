@@ -220,6 +220,19 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVMW",
   },
   {
+    // wasm-cursor — region-driven Cursor Manager demo. Four labelled
+    // quadrants; moving the mouse between them swaps the cursor via
+    // GetCursor + SetCursor. Classic Mac "poll mouse on idle, change
+    // cursor by region" pattern — the OS has no enter/leave events.
+    id: "wasm-cursor",
+    label: "Wasm Cursor",
+    files: ["cursor.c", "cursor.r"],
+    rezFile: "cursor.r",
+    outputName: "WasmCursor.bin",
+    appType: "APPL",
+    appCreator: "CVCR",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display
