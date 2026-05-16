@@ -1808,6 +1808,34 @@ body.cvm-paused .emulator-canvas {
   margin: 1px auto !important;
 }
 
+/* Mac OS 7/8 close box lives on the LEFT of the titlebar — a small
+   white square with a black border, classic since the Lisa. WinBox
+   ships .wb-close on the right inside .wb-control; we absolutely
+   position it to the left edge of the titlebar instead. The other
+   .wb-control entries (.wb-min, .wb-max, .wb-full) stay on the right
+   where WinBox put them — that's the Mac convention for zoom + min. */
+.cvm-mac-winbox .wb-close {
+  position: absolute !important;
+  left: 6px !important;
+  top: 4px !important;
+  width: 12px !important;
+  height: 12px !important;
+  /* Override WinBox's stock X-glyph background image with a Mac-style
+     1-bit white square + thin black border. */
+  background: var(--paper) !important;
+  background-image: none !important;
+  border: 1px solid var(--ink) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 2;
+}
+.cvm-mac-winbox .wb-close:hover {
+  /* Filled-in look on hover, matches the System 7 "about to close"
+     visual cue. */
+  background: var(--ink) !important;
+}
+
 /* Paper background for the text-heavy palettes. */
 .cvm-help-winbox .wb-body,
 .cvm-about-winbox .wb-body,
