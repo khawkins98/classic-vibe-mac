@@ -285,13 +285,44 @@ hls -a : || true
 # image revision drops the item, the build still succeeds and the
 # warning lands in the build log.
 #
-# Initial list (Pass 1 — #221):
-#   ":System Folder:Extensions:Backdrop"
+# Current list (Pass 1 + obvious Pass 2 extensions — #221):
+#   Extensions/Backdrop
 #     Tim Maroney's 1987 vMac mascot painter (RDEV/BkDp, 6 KB).
 #     Splashes "Backdrop … Centram Systems West, Berkeley, CA" on
 #     every boot. Public-domain utility, no consumer in cv-mac.
+#   Extensions/Disinfectant INIT
+#     John Norstad's 1995 anti-virus INIT (5.5 KB). Splashes its
+#     logo briefly on boot. The threats it addressed (WDEF, Code-1,
+#     INIT-29) cannot reach a sandboxed emulator running modern
+#     source; nothing in cv-mac consumes it.
+#   Apple Menu Items/{Disinfectant 3.2, Disk Copy, HyperCard Player,
+#                     Norton Utilities, ResEdit, Tex-Edit}
+#     Aliases (adrp type, ~500-3000 B each) pointing at applications
+#     in the volume root which the existing volume-root cleanup
+#     (lines 256-269 above) deletes. The aliases therefore resolve
+#     to "the original could not be found" — pure broken-affordance
+#     clutter in the Apple menu.
+#
+# Not yet pruned (separate audit work):
+#   - Extensions/Aladdin/ — StuffIt Translators folder. Parent app
+#     not installed, but `hdel` only handles files; recursive
+#     directory deletion needs custom shell logic. Future PR.
+#   - Apple Menu Items/StuffIt Lite™ — same family as the aliases
+#     above but the filename contains a non-ASCII byte (0xAA, MacRoman
+#     ™) that needs careful shell escaping for hfsutils. Future PR.
+#   - Apple Guide / Macintosh Guide / *.Guide Additions in Extensions
+#     (~1.6 MB total) — not load-bearing for cv-mac demos, but
+#     legitimately part of the standard System 7.5.5 user experience.
+#     Removal defensible but not zero-controversy; leaving for the
+#     user's audit call.
 SYSTEM_FOLDER_DELETE=(
   ":System Folder:Extensions:Backdrop"
+  ":System Folder:Apple Menu Items:Disinfectant 3.2"
+  ":System Folder:Apple Menu Items:Disk Copy"
+  ":System Folder:Apple Menu Items:HyperCard Player"
+  ":System Folder:Apple Menu Items:Norton Utilities"
+  ":System Folder:Apple Menu Items:ResEdit"
+  ":System Folder:Apple Menu Items:Tex-Edit"
 )
 
 for path in "${SYSTEM_FOLDER_DELETE[@]}"; do
@@ -301,6 +332,18 @@ for path in "${SYSTEM_FOLDER_DELETE[@]}"; do
     echo "[boot-disk]   skipped (not present): ${path}"
   fi
 done
+
+# Disinfectant INIT lives at a path whose filename starts with a
+# literal 0x01 SOH byte — a classic Mac sort-control hack ("active
+# vampire" trick) to make the file sort above alphabetical neighbours.
+# Bash array elements don't carry that byte through cleanly without
+# inadvertent doubling, so handle it as a one-off call using ANSI-C
+# quoting in-place.
+if hdel $':System Folder:Extensions:\x01Disinfectant INIT' 2>/dev/null; then
+  echo "[boot-disk]   pruned cruft: :System Folder:Extensions:Disinfectant INIT (SOH-prefixed)"
+else
+  echo "[boot-disk]   skipped (not present): :System Folder:Extensions:Disinfectant INIT"
+fi
 
 # Inspect (and report) the System Folder's blessed bit. hattrib without
 # any flags prints the current attributes; our volume should already
