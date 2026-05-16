@@ -112,20 +112,38 @@ every open window, Help opens the help palette.
 
 Under the menubar, four docked windows tile the viewport at first
 load: **Project** (file list + project switcher), **Playground**
-(CodeMirror 6 editor + Build buttons + Show Assembly), **Macintosh**
-(the live emulator), and **Output** (build log + console). Each is
-a real [WinBox](https://nextapps-de.github.io/winbox/) window with
-the Mac OS 8 striped titlebar + paper title field + diagonal grow
-box — fully draggable, resizable, raise-on-click, and
-shade-on-double-click (titlebar collapse). View → Reset window
-layout snaps them back to the tiled grid.
+(CodeMirror 6 editor + Build / Build & Run / Download / Reset
+toolbar), **Macintosh** (the live emulator), and **Output** (build
+log + console). Each is a real
+[WinBox](https://nextapps-de.github.io/winbox/) window with the Mac
+OS 8 striped titlebar + recessed paper title field + diagonal grow
+box + Platinum scrollbars — fully draggable, resizable,
+raise-on-click, and shade-on-double-click (titlebar collapse).
+View → Reset window layout snaps them back to the tiled grid.
+The menubar's right edge carries a `cv-mac <hash>` build stamp
+(click to open About) and the current date.
+
+The Playground toolbar's **Reset** button discards local IDB edits
+and re-fetches every file for the current project from the bundled
+defaults — useful when the sample sources are updated server-side.
+The **Download** button packages the current project as a `.zip` the
+user can re-import via File → Open .zip.
 
 The CodeMirror editor inside Playground (minimalSetup + the C
-language pack) seeds from `src/web/public/sample-projects/` on
-first load and rehydrates from IndexedDB on subsequent loads, so
-edits survive reloads. UI state (open file, cursor position) is
-persisted on a 1s debounce. See
-[`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
+language pack + the search panel) seeds from
+`src/web/public/sample-projects/` on first load and rehydrates from
+IndexedDB on subsequent loads, so edits survive reloads. ⌘F opens
+the search panel; ⌘G / ⇧⌘G walk matches; ⌘⌥F switches to
+find-and-replace. UI state (open file, cursor position) is
+persisted on a 1 s debounce. Build Log entries are clickable —
+click a `file:line:col` diagnostic to jump the editor's cursor
+there. See [`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
+
+Per-build telemetry surfaces as `[build-c] …` lines (per-stage cc1
+/ as / ld / Elf2Mac timings) and a `[cvm-stats] session: N builds,
+Xs spent compiling (avg Yms), Z cache hits (saved Ws)` summary
+after every build, so the in-memory build artefact cache's
+session-level payoff is observable.
 
 ### 7. Build & Run: the full toolchain runs in the tab
 
