@@ -126,6 +126,12 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-multiwin", f),
   })),
+  // wasm-cursor — Cursor Manager / region-driven cursor swap.
+  ...["cursor.c", "cursor.r"].map((f) => ({
+    project: "wasm-cursor",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-cursor", f),
+  })),
   // wasm-wordpad — Mini word processor (#125). Font / Size / Style
   // menus driving a monostyle TextEdit; the next ladder rung after
   // Notepad. The last item in the #125 sprint.

@@ -82,6 +82,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Three windows open at launch, one event loop. Click any back window to raise it (SelectWindow), drag any titlebar to move, close any to dismiss. Each window stores its own pattern index in its refCon and fills itself with a different system pattern. Last close exits.",
   },
+  "wasm-cursor": {
+    emoji: "🖱️",
+    description:
+      "Cursor Manager demo. Four labelled quadrants — moving the mouse between them swaps the cursor via GetCursor + SetCursor (arrow / I-beam / watch / cross-hair). Classic Mac \"poll the mouse on idle, change cursor by region\" pattern since the OS has no enter/leave events.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
