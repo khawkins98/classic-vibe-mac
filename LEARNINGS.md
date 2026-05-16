@@ -1750,6 +1750,43 @@ If you need non-ASCII characters in a Mac-side string, encode them as MacRoman b
 
 **Pattern to remember:** The one-shim-block-in-`Externs.h` approach beats per-file patching because (a) future upstream updates rebase cleanly — your changes are scoped to one file, (b) the audit reviewer reads one diff hunk and understands the entire compatibility story, (c) trivial renames like `SndCallBackUPP` → `SndCallbackUPP` can be done in-place with `perl -i` because the upstream source is otherwise untouched. This generalises: when porting a large vendored codebase across a header generation gap, prefer a thin compatibility layer at the boundary over scattered per-file edits.
 
+### 2026-05-16 — When a shim matches a sysroot symbol's NAME but not its SEMANTICS — the `ToolTrap = 0xA800` trap
+**Context:** Glypha onboarding (#255) defined `ToolTrap` as `0xA800` in `Externs.h`. That value IS a Trap Manager constant — the mask for the Toolbox-trap-number range (Toolbox traps live at 0xA800-0xAFFF). The symbol `ToolTrap` carrying that 0xA800 meaning shows up in some classic MacHeaders period docs. So the shim's spelling and value both have provenance — but it was still wrong.
+
+**Cause:** Universal Headers spell *the same identifier* `ToolTrap` as a member of the `TrapType` enum (= 1, paired with `OSTrap` = 0). It's the **selector** value passed as the second arg of `NGetTrapAddress(trapNum, tType)` — and `TrapType` is `signed char` (SInt8). When Glypha's `Utilities.c:TrapExists` does `NGetTrapAddress(theTrap, ToolTrap)`, our 0xA800 (= 43008) gets silently truncated to 0 — which is `OSTrap`. Every TrapExists() call on a Toolbox trap therefore queried the wrong dispatch table and returned the wrong answer. Broke `CheckEnvirons`'s Gestalt-availability probe and contributed to silent-exit behaviour before `LoadGraphic` NULL even got a turn.
+
+**How it surfaced:** gcc emitted `Externs.h:72:18: warning: overflow in conversion from 'int' to 'TrapType' {aka 'signed char'} changes value from '43008' to '0'`. **The warning is the diagnostic** — it pointed straight at the line. Without it the symptom (silent exit) would have been very hard to attribute.
+
+**Action:** Aliased to the sysroot enum members:
+```c
+#ifndef ToolTrap
+#define ToolTrap kToolboxTrapType
+#endif
+#ifndef OSTrap
+#define OSTrap kOSTrapType
+#endif
+```
+
+Glypha's source compiles unchanged and behaves correctly. Sysroot still uses its own `kToolboxTrapType`/`kOSTrapType` spellings; the shim translates.
+
+**Pattern to remember:** When shimming a CodeWarrior-era symbol for Universal Headers, **check what type the sysroot expects when the symbol is used as an argument** — name-and-value matches aren't enough if the *semantic kind* differs (mask vs selector vs flag vs enum member). The 2026-05-16 LEARNINGS entry on the consolidated-shim block was right about *where* to put compatibility code; this entry refines *what* it should contain: shims for things that flow into typed arguments must respect the destination type, not just the source value's existence.
+
+**Diagnostic heuristic:** if cc1 emits any `[-Woverflow]` warning at a `#define` line in your compatibility shim, treat it as a bug, not a noise warning. The compiler is telling you the value you stored won't fit the slot it'll be loaded into.
+
+### 2026-05-16 — Debug-channel back-from-the-Mac: file in extfs beats trap interception
+**Context:** Implementing the Output panel's Console tab (#104 placeholder) — needed a way for a running 68k Mac app inside BasiliskII to surface log lines to the JS-side IDE chrome in near-real-time.
+
+**Options weighed:**
+1. **Trap interception in BasiliskII.** Patch `_DebugStr` ($A9FF) and `_DrawString` ($A884) inside the WASM emulator to fork copies into a JS-accessible buffer. Most "Mac-native" — would capture *any* code's `DebugStr` calls, including vendored sources. Cost: requires modifying BasiliskII C++ and rebuilding the WASM cores, tracking upstream forever, plus design work for the shared-memory buffer and back-pressure.
+2. **Trap-replacement INIT on the boot disk.** Install a system extension that overrides `_DebugStr` to write to a known low-memory slot the host can poll. Pure Mac OS pattern, but inserting it requires editing the vendored boot disk image. Heavy infrastructure for a debug aid.
+3. **File-based back-channel through the existing extfs.** Mac calls `cvm_log()` → writes to `/Shared/__cvm_console.log` via HOpen/SetFPos/FSWrite. JS-side watcher polls the file every 1s via the existing emulator-worker postMessage channel, ships only the new tail (`fromOffset` → `bytes` + `totalSize`). The same back-channel pattern PixelPad uses for live drawing previews (#125).
+
+**Action:** Shipped option 3 in one PR (#261, ~545 LOC including a 6-click demo, the C library, the watcher, and worker plumbing). End-to-end working in under a day; trade-off is it only sees opt-in `cvm_log()` calls, not arbitrary `DebugStr` invocations in code we didn't write.
+
+**Pattern to remember:** When you need a runtime back-channel from the emulator to the host UI, prefer **reusing the existing extfs / shared-folder plumbing** over patching the emulator. The cost asymmetry is enormous: emulator patches are a maintenance commitment with every upstream rev; a Mac-side library + file-poller is a one-shot drop-in. The trade-off (Mac code must opt in) is usually acceptable for debug/dev tooling, where the relevant code *is* yours to instrument. Save the emulator-patch budget for things that genuinely can't be done any other way (e.g. timing-sensitive cycle counting, breakpoints).
+
+**Incremental-poll contract worth keeping:** `poll_X { fromOffset }` → `data { bytes: Tail, totalSize }` lets the watcher carry a running offset, ship only what's new, AND detect truncation (when `totalSize < lastOffset` the source called something like `cvm_log_reset()` — wipe the UI). This is materially nicer than the all-or-nothing `poll_X` → `data { full }` shape PixelPad uses, and a good template for the next file-based watcher.
+
 ### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
 **Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
 **Finding:** Two distinct header files coexist in the Retro68 SDK:
