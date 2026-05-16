@@ -139,6 +139,13 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-bounce", f),
   })),
+  // wasm-dialog — ModalDialog with EditText (#125). Fills the
+  // "modal dialogs with editable fields" gap.
+  ...["dialog.c", "dialog.r"].map((f) => ({
+    project: "wasm-dialog",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-dialog", f),
+  })),
 ];
 
 
