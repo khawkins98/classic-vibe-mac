@@ -2625,3 +2625,98 @@ body.cvm-paused .emulator-canvas {
   font-style: italic;
   color: var(--ink);
 }
+
+
+/* --- Toolbox Reference WinBox (cv-mac #196 Phase 3 follow-up) -------- */
+/* Pinned-window version of the hover card. Same content shape, but
+   draggable, with clickable See-Also navigation. */
+.cvm-toolbox-ref {
+  padding: 14px 16px 12px;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  height: 100%;
+  overflow: auto;
+}
+.cvm-toolbox-ref__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--shadow);
+  margin-bottom: 8px;
+}
+.cvm-toolbox-ref__name {
+  margin: 0;
+  font-family: var(--font-chrome);
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--ink);
+}
+.cvm-toolbox-ref__include {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--shadow);
+}
+.cvm-toolbox-ref__sig {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+.cvm-toolbox-ref__blurb {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.cvm-toolbox-ref__see-also-heading {
+  margin: 14px 0 4px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  font-weight: bold;
+  font-style: italic;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.cvm-toolbox-ref__see-also {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.cvm-toolbox-ref__see-also li {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.cvm-toolbox-ref__see-also a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.cvm-toolbox-ref__see-also a:hover {
+  background: var(--ink);
+  color: var(--paper);
+  text-decoration: none;
+}
+.cvm-toolbox-ref__see-also-stub {
+  color: var(--shadow);
+  font-style: italic;
+}
+.cvm-toolbox-ref__footer {
+  margin: 12px 0 0;
+  padding-top: 6px;
+  border-top: 1px dotted var(--shadow);
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--shadow);
+}

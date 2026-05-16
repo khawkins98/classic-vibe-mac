@@ -33,6 +33,10 @@ import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
 import { toolboxHoverTooltip } from "./toolbox-tooltip";
+import {
+  openToolboxReference,
+  isToolboxIdentifier,
+} from "./toolbox-reference-window";
 import JSZip from "jszip";
 
 import { SAMPLE_PROJECTS, TOOLCHAIN_VERSION, type SampleProject } from "./types";
@@ -269,6 +273,23 @@ export async function mountPlayground(
   let scheduleAsmCompile: (reason: "edit" | "switch" | "open" | "opt-level") => void =
     () => {};
 
+  // Word-at-position helper used by the ⌘-click → toolbox-reference
+  // handler. CodeMirror gives us a character position; we widen it to
+  // the surrounding C identifier (letters, digits, underscore).
+  function identifierAtPos(view: EditorView, pos: number): string | null {
+    const line = view.state.doc.lineAt(pos);
+    const col = pos - line.from;
+    if (col < 0 || col > line.text.length) return null;
+    const isIdent = (c: string) => /[A-Za-z0-9_]/.test(c);
+    const probe = col === line.text.length ? col - 1 : col;
+    if (probe < 0 || !isIdent(line.text[probe] ?? "")) return null;
+    let from = probe;
+    while (from > 0 && isIdent(line.text[from - 1] ?? "")) from--;
+    let to = probe + 1;
+    while (to < line.text.length && isIdent(line.text[to] ?? "")) to++;
+    return line.text.slice(from, to);
+  }
+
   // HighlightStyle for the playground's main editor (cpp() + rez()).
   // Mirrors the warm earth-tone palette m68kHighlight uses in
   // lang-m68k.ts so the C source and the Show-Assembly pane feel like
@@ -344,6 +365,24 @@ export async function mountPlayground(
       // toolbox-tooltip.ts. Misses (i.e. user variables, locals)
       // are silent so the tooltip doesn't flicker on every word.
       toolboxHoverTooltip,
+      // ⌘-click (Ctrl-click on non-Mac) on a known Toolbox identifier
+      // opens a pinned WinBox reference window. Same data as the
+      // hover tooltip but persistent and with clickable See-Also
+      // navigation. Hover for quick scanning, ⌘-click when you want
+      // to dig in.
+      EditorView.domEventHandlers({
+        click: (event, view) => {
+          if (!(event.metaKey || event.ctrlKey)) return false;
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (pos == null) return false;
+          const word = identifierAtPos(view, pos);
+          if (!word) return false;
+          if (!isToolboxIdentifier(word)) return false;
+          event.preventDefault();
+          openToolboxReference(word);
+          return true;
+        },
+      }),
       keymap.of([
         indentWithTab,
         ...defaultKeymap,
