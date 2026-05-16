@@ -42,6 +42,13 @@ import {
   setAsmStderr,
 } from "./asm-palette";
 import {
+  ICON_BUILD,
+  ICON_BUILDRUN,
+  ICON_DOWNLOAD,
+  ICON_RESET,
+  ICON_SHOWASM,
+} from "./toolbar-icons";
+import {
   openToolboxReference,
   isToolboxIdentifier,
 } from "./toolbox-reference-window";
@@ -1145,41 +1152,42 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         <select id="cvm-pg-project" class="cvm-pg-select"></select>
       </label>
       <!--
-        Iconified build toolbar. Each button has a glyph + label so
-        users have visual + textual affordances. The glyphs are
-        Unicode (no SVG assets); the underlying IDs are unchanged so
-        all the existing JS hooks + Playwright tests continue to find
-        them.
+        Iconified build toolbar. Each button carries a hand-drawn 16x16
+        pixel-art SVG glyph (toolbar-icons.ts) plus a text label so
+        users have visual + textual affordances. SVGs use
+        shape-rendering=crispEdges so the icons read as period 1-bit
+        pixel art rather than smooth modern vector. Button IDs are
+        unchanged so existing JS hooks + Playwright tests still find them.
       -->
       <div class="cvm-pg-toolbar cvm-pg-toolbar--icons" role="group" aria-label="Build controls">
         <button type="button" id="cvm-pg-build"
                 class="cvm-pg-iconbtn cvm-pg-iconbtn--primary"
                 title="Compile the current project to a .bin and download it">
-          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">🔨</span>
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_BUILD}</span>
           <span class="cvm-pg-iconbtn__label">Build</span>
         </button>
         <button type="button" id="cvm-pg-buildrun"
                 class="cvm-pg-iconbtn cvm-pg-iconbtn--primary"
                 title="Compile + hot-load into the running Mac in ~1s">
-          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">▶</span>
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_BUILDRUN}</span>
           <span class="cvm-pg-iconbtn__label">Build &amp; Run</span>
         </button>
         <button type="button" id="cvm-pg-download"
                 class="cvm-pg-iconbtn"
                 title="Download the current project's source files as a .zip">
-          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">💾</span>
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_DOWNLOAD}</span>
           <span class="cvm-pg-iconbtn__label">Download</span>
         </button>
         <button type="button" id="cvm-pg-reset"
                 class="cvm-pg-iconbtn"
                 title="Discard your edits and reload this project from the latest bundled defaults shipped with the page">
-          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">↻</span>
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_RESET}</span>
           <span class="cvm-pg-iconbtn__label">Reset</span>
         </button>
         <button type="button" id="cvm-pg-show-asm"
                 class="cvm-pg-iconbtn"
                 title="Open the m68k assembly view as a draggable palette — compile this .c to assembly in your browser">
-          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">⚙</span>
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_SHOWASM}</span>
           <span class="cvm-pg-iconbtn__label">Show ASM</span>
         </button>
       </div>
