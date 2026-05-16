@@ -167,11 +167,12 @@ variations on a theme.
 | `wasm-patterns/` | `patterns.c` + `.r` | `Pattern` (8x8 bitmap), `FillRect` with custom + system patterns (white/ltGray/gray/dkGray) | 165 |
 | `wasm-bounce/` | `bounce.c` + `.r` | Hand-built offscreen `BitMap` (NewPtr buffer + SetPortBits), `CopyBits` double-buffer, `TickCount`-paced animation | 180 |
 | `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetIText` / `SelIText` | 180 |
+| `wasm-sound/` | `sound.c` + `.r` | `SysBeep(duration)` — the simplest, oldest Sound Manager entry-point | 140 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
-- **Sound Manager** (`SndPlay`) — period-correct audio feedback
+- **`SndPlay` on an `'snd '` resource** — the richer Sound Manager path past SysBeep
 - **Color QuickDraw `NewGWorld`** — same surface as Bounce but using the modern (System 7+) double-buffer API
 
 ### Adding a wasm-shelf sample

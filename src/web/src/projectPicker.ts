@@ -92,6 +92,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "ModalDialog with an editable text field. Click the button → modal opens with a prompt, EditText field, OK + Cancel. OK reads the typed answer with GetIText and draws \"Hello, <name>!\" back to the main window.",
   },
+  "wasm-sound": {
+    emoji: "🔔",
+    description:
+      "Sound Manager SysBeep demo — two buttons play the system alert tone at varying durations (5/10/15/… ticks vs a solid 1-second beep). The oldest, simplest entry-point in the Sound Manager.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {
