@@ -1059,13 +1059,13 @@ function renderShell(persistent: boolean, preservedCount: number): string {
   return `
     <div class="window__body">
       <p class="cvm-pg-intro">
-        Click into the source below and start typing &mdash; this is the
-        real C and Rez code for the app running in the Mac above. Edits
-        save automatically in your browser. Hit <em>Build .bin</em> to
-        compile and download a MacBinary, or <em>Build &amp; Run</em>
-        to reboot the Mac with your changes. Everything compiles in your
-        browser: <code>.c</code> through <code>cc1</code> + <code>as</code>
-        + <code>ld</code>, and any <code>.r</code> through WASM-Rez.
+        The source below is the actual C and Rez code for the app
+        running in the Mac above. Click in, edit, and hit
+        <em>Build &amp; Run</em>; the Mac reboots a second later with
+        your changes. <em>Build .bin</em> just builds and downloads,
+        without rebooting. Edits save to your browser as you type, and
+        compilation happens here in the tab: <code>.c</code> through
+        <code>cc1 + as + ld</code>, any <code>.r</code> through WASM-Rez.
       </p>
       ${banner}
       ${migrationBanner}
@@ -1114,10 +1114,10 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         </button>
       </div>
       <p class="cvm-pg-toolbar-note">
-        <em>Reset</em> pulls down the latest bundled version of every
-        file in this project, discarding your in-browser edits. Useful
-        when the sample sources have been updated server-side and you
-        want the new defaults.
+        <em>Reset</em> throws away your edits and reloads this project
+        from the original bundled source. Useful when the sample's
+        been updated and you want the new version, or you've made a
+        mess and want to start over.
       </p>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
