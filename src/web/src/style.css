@@ -115,6 +115,21 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
 }
+/* When several right-aligned items follow one another (e.g. build
+   version + clock), only the first should consume the auto margin;
+   later siblings sit flush next to it with a small fixed gap. */
+.menubar__item--right + .menubar__item--right {
+  margin-left: 10px;
+}
+/* The build-version stamp sits to the left of the clock and acts as
+   a discoverable About shortcut. Slightly muted so it doesn't compete
+   with the clock for visual weight. */
+#cvm-menubar-version {
+  color: var(--shadow);
+}
+#cvm-menubar-version:hover {
+  color: var(--paper);
+}
 
 /* Interactive menubar items behave like buttons (Help is the first). */
 .menubar__item--interactive {
