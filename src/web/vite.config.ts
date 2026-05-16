@@ -334,15 +334,27 @@ export default defineConfig({
         // Split heavyweight third-party deps into their own chunks so the
         // page-shell remains small and the editor + zip code can be cached
         // independently of the chrome.
-        manualChunks: {
-          "cvm-codemirror": [
-            "@codemirror/state",
-            "@codemirror/view",
-            "@codemirror/commands",
-            "@codemirror/language",
-            "@codemirror/lang-cpp",
-          ],
-          "cvm-jszip": ["jszip"],
+        //
+        // Function form (not the {chunk: [modules]} object form) because
+        // Vite 6+ removed the object convenience and calls manualChunks
+        // as a function only — see https://vite.dev/guide/migration.html.
+        // The function form has always worked in Vite 5 too, so this is
+        // a forward-compatible no-behaviour-change conversion (#107
+        // unblocker for the dependabot major-Vite bump).
+        manualChunks: (id) => {
+          if (
+            id.includes("/@codemirror/state/") ||
+            id.includes("/@codemirror/view/") ||
+            id.includes("/@codemirror/commands/") ||
+            id.includes("/@codemirror/language/") ||
+            id.includes("/@codemirror/lang-cpp/")
+          ) {
+            return "cvm-codemirror";
+          }
+          if (id.includes("/jszip/")) {
+            return "cvm-jszip";
+          }
+          return undefined;
         },
       },
     },
