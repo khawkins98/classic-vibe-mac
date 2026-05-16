@@ -146,6 +146,13 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-dialog", f),
   })),
+  // wasm-sound — Sound Manager SysBeep demo (#125). Fills the
+  // Sound Manager gap with the simplest, always-available trap.
+  ...["sound.c", "sound.r"].map((f) => ({
+    project: "wasm-sound",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-sound", f),
+  })),
 ];
 
 
