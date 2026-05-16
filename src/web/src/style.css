@@ -776,44 +776,6 @@ body.cvm-paused .emulator-canvas {
   white-space: nowrap;
 }
 
-/* Optimization-level picker in the icon toolbar (cv-mac #100 Phase E).
-   Lives at the far right of the toolbar so it doesn't crowd the main
-   build buttons. Row layout matches the slimmed icon-strip toolbar
-   (#218) — label sits to the left of the select rather than above. */
-.cvm-pg-opt {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  padding: 0 4px;
-  cursor: pointer;
-  user-select: none;
-}
-.cvm-pg-opt__label {
-  font-family: var(--font-chrome);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: var(--shadow);
-  text-transform: uppercase;
-}
-.cvm-pg-opt__select {
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  background: var(--paper);
-  border: 1px solid var(--ink);
-  box-shadow:
-    inset 1px 1px 0 0 var(--shadow),
-    inset -1px -1px 0 0 var(--highlight);
-  padding: 2px 6px;
-  cursor: pointer;
-  min-width: 110px;
-}
-.cvm-pg-opt__select:focus-visible {
-  outline: 2px solid var(--selection);
-  outline-offset: 1px;
-}
-
 /* Hide the editor's project dropdown in IDE layout — the files panel
    owns project switching now. The element stays in the DOM because
    editor.ts queries it by id and Playwright tests reference it.
@@ -835,10 +797,9 @@ body.cvm-paused .emulator-canvas {
 }
 
 .cvm-pg-field__label {
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--shadow);
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--ink);
 }
 
 /*
@@ -1480,10 +1441,9 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-files__project-label {
   font-family: var(--font-chrome);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: var(--shadow);
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--ink);
 }
 .cvm-files__select {
   font-family: var(--font-chrome);
@@ -1499,10 +1459,9 @@ body.cvm-paused .emulator-canvas {
 .cvm-files__section {
   padding: 10px 12px 4px;
   font-family: var(--font-chrome);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  color: var(--shadow);
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--ink);
 }
 
 .cvm-files__footer {
@@ -2630,8 +2589,6 @@ body.cvm-paused .emulator-canvas {
   font-weight: bold;
   font-style: italic;
   color: var(--ink);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 .cvm-toolbox-ref__see-also {
   margin: 0 0 8px;
