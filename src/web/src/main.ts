@@ -243,7 +243,7 @@ window.addEventListener("cvm:buildlog-diagnostic", ((e: Event) => {
   appendBuildLogDiagnostic(d.file, d.line, d.column, d.severity, d.message);
 }) as EventListener);
 
-const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]", "[cvm-stats]"];
+const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]", "[cvm-stats]", "[cvm-fetch]"];
 if (buildLogEl) {
   // Mirror our own identity stamp into the log immediately.
   appendBuildLog(
@@ -318,6 +318,52 @@ if (outputClearBtn) {
     if (!active) return;
     const pre = active.querySelector<HTMLPreElement>("pre");
     if (pre) pre.textContent = "";
+  });
+}
+
+// Copy the active output pane to the clipboard. We grab the visible
+// stats banner (if present) plus the <pre> content — diagnostic buttons
+// inside the pre flatten to their textContent, so warnings/errors come
+// across as the same "file:line:col: warning: msg" lines you see on screen.
+const outputCopyBtn = document.getElementById("cvm-output-copy") as
+  | HTMLButtonElement
+  | null;
+if (outputCopyBtn) {
+  outputCopyBtn.addEventListener("click", async () => {
+    const active = document.querySelector<HTMLDivElement>(
+      ".cvm-output__pane--active",
+    );
+    if (!active) return;
+    const parts: string[] = [];
+    const statsBar = active.querySelector<HTMLDivElement>(
+      ".cvm-output__statsbar",
+    );
+    if (statsBar && !statsBar.hidden && statsBar.textContent) {
+      parts.push(statsBar.textContent.trim());
+    }
+    const pre = active.querySelector<HTMLPreElement>("pre");
+    if (pre && pre.textContent) parts.push(pre.textContent);
+    const text = parts.join("\n").trimEnd();
+    const flash = (label: string) => {
+      const orig = outputCopyBtn.textContent ?? "Copy";
+      outputCopyBtn.textContent = label;
+      outputCopyBtn.disabled = true;
+      window.setTimeout(() => {
+        outputCopyBtn.textContent = orig;
+        outputCopyBtn.disabled = false;
+      }, 1500);
+    };
+    if (!text) {
+      flash("(empty)");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text + "\n");
+      flash("Copied!");
+    } catch (err) {
+      console.warn("[cvm] clipboard copy failed:", err);
+      flash("Copy failed");
+    }
   });
 }
 
