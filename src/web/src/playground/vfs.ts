@@ -38,6 +38,7 @@
 
 import { readFile } from "./persistence";
 import type { Vfs } from "./preprocessor";
+import { timeFetch } from "./fetchStats";
 
 /**
  * The set of files we ship under public/wasm-rez/RIncludes/. We keep this
@@ -96,19 +97,21 @@ export function createVfs(baseUrl: string, _projectId: string): CachedVfs {
     //    "p:" — so the two namespaces never collide. (See header comment:
     //    project-file overrides of bundled headers are intentionally not
     //    supported today.)
-    await Promise.all(
-      BUNDLED_RINCLUDES.map(async (name) => {
-        const key = `r:${name}`;
-        if (cache.has(key)) return;
-        try {
-          const res = await fetch(`${baseUrl}wasm-rez/RIncludes/${name}`);
-          if (!res.ok) return;
-          cache.set(key, await res.text());
-        } catch {
-          // Network failure → cache miss → preprocessor error. The
-          // playground UI surfaces it.
-        }
-      }),
+    await timeFetch("rincludes", () =>
+      Promise.all(
+        BUNDLED_RINCLUDES.map(async (name) => {
+          const key = `r:${name}`;
+          if (cache.has(key)) return;
+          try {
+            const res = await fetch(`${baseUrl}wasm-rez/RIncludes/${name}`);
+            if (!res.ok) return;
+            cache.set(key, await res.text());
+          } catch {
+            // Network failure → cache miss → preprocessor error. The
+            // playground UI surfaces it.
+          }
+        }),
+      ),
     );
     // 2. Project files from IDB. Anyone of them might be #include'd by
     //    the top-level .r (cross-file edits). Empty/missing files just

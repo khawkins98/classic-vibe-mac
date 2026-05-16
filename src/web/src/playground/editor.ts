@@ -73,6 +73,7 @@ import {
 import { preprocess } from "./preprocessor";
 import { createVfs } from "./vfs";
 import { compile } from "./rez";
+import { consumeFetchMs } from "./fetchStats";
 import {
   spliceResourceFork,
   triggerDownload,
@@ -1693,10 +1694,17 @@ const sessionStats = {
   cacheHits: 0,      // builds short-circuited by cBuildCache
   totalCompileMs: 0, // wall-time of actual compileToBin calls (misses only)
   totalSavedMs: 0,   // cumulative ms skipped via cache hits
+  totalFetchMs: 0,   // cumulative ms in sysroot/tool/RIncludes network fetches
 };
 
 function recordBuild(opts: { cacheHit: boolean; ms: number }): void {
   sessionStats.builds += 1;
+  // Drain the fetch accumulator regardless of cache hit — even cache
+  // hits may have paid first-touch sysroot/tool fetches that we want
+  // to attribute correctly. `opts.ms` is wall-time of the build call;
+  // fetch time is *inside* it for a cold session, so we report fetch
+  // time alongside compile time rather than double-counting.
+  sessionStats.totalFetchMs += consumeFetchMs();
   if (opts.cacheHit) {
     sessionStats.cacheHits += 1;
     sessionStats.totalSavedMs += opts.ms;
@@ -1706,6 +1714,7 @@ function recordBuild(opts: { cacheHit: boolean; ms: number }): void {
   // Compact summary — fits on one console line.
   const totalSeconds = (sessionStats.totalCompileMs / 1000).toFixed(1);
   const savedSeconds = (sessionStats.totalSavedMs / 1000).toFixed(1);
+  const fetchSeconds = (sessionStats.totalFetchMs / 1000).toFixed(1);
   const avgMs =
     sessionStats.builds - sessionStats.cacheHits > 0
       ? Math.round(
@@ -1716,7 +1725,7 @@ function recordBuild(opts: { cacheHit: boolean; ms: number }): void {
   console.info(
     `[cvm-stats] session: ${sessionStats.builds} build${
       sessionStats.builds === 1 ? "" : "s"
-    }, ${totalSeconds}s spent compiling (avg ${avgMs}ms), ${
+    }, ${totalSeconds}s compiling (avg ${avgMs}ms), ${fetchSeconds}s fetching resources, ${
       sessionStats.cacheHits
     } cache hit${sessionStats.cacheHits === 1 ? "" : "s"} (saved ${savedSeconds}s).`,
   );

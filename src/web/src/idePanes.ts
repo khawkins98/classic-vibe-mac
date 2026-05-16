@@ -145,6 +145,8 @@ function outputHtml(): string {
                 data-pane="console"
                 aria-selected="false">Console</button>
         <span class="cvm-output__tabbar-spacer"></span>
+        <button type="button" class="cvm-output__btn" id="cvm-output-copy"
+                title="Copy the current tab's contents to the clipboard">Copy</button>
         <button type="button" class="cvm-output__btn" id="cvm-output-clear"
                 title="Clear the current tab">Clear</button>
       </div>
