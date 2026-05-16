@@ -908,10 +908,6 @@ function renderShell(persistent: boolean, preservedCount: number): string {
        </p>`
     : "";
   return `
-    <header class="window__titlebar">
-      <span class="window__close" aria-hidden="true"></span>
-      <h2 class="window__title" id="title-playground">Playground</h2>
-    </header>
     <div class="window__body">
       <p class="cvm-pg-intro">
         Click into the source below and start typing &mdash; this is the
