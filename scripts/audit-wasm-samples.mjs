@@ -130,8 +130,6 @@ async function compileProject(projectDir) {
   );
 
   const objects = [];
-  let cc1Stderr = "";
-  let asStderr = "";
 
   // Stage 1+2 per .c source
   for (const cFile of cSources) {
@@ -151,9 +149,11 @@ async function compileProject(projectDir) {
       `/tmp/${cFile}`,
       "-o", `/tmp/${baseNoExt}.s`,
     ]);
-    cc1Stderr = cc1.stderr.join("\n");
     if (cc1Rc !== 0) {
-      const errLine = cc1.stderr.find((l) => /error/i.test(l)) ?? cc1.stderr[0] ?? "";
+      const errLine =
+        cc1.stderr.find((l) => /error/i.test(l)) ??
+        cc1.stderr[0] ??
+        "compilation failed (no error message)";
       return { ok: false, stage: "cc1", file: cFile, reason: errLine };
     }
     const asmBytes = cc1.Module.FS.readFile(`/tmp/${baseNoExt}.s`);
@@ -166,14 +166,16 @@ async function compileProject(projectDir) {
       `/tmp/${baseNoExt}.s`,
       "-o", `/tmp/${baseNoExt}.o`,
     ]);
-    asStderr = as.stderr.join("\n");
     if (asRc !== 0) {
-      return { ok: false, stage: "as", file: cFile, reason: as.stderr[0] ?? "" };
+      return {
+        ok: false,
+        stage: "as",
+        file: cFile,
+        reason: as.stderr[0] ?? "assembly failed (no error message)",
+      };
     }
     objects.push({ name: `${baseNoExt}.o`, bytes: as.Module.FS.readFile(`/tmp/${baseNoExt}.o`) });
   }
-  void cc1Stderr;
-  void asStderr;
 
   // Stage 3: ld
   const ld = await loadTool("ld.mjs", "libs");
