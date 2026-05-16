@@ -21,7 +21,15 @@ today.
 
 ## Live at
 
-**https://khawkins98.github.io/classic-vibe-mac/**
+**https://khawkins98.github.io/classic-vibe-mac/** — the full
+playground: System 7.5.5 boots, 21 in-browser-buildable wasm
+samples, edit-and-rebuild loop running.
+
+Toolchain-only proof of life: **https://khawkins98.github.io/wasm-retro-cc/**
+— compile a Toolbox `hello.c` straight through the four wasm tools
+without booting an emulator. Useful when evaluating
+[`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc) for
+your own non-cv-mac use.
 
 ## Reading paths
 
