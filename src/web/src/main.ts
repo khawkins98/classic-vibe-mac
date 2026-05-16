@@ -18,6 +18,10 @@ import {
   TOOLCHAIN_VERSION,
   SAMPLE_PROJECTS,
 } from "./playground/types";
+import {
+  writeFile as persistWriteFile,
+  writeUiState as persistWriteUiState,
+} from "./playground/persistence";
 
 // Identity stamp printed on every page load. Survives in DevTools across
 // reloads/navigation, so we can tell at a glance which deploy a user's
@@ -480,25 +484,116 @@ let lastBootSpec:
   | { kind: "inMemory"; name: string; bytes: Uint8Array }
   | null = null;
 
+// ── Cross-tab handoff (wasm-retro-cc → cv-mac) ────────────────────────
+//
+// The wasm-retro-cc Pages demo's "Run in classic-vibe-mac" button packs
+// the user's C source into the URL fragment as
+//   #cvm-import-source=<base64url-encoded UTF-8>
+// We pick it up BEFORE the playground mounts and write it straight into
+// IDB as wasm-hello/hello.c (closest analogue — single-file C, no .r
+// needed). The editor's normal startup read then pulls our imported
+// source as if the user had typed it themselves, no special reload
+// path needed. Fragment is cleared after the write so a page refresh
+// doesn't re-overwrite the user's subsequent edits.
+//
+// Fragment (not query) is intentional on the demo side: GitHub Pages
+// preserves it verbatim and the source never reaches a server.
+const IMPORT_FRAGMENT_PREFIX = "cvm-import-source=";
+function decodeBase64Url(s: string): string | null {
+  try {
+    let b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4 !== 0) b64 += "=";
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+async function consumeImportSourceFragment(): Promise<boolean> {
+  const frag = location.hash.replace(/^#/, "");
+  if (!frag.startsWith(IMPORT_FRAGMENT_PREFIX)) return false;
+  const encoded = frag.slice(IMPORT_FRAGMENT_PREFIX.length);
+  const source = decodeBase64Url(encoded);
+  if (source === null) {
+    console.warn("[cvm] cvm-import-source fragment failed to decode; ignoring");
+    return false;
+  }
+  // 1 MB hard cap. Pure hygiene — a single .c file at the cap is
+  // already absurd; anything larger is almost certainly a paste error.
+  if (source.length > 1_000_000) {
+    console.warn(
+      `[cvm] cvm-import-source fragment too large (${source.length} bytes); ignoring`,
+    );
+    return false;
+  }
+  // Pin the project dropdown to wasm-hello at the DOM level so the
+  // playground's first read uses our imported file (not whatever the
+  // dropdown happened to remember from a previous tab). Safe to do
+  // before mountPlayground runs — the dropdown's `select` element is
+  // in the static HTML at the top of this file.
+  try {
+    await persistWriteFile("wasm-hello", "hello.c", source);
+    // Mark the IDB as already at the current bundleVersion so the
+    // playground's initPersistence smart-migration path doesn't
+    // immediately overwrite our just-written file with the bundled
+    // hello.c. (On a fresh tab this would otherwise fire because the
+    // "bundleVersion" ui-state key starts unset → smart-migrate runs →
+    // sees no per-file seedHash → silently refreshes back to bundled.)
+    await persistWriteUiState("bundleVersion", BUNDLE_VERSION);
+  } catch (e) {
+    console.warn("[cvm] cvm-import-source IDB write failed:", e);
+    return false;
+  }
+  // Clear the fragment so a reload doesn't re-trigger the handoff and
+  // stomp the user's subsequent edits.
+  try {
+    history.replaceState(null, "", location.pathname + location.search);
+  } catch {
+    /* best effort */
+  }
+  console.info(
+    `[cvm] imported ${source.length}-byte source from wasm-retro-cc into wasm-hello/hello.c`,
+  );
+  return true;
+}
+
+// Run the import BEFORE mountPlayground so the editor's initial read
+// from IDB picks up our writes. The async work is small (one IDB put)
+// — typically <50 ms on a warm IDB. mountPlayground waits on this
+// promise so the editor's first paint shows the imported content.
+const importReady: Promise<boolean> = consumeImportSourceFragment();
+
 if (playgroundEl) {
   // Hot-load callback: hands the patched HFS image to the loader, which
   // tears down the worker, spawns a fresh one with the new disk in the
   // secondary slot, and resolves once the second boot is complete.
-  void mountPlayground(
-    playgroundEl,
-    import.meta.env.BASE_URL,
-    emulatorHandle
-      ? async ({ bytes, volumeName }) => {
-          const spec = {
-            kind: "inMemory" as const,
-            name: volumeName,
-            bytes,
-          };
-          lastBootSpec = spec;
-          await emulatorHandle!.reboot(spec);
-        }
-      : undefined,
-  );
+  void importReady.then((imported) => {
+    if (imported) {
+      // Pin the dropdown to wasm-hello so the editor mounts that
+      // project — regardless of which project the dropdown last
+      // remembered. Setting .value before mountPlayground runs is
+      // enough; the editor reads activeProjectId() during its init.
+      const sel = getProjectDropdown();
+      if (sel) sel.value = "wasm-hello";
+    }
+    return mountPlayground(
+      playgroundEl,
+      import.meta.env.BASE_URL,
+      emulatorHandle
+        ? async ({ bytes, volumeName }) => {
+            const spec = {
+              kind: "inMemory" as const,
+              name: volumeName,
+              bytes,
+            };
+            lastBootSpec = spec;
+            await emulatorHandle!.reboot(spec);
+          }
+        : undefined,
+    );
+  });
 }
 
 // ── Files panel: project dropdown + file list (cv-mac #104) ────────────────
