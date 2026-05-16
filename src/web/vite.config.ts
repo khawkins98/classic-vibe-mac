@@ -117,6 +117,15 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-clock", f),
   })),
+  // wasm-multiwin — three windows, one event loop. Every other sample
+  // on the shelf is single-window; this one demonstrates the
+  // front-window dispatch model (SelectWindow on back-window clicks,
+  // refCon-stashed per-window state, last-close exits).
+  ...["multiwin.c", "multiwin.r"].map((f) => ({
+    project: "wasm-multiwin",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-multiwin", f),
+  })),
   // wasm-wordpad — Mini word processor (#125). Font / Size / Style
   // menus driving a monostyle TextEdit; the next ladder rung after
   // Notepad. The last item in the #125 sprint.
