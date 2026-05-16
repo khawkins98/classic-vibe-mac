@@ -23,6 +23,7 @@
  * emits via `-o <file>.s`.
  */
 import type { Diagnostic } from "./preprocessor";
+import { timeFetch } from "./fetchStats";
 
 interface Cc1Module {
   FS: {
@@ -447,20 +448,22 @@ async function fetchSysrootBlob(
   binPath: string,
   indexPath: string,
 ): Promise<{ blob: Uint8Array; index: SysrootIndexEntry[] }> {
-  const [blobBuf, indexText] = await Promise.all([
-    fetch(`${baseUrl}wasm-cc1/${binPath}`).then((r) => {
-      if (!r.ok) throw new Error(`${binPath}: HTTP ${r.status}`);
-      return r.arrayBuffer();
-    }),
-    fetch(`${baseUrl}wasm-cc1/${indexPath}`).then((r) => {
-      if (!r.ok) throw new Error(`${indexPath}: HTTP ${r.status}`);
-      return r.text();
-    }),
-  ]);
-  return {
-    blob: new Uint8Array(blobBuf),
-    index: JSON.parse(indexText) as SysrootIndexEntry[],
-  };
+  return timeFetch(`sysroot:${binPath}`, async () => {
+    const [blobBuf, indexText] = await Promise.all([
+      fetch(`${baseUrl}wasm-cc1/${binPath}`).then((r) => {
+        if (!r.ok) throw new Error(`${binPath}: HTTP ${r.status}`);
+        return r.arrayBuffer();
+      }),
+      fetch(`${baseUrl}wasm-cc1/${indexPath}`).then((r) => {
+        if (!r.ok) throw new Error(`${indexPath}: HTTP ${r.status}`);
+        return r.text();
+      }),
+    ]);
+    return {
+      blob: new Uint8Array(blobBuf),
+      index: JSON.parse(indexText) as SysrootIndexEntry[],
+    };
+  });
 }
 
 function loadHeadersBlob(baseUrl: string) {
@@ -485,7 +488,12 @@ async function loadToolModule(
   mjsName: string,
   mount: "none" | "headers" | "libs",
 ): Promise<ToolHandle> {
-  const factoryMod = await import(/* @vite-ignore */ `${baseUrl}wasm-cc1/${mjsName}`);
+  // The dynamic import resolves the tool's .mjs glue + its sibling
+  // .wasm — both round-trips count as network/resource time, not
+  // compile time.
+  const factoryMod = await timeFetch(`tool:${mjsName}`, () =>
+    import(/* @vite-ignore */ `${baseUrl}wasm-cc1/${mjsName}`),
+  );
   const factory = factoryMod.default as Cc1Factory;
   if (typeof factory !== "function") {
     throw new Error(
