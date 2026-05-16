@@ -99,10 +99,32 @@ const HELP_HTML = /* html */ `
 
   <h3>Save / share your work</h3>
   <p>
-    <em>Download .zip</em> packages your current project's files for
-    offline editing or sharing. <em>Open project… → Open .zip…</em>
-    accepts a zip back — overwrites the matching project's files in
-    your browser. The two round-trip cleanly.
+    <em>Download .zip</em> on the Playground toolbar packages your
+    current project's files for offline editing or sharing. <em>Open
+    project… → Open .zip…</em> accepts a zip back — overwrites the
+    matching project's files in your browser. The two round-trip
+    cleanly.
+  </p>
+  <p>
+    <em>Reset</em> on the Playground toolbar discards your in-browser
+    edits to the current project and re-fetches every file from the
+    bundled defaults. Useful when the sample sources have been updated
+    server-side and you want the new defaults. Other projects' edits
+    are kept.
+  </p>
+
+  <h3>Build feedback</h3>
+  <p>
+    The Output panel shows per-build timings as <code>[build-c]</code>
+    lines plus a <code>[cvm-stats]</code> session summary so you can
+    see the in-memory build cache paying off over a long debug session.
+    Compile errors land in the same panel as clickable
+    <em>file:line:col</em> entries — clicking one jumps the editor's
+    cursor to that source location.
+  </p>
+  <p>
+    The right edge of the menubar shows the running build hash
+    (<code>cv-mac &lt;hash&gt;</code>). Click it to open the About box.
   </p>
 
   <h3>Keyboard shortcuts</h3>
@@ -130,6 +152,11 @@ const HELP_HTML = /* html */ `
       <tr><td><kbd>⌘S</kbd></td><td>File → Download .zip</td></tr>
       <tr><td><kbd>⌘,</kbd></td><td>Edit → Preferences…</td></tr>
       <tr><td><kbd>⌘?</kbd></td><td>Help → classic-vibe-mac Help</td></tr>
+      <tr><th colspan="2">Editor (when typing in the source pane)</th></tr>
+      <tr><td><kbd>⌘F</kbd></td><td>Find</td></tr>
+      <tr><td><kbd>⌘G</kbd> · <kbd>⇧⌘G</kbd></td><td>Next / previous match</td></tr>
+      <tr><td><kbd>⌘⌥F</kbd></td><td>Find &amp; replace</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close the search panel</td></tr>
       <tr><th colspan="2">Windows</th></tr>
       <tr><td>double-click titlebar</td>
           <td>Shade (collapse to titlebar) / unshade</td></tr>
