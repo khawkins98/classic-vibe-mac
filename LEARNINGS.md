@@ -166,21 +166,26 @@ multi-`.r` "Hello, World!" with menus. Then one with a status bar.
 We almost did that, then pivoted on a review-pass observation: a
 sample shelf is most valuable when each entry picks a *distinct
 Toolbox surface*, not when each entry adds another feature to the
-same surface. The wasm-shelf is now nine entries (textedit / notepad /
-calculator / scribble / scrollwin added 2026-05-16) and each one
-exists because it exercises something nothing else does:
+same surface. The wasm-shelf grew from 4 → 13 entries on 2026-05-16
+(textedit / notepad / calculator / scribble / scrollwin / patterns /
+bounce / dialog / sound added) and each one exists because it
+exercises something nothing else does:
 
 - `wasm-textedit` — TextEdit handle + edit-loop primitives
 - `wasm-notepad` — MBAR + MenuSelect + system scrap (Cut/Copy/Paste)
 - `wasm-calculator` — hand-drawn buttons + PtInRect hit-testing
 - `wasm-scribble` — StillDown / GetMouse / LineTo (the IM ch. 1 loop)
 - `wasm-scrollwin` — NewControl + TrackControl with live actionProc
+- `wasm-patterns` — 8x8 Pattern bitmaps + FillRect + system patterns
+- `wasm-bounce` — offscreen BitMap + CopyBits double-buffer
+- `wasm-dialog` — DLOG + DITL ModalDialog with editable text field
+- `wasm-sound` — SysBeep — Sound Manager's simplest entry-point
 
 A second-order benefit: when the shelf is a coverage matrix, *gaps*
-become first-class artefacts. `src/app/README.md` now ships a "Coverage
-gaps worth filling next" list (Bitmaps / CopyBits, ModalDialog with
-editable fields, StandardGetFile, Sound Manager). The next contributor
-doesn't have to invent a sample idea — they pick a row.
+become first-class artefacts. `src/app/README.md` ships a "Coverage
+gaps worth filling next" list — every PR that ships a sample retires
+a gap row and may surface a deeper one. The next contributor doesn't
+have to invent a sample idea; they pick a row.
 
 **Rule:** when you're sizing the Nth sample app in a learning shelf,
 ask "what API surface does this teach that the existing N-1 don't?"
@@ -188,13 +193,15 @@ If the honest answer is "more of the same surface, just elaborated",
 the right move is either (a) extend an existing sample with the
 elaboration, or (b) skip the sample and pick something on the gap list.
 
-The same review surfaced a corollary: ~320 lines of boilerplate
-(Toolbox init + standard inGoAway / inDrag arms + drag-bounds rect)
-duplicate across the nine samples. The fix is a `wasm-common.h`
-helper, but that's *only* worth pulling once the shelf reads as a
-coverage matrix — otherwise factoring out boilerplate from
-arbitrarily-shaped samples just hides the variation that does exist.
-Shelf first, shared header second.
+The same review surfaced a corollary: at the 9-sample mark there were
+~320 lines of duplicated boilerplate (Toolbox init + standard
+inGoAway / inDrag arms + drag-bounds rect) across the shelf. By the
+13-sample mark that count is closer to 450 lines, and the case for a
+`wasm-common.h` helper is correspondingly stronger — but the helper
+is *only* worth pulling once the shelf reads as a coverage matrix.
+Otherwise factoring out boilerplate from arbitrarily-shaped samples
+just hides the variation that does exist. Shelf first, shared header
+second.
 
 ---
 
