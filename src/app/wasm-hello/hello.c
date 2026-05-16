@@ -48,7 +48,11 @@ QDGlobals qd;
 /* "Hello, World!" as a Pascal string: byte 0 = length (13), then chars.
  * Written out as a byte array (not GCC's "\pHello" extension) so the
  * source is portable to any classic Mac C compiler — including PCC,
- * for any future side-by-side comparison work. */
+ * for any future side-by-side comparison work.
+ *
+ * ← try changing this! Rewrite the bytes (and update the leading
+ * length byte to match) and Build & Run — your text will appear on
+ * the Mac in ~1 second. */
 static const unsigned char kHelloStr[] = {
     13, 'H', 'e', 'l', 'l', 'o', ',', ' ', 'W', 'o', 'r', 'l', 'd', '!'
 };
