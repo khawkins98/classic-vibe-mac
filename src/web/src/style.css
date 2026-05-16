@@ -1838,10 +1838,13 @@ body.cvm-paused .emulator-canvas {
     3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
 }
 .cvm-mac-winbox .wb-header {
+  /* Tighter Mac OS 8 pinstripes: 1px ink + 2px paper instead of
+     the old 1+1, so a 20px header carries ~6 stripes (Mac OS 8
+     standard) rather than ~10 (more Mac OS 7 / System 6 look). */
   background-image: repeating-linear-gradient(
     to bottom,
     var(--ink) 0, var(--ink) 1px,
-    var(--paper) 1px, var(--paper) 2px
+    var(--paper) 1px, var(--paper) 3px
   ) !important;
   background-color: transparent !important;
   border-bottom: 1px solid var(--ink) !important;
@@ -1850,12 +1853,21 @@ body.cvm-paused .emulator-canvas {
 .cvm-mac-winbox .wb-title {
   background: var(--paper) !important;
   color: var(--ink) !important;
-  padding: 0 8px !important;
+  /* Hard 1px ink border defines the title field as a recessed
+     paper inset against the striped chrome — sharper Mac OS 8
+     "label" look than the borderless white pill we had before. */
+  border: 1px solid var(--ink) !important;
+  padding: 0 10px !important;
   font-family: var(--font-chrome) !important;
   font-size: 12px !important;
-  line-height: 18px !important;
-  height: 18px !important;
+  line-height: 14px !important;
+  height: 16px !important;
   margin: 1px auto !important;
+  /* Width-shrink so the title sits flush around its text instead
+     of stretching across the full header width — classic Mac
+     pattern, lets the stripes show on either side. */
+  width: max-content !important;
+  max-width: calc(100% - 60px) !important;
 }
 
 /* Mac OS 7/8 close box lives on the LEFT of the titlebar — a small
