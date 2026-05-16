@@ -95,7 +95,7 @@ resource 'DITL' (128) {
             "resource file shipped alongside this app. The asset is "
             "generated offline by build-icon-gallery-rsrc.mjs and "
             "spliced onto the disk by the cv-mac build pipeline. "
-            "★★★★★★ tier of the cv-mac shelf."
+            "6-star tier of the cv-mac shelf."
         };
     }
 };
