@@ -97,6 +97,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Sound Manager SysBeep demo — two buttons play the system alert tone at varying durations (5/10/15/… ticks vs a solid 1-second beep). The oldest, simplest entry-point in the Sound Manager.",
   },
+  "wasm-color": {
+    emoji: "🌈",
+    description:
+      "Color QuickDraw demo: the canonical 1990 Macintosh II 6-colour palette painted as labelled stripes (red, yellow, green, cyan, blue, magenta). RGBColor + RGBForeColor + PaintRect. On a 1-bit display the colours quantise to black/white — Color QuickDraw's documented degradation path.",
+  },
 };
 
 function entryFor(p: SampleProject): PickerEntry {

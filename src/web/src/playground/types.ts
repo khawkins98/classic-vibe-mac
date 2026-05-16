@@ -258,6 +258,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVSO",
   },
+  {
+    // wasm-color — Color QuickDraw RGBForeColor demo (cv-mac #125).
+    // Draws the canonical 1990 Macintosh II 6-colour palette as a
+    // horizontal stripe gallery. RGBColor + RGBForeColor + PaintRect.
+    // On a 1-bit display the colours quantise to black/white per the
+    // documented Color QuickDraw degradation path.
+    id: "wasm-color",
+    label: "Wasm Color",
+    files: ["color.c", "color.r"],
+    rezFile: "color.r",
+    outputName: "WasmColor.bin",
+    appType: "APPL",
+    appCreator: "CVCR",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
