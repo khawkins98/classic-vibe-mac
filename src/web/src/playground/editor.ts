@@ -1430,6 +1430,7 @@ async function runBuildInBrowserC(
       `[build-c] cache hit ${cFile}: ${cached.bytes.byteLength}B ` +
         `(skipped cc1+as+ld+Elf2Mac; saved ~${cached.savedMs}ms)`,
     );
+    recordBuild({ cacheHit: true, ms: cached.savedMs });
     setEditorDiagnostics(view, cached.diagnostics, activeFile);
     return {
       ok: true,
@@ -1520,6 +1521,7 @@ async function runBuildInBrowserC(
     savedMs: r.totalMs,
   });
   cBuildCacheTrim();
+  recordBuild({ cacheHit: false, ms: r.totalMs });
 
   return {
     ok: true,
@@ -1555,6 +1557,49 @@ function cBuildCacheTrim(): void {
     if (oldest === undefined) break;
     cBuildCache.delete(oldest);
   }
+}
+
+// ── Cumulative session build stats ─────────────────────────────────────
+//
+// Per-build telemetry surfaces in `[build-c]` lines (per-stage timings).
+// This little accumulator adds a per-session summary so the user can
+// see how the cache is paying off over a long debug session.
+//
+// Emitted as `[cvm-stats]` after each build. The build log proxy
+// in main.ts mirrors anything starting with that prefix into the
+// Output panel.
+const sessionStats = {
+  builds: 0,         // total Build/Build & Run invocations (cache hit or miss)
+  cacheHits: 0,      // builds short-circuited by cBuildCache
+  totalCompileMs: 0, // wall-time of actual compileToBin calls (misses only)
+  totalSavedMs: 0,   // cumulative ms skipped via cache hits
+};
+
+function recordBuild(opts: { cacheHit: boolean; ms: number }): void {
+  sessionStats.builds += 1;
+  if (opts.cacheHit) {
+    sessionStats.cacheHits += 1;
+    sessionStats.totalSavedMs += opts.ms;
+  } else {
+    sessionStats.totalCompileMs += opts.ms;
+  }
+  // Compact summary — fits on one console line.
+  const totalSeconds = (sessionStats.totalCompileMs / 1000).toFixed(1);
+  const savedSeconds = (sessionStats.totalSavedMs / 1000).toFixed(1);
+  const avgMs =
+    sessionStats.builds - sessionStats.cacheHits > 0
+      ? Math.round(
+          sessionStats.totalCompileMs /
+            (sessionStats.builds - sessionStats.cacheHits),
+        )
+      : 0;
+  console.info(
+    `[cvm-stats] session: ${sessionStats.builds} build${
+      sessionStats.builds === 1 ? "" : "s"
+    }, ${totalSeconds}s spent compiling (avg ${avgMs}ms), ${
+      sessionStats.cacheHits
+    } cache hit${sessionStats.cacheHits === 1 ? "" : "s"} (saved ${savedSeconds}s).`,
+  );
 }
 
 async function computeCBuildCacheKey(
