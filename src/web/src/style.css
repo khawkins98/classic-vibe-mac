@@ -1220,54 +1220,72 @@ body.cvm-paused .emulator-canvas {
   outline-offset: 2px;
 }
 
-/* --- File tab bar (issue #22) --------------------------------------- */
+/* --- File tab bar (issue #22; Platinum tab-merges-with-panel from
+   #229 item 4) --------------------------------------- */
+
+/*
+ * Mac OS 8 tab control idiom: tabs sit as a strip glued to the top
+ * of a bordered content panel. The active tab visually merges with
+ * the panel below — its bottom border is masked where it meets the
+ * panel, so the active tab + the panel read as one shape.
+ *
+ * Two things make the merge work:
+ *   1. Tab borders and the editor body's border use the same color
+ *      (`var(--ink)`, the canonical Platinum 1 px ink line). Mixed
+ *      colors broke the visual continuity pre-#229.
+ *   2. The tabbar sits 1 px on top of the editor (`margin-bottom: -1px`)
+ *      so its bottom border overlays the editor's top border, and
+ *      the active tab's paper-colored bottom segment punches a gap
+ *      through both, making the active tab and editor body read as
+ *      one continuous panel.
+ */
 
 .cvm-pg-tabbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 0;
+  gap: 0;
   padding: 4px 4px 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ink);
   background: var(--chrome);
   margin-bottom: -1px; /* tabs sit on top of editor border */
-}
-
-/* The Mac OS 8 IDE layout (#104) surfaces the file list in the left
-   "Project" pane. The in-editor tab strip becomes redundant — hide it
-   while keeping the DOM, since main.ts's switchFile() drives the
-   editor by clicking these tabs programmatically. */
-.cvm-ide .cvm-pg-tabbar {
-  display: none;
+  position: relative;
+  z-index: 0;
 }
 
 .cvm-pg-tab {
   position: relative;
-  padding: 2px 10px;
-  font: inherit;
-  font-size: 0.8rem;
+  padding: 2px 12px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
   background: var(--chrome);
-  border: 1px solid var(--border);
+  border: 1px solid var(--ink);
   border-bottom: none;
-  border-radius: 0; /* System 7 tabs are square, not rounded */
+  border-radius: 0; /* System 7/8 tabs are square, not rounded */
   cursor: pointer;
   color: var(--ink);
   white-space: nowrap;
-  /* Visually inactive tabs sit a pixel lower so the active one "connects". */
+  /* Inactive tabs sit 2 px lower so the active one reads as
+     "raised" above its siblings — the standard Platinum behaviour. */
   margin-top: 2px;
+  /* Adjacent inactive tabs share a border, so collapse left
+     borders on all but the first sibling. */
+  margin-right: -1px;
 }
 
 .cvm-pg-tab[aria-selected="true"] {
   background: var(--paper);
-  border-color: var(--border);
-  /* Cover the tab bar's bottom border so it merges with the editor. */
+  /* Cover the tabbar's bottom border (and the editor's top border
+     directly below it, since margin-bottom: -1px aligns them) so
+     the active tab merges with the editor body as one panel. */
   border-bottom: 1px solid var(--paper);
   margin-top: 0;
-  font-weight: 600;
-  z-index: 1;
+  margin-bottom: -1px;
+  font-weight: bold;
+  z-index: 2;
 }
 
 .cvm-pg-tab[aria-selected="false"]:hover {
-  background: #e0e0e0; /* lightened chrome; replaces color-mix() for broad browser support */
+  background: #d0d0d0; /* lightly raised platinum on hover */
 }
 
 .cvm-pg-tab:focus-visible {
