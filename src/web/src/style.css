@@ -924,50 +924,16 @@ body.cvm-paused .emulator-canvas {
   margin: 8px 0 0;
 }
 
-/* --- Show Assembly panel (cv-mac #64 / wasm-retro-cc #17) ------------ */
-.cvm-pg-asm-panel {
-  margin-top: 12px;
-  border: 1px solid var(--ink);
-  background: var(--paper);
-  box-shadow:
-    inset 1px 1px 0 0 var(--shadow),
-    inset -1px -1px 0 0 var(--highlight);
-}
-
-.cvm-pg-asm-summary {
-  cursor: pointer;
-  padding: 6px 10px;
-  font-family: var(--font-chrome);
-  font-size: 12px;
-  background: linear-gradient(
-    180deg,
-    var(--highlight) 0%,
-    var(--paper) 30%,
-    var(--shadow) 100%
-  );
-  border-bottom: 1px solid var(--ink);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  user-select: none;
-}
-
-.cvm-pg-asm-summary__title {
-  font-weight: bold;
-}
-
-.cvm-pg-asm-summary__hint {
-  color: var(--shadow);
-  font-size: 11px;
-}
-
-.cvm-pg-asm-meter {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--shadow);
-  font-variant-numeric: tabular-nums;
-}
+/* --- Show Assembly palette (cv-mac #64, palette in #218 item 4) ------- */
+/* The `.cvm-pg-asm-panel` + `.cvm-pg-asm-summary*` + standalone
+   `.cvm-pg-asm-meter` rules were retired with the inline `<details>`
+   panel — `<details>`-related chrome no longer applies because the
+   asm UI lives inside `cvm-asm-winbox` (a WinBox palette). The meter
+   is now reflected into the WinBox title via `setTitle()` rather than
+   styled as a chrome span. The body rules (`.cvm-pg-asm-intro`,
+   `.cvm-pg-asm-status`, `.cvm-pg-asm-mount`, `.cvm-pg-asm-stderr-wrap`,
+   `.cvm-pg-asm-stderr`) are still load-bearing — the palette body
+   renders the same DOM structure with the same class names. */
 
 .cvm-pg-asm-intro {
   margin: 8px 10px;
@@ -1026,8 +992,7 @@ body.cvm-paused .emulator-canvas {
    "don't regress mobile" guidance) and show a one-line caption instead. */
 @media (max-width: 720px) {
   .cvm-pg-toolbar,
-  .cvm-pg-editor,
-  .cvm-pg-asm-panel {
+  .cvm-pg-editor {
     display: none;
   }
   .cvm-pg-mobile-note {
@@ -1821,8 +1786,28 @@ body.cvm-paused .emulator-canvas {
 .cvm-help-winbox .wb-body,
 .cvm-about-winbox .wb-body,
 .cvm-prefs-winbox .wb-body,
-.cvm-explainer-winbox .wb-body {
+.cvm-explainer-winbox .wb-body,
+.cvm-asm-winbox .wb-body {
   background: var(--paper) !important;
+}
+/* The Show Assembly palette body is mostly the read-only CM mount,
+   which has its own background; tighten the surrounding padding so
+   the asm viewer fills the chrome rather than floating in it. */
+.cvm-asm-winbox .wb-body {
+  padding: 6px 0 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.cvm-asm-palette {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.cvm-asm-palette .cvm-pg-asm-mount {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 200px;
 }
 /* Platinum background for the picker + the four docked work panes. */
 .cvm-picker-winbox .wb-body,

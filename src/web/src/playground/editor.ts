@@ -31,8 +31,16 @@ import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { tags as t } from "@lezer/highlight";
 import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
-import { m68k } from "./lang-m68k";
 import { toolboxHoverTooltip } from "./toolbox-tooltip";
+import {
+  openAsmPalette,
+  isAsmPaletteOpen,
+  onAsmPaletteOpen,
+  setAsmStatus,
+  setAsmMeter,
+  setAsmContent,
+  setAsmStderr,
+} from "./asm-palette";
 import {
   openToolboxReference,
   isToolboxIdentifier,
@@ -158,6 +166,12 @@ export async function mountPlayground(
   const buildRunBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-buildrun",
   )!;
+  const showAsmBtn = rootEl.querySelector<HTMLButtonElement>(
+    "#cvm-pg-show-asm",
+  )!;
+  showAsmBtn.addEventListener("click", () => {
+    openAsmPalette();
+  });
   const whatBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-whatjusthappened",
   )!;
@@ -488,18 +502,25 @@ export async function mountPlayground(
     });
   }
 
-  // ── Show Assembly panel (wasm-retro-cc #17 / cv-mac #64) ────────────────
+  // ── Show Assembly palette driver (wasm-retro-cc #17 / cv-mac #64) ──────
   //
-  // The panel lives inside a `<details>` so it's collapsed by default —
-  // opening it triggers the first cc1.wasm fetch (~3.4 MB brotli). We
-  // delay constructing the read-only CodeMirror until first open too, so
-  // pages that never open the panel pay zero cost.
+  // The UI itself (WinBox, status line, meter, the read-only m68k CM view)
+  // lives in `asm-palette.ts`. This module owns only the *compile pipeline*
+  // — file fetching, sibling resolution, debouncing, sequence guards —
+  // because that part is tightly coupled to the editor's project/file
+  // state. Results are pushed into the palette via its setter functions
+  // (no-op when the palette is closed, which is how the closed-by-default
+  // gating works — `scheduleAsmCompile` short-circuits on
+  // `isAsmPaletteOpen() === false`, so pages whose user never opens the
+  // palette pay zero cc1 cost).
   //
   // Recompile triggers (all → scheduleAsmCompile):
-  //   • Panel open (`toggle` event with .open=true)
+  //   • Palette open (handled below via `onAsmPaletteOpen`) — fires an
+  //     immediate, non-debounced compile so the viewer doesn't sit empty.
   //   • Main editor doc change AND current file is .c/.h (the
   //     updateListener above)
   //   • File switch into a .c/.h file (the tail of switchTo)
+  //   • Optimization-level change (the onOptLevelChange subscription)
   //
   // Serialization: cc1 has shared MEMFS — concurrent compileToAsm() calls
   // would race on /tmp/in.c. We assign a monotonic asmSeq to each call;
@@ -508,14 +529,6 @@ export async function mountPlayground(
   // compile, but the seq guard covers the seam between debounce-fire and
   // promise resolution.
   const ASM_DEBOUNCE_MS = 500;
-  const asmPanel = rootEl.querySelector<HTMLDetailsElement>("#cvm-pg-asm-panel")!;
-  const asmStatusEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-asm-status")!;
-  const asmMountEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-asm-mount")!;
-  const asmMeterEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-asm-meter")!;
-  const asmStderrWrap = rootEl.querySelector<HTMLDetailsElement>("#cvm-pg-asm-stderr-wrap")!;
-  const asmStderrEl = rootEl.querySelector<HTMLPreElement>("#cvm-pg-asm-stderr")!;
-
-  let asmView: EditorView | null = null;
   let asmDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   let asmSeq = 0;
 
@@ -523,66 +536,19 @@ export async function mountPlayground(
     return /\.(c|h|cpp|hpp|cc|hh)$/i.test(filename);
   }
 
-  function initAsmView(): void {
-    if (asmView) return;
-    // Read-only, plain-text view. m68k asm syntax highlighting would be
-    // nice-to-have but isn't critical for shipping the feature — the
-    // text is already monospaced and readable. Adding a CodeMirror lang
-    // package for GAS-flavoured 68k is open work (see cv-mac #64 follow-ups).
-    asmView = new EditorView({
-      parent: asmMountEl,
-      state: EditorState.create({
-        doc: "",
-        extensions: [
-          lineNumbers(),
-          EditorState.readOnly.of(true),
-          EditorView.editable.of(false),
-          m68k(), // brings its own HighlightStyle (see lang-m68k.ts)
-          EditorView.theme(
-            {
-              "&": {
-                backgroundColor: "#f8f8f8",
-                color: "#000000",
-                fontFamily:
-                  '"Monaco", "Andale Mono", "Courier New", monospace',
-                fontSize: "11px",
-              },
-              ".cm-content": { padding: "8px 0", caretColor: "transparent" },
-              ".cm-gutters": {
-                backgroundColor: "#dddddd",
-                color: "#666666",
-                border: "none",
-                borderRight: "1px solid #000000",
-              },
-              ".cm-scroller": { lineHeight: "1.4" },
-              "&.cm-focused": { outline: "none" },
-            },
-            { dark: false },
-          ),
-        ],
-      }),
-    });
-  }
-
-  function setAsmStatus(text: string, kind: "info" | "ok" | "err"): void {
-    asmStatusEl.textContent = text;
-    asmStatusEl.dataset.kind = kind;
-  }
-
   async function runAsmCompile(): Promise<void> {
-    if (!asmPanel.open) return;
+    if (!isAsmPaletteOpen()) return;
     if (!isCSource(current.filename)) {
       setAsmStatus(
         `${current.filename} isn't a C source — switch to a .c tab to compile.`,
         "info",
       );
-      asmStderrWrap.hidden = true;
+      setAsmStderr("");
       return;
     }
-    initAsmView();
     const seq = ++asmSeq;
     setAsmStatus("Compiling…", "info");
-    asmMeterEl.textContent = "compiling…";
+    setAsmMeter("compiling…");
 
     const source = view.state.doc.toString();
     const fname = current.filename;
@@ -618,7 +584,7 @@ export async function mountPlayground(
     } catch (e) {
       if (seq !== asmSeq) return;
       setAsmStatus(`cc1 load failed: ${(e as Error).message}`, "err");
-      asmMeterEl.textContent = "error";
+      setAsmMeter("error");
       return;
     }
     if (seq !== asmSeq) return; // a newer call superseded us
@@ -631,40 +597,27 @@ export async function mountPlayground(
           : "cc1 failed",
         "err",
       );
-      asmMeterEl.textContent = "error";
-      if (result.rawStderr.trim()) {
-        asmStderrEl.textContent = result.rawStderr;
-        asmStderrWrap.hidden = false;
-      } else {
-        asmStderrWrap.hidden = true;
-      }
+      setAsmMeter("error");
+      setAsmStderr(result.rawStderr);
       return;
     }
 
-    // Success — replace the asm viewer content.
+    // Success — push the asm into the palette view.
     const asmText = result.asm ?? "";
-    asmView!.dispatch({
-      changes: { from: 0, to: asmView!.state.doc.length, insert: asmText },
-      scrollIntoView: false,
-    });
+    setAsmContent(asmText);
     const lineCount = asmText.split("\n").length;
     setAsmStatus(
       `${fname} → ${lineCount} lines of m68k assembly in ${result.durationMs.toFixed(0)}ms`,
       "ok",
     );
-    asmMeterEl.textContent = `${result.durationMs.toFixed(0)}ms · ${lineCount}L`;
-    // Warnings are still surfaced — only show stderr block if non-empty.
-    if (result.rawStderr.trim()) {
-      asmStderrEl.textContent = result.rawStderr;
-      asmStderrWrap.hidden = false;
-    } else {
-      asmStderrWrap.hidden = true;
-    }
+    setAsmMeter(`${result.durationMs.toFixed(0)}ms · ${lineCount}L`);
+    // Warnings are still surfaced — non-empty stderr reveals the block.
+    setAsmStderr(result.rawStderr);
   }
 
   // Install the real scheduleAsmCompile (replaces the no-op forward-decl).
   scheduleAsmCompile = (_reason) => {
-    if (!asmPanel.open) return;
+    if (!isAsmPaletteOpen()) return;
     if (asmDebounceTimer) clearTimeout(asmDebounceTimer);
     asmDebounceTimer = setTimeout(() => {
       asmDebounceTimer = null;
@@ -672,13 +625,11 @@ export async function mountPlayground(
     }, ASM_DEBOUNCE_MS);
   };
 
-  // Panel toggle: on first open, kick off an immediate (no-debounce)
-  // compile so the viewer doesn't sit empty for 500ms. Subsequent re-opens
-  // already have content; re-running on every open would be wasted work
-  // unless the file or source changed since last time, which the seq
-  // guards already handle.
-  asmPanel.addEventListener("toggle", () => {
-    if (!asmPanel.open) return;
+  // Palette open: kick off an immediate (no-debounce) compile so the
+  // viewer doesn't sit empty for 500 ms after the user clicks the
+  // button. The palette is fresh state on each open (the close handler
+  // destroys the CM view), so we always run.
+  onAsmPaletteOpen(() => {
     if (!isCSource(current.filename)) {
       setAsmStatus(
         `${current.filename} isn't a C source — switch to a .c tab to compile.`,
@@ -686,7 +637,6 @@ export async function mountPlayground(
       );
       return;
     }
-    initAsmView();
     void runAsmCompile();
   });
 
@@ -1226,6 +1176,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
           <span class="cvm-pg-iconbtn__icon" aria-hidden="true">↻</span>
           <span class="cvm-pg-iconbtn__label">Reset</span>
         </button>
+        <button type="button" id="cvm-pg-show-asm"
+                class="cvm-pg-iconbtn"
+                title="Open the m68k assembly view as a draggable palette — compile this .c to assembly in your browser">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">⚙</span>
+          <span class="cvm-pg-iconbtn__label">Show ASM</span>
+        </button>
       </div>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
@@ -1235,27 +1191,6 @@ function renderShell(persistent: boolean, preservedCount: number): string {
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
-      <details id="cvm-pg-asm-panel" class="cvm-pg-asm-panel">
-        <summary class="cvm-pg-asm-summary">
-          <span class="cvm-pg-asm-summary__title">Show Assembly</span>
-          <span class="cvm-pg-asm-summary__hint">— compile this <code>.c</code> to m68k assembly in your browser</span>
-          <span id="cvm-pg-asm-meter" class="cvm-pg-asm-meter" aria-live="polite"></span>
-        </summary>
-        <p class="cvm-pg-asm-intro">
-          The <code>.c</code> file open above is compiled through
-          <code>cc1.wasm</code> &mdash; the real GCC 12 backend for
-          Motorola 68k, ported to WebAssembly. Output below is exactly
-          what the cross-compiler would emit running natively. Switch
-          to a <code>.c</code> tab to see the assembly update as you
-          type (~500&nbsp;ms debounce).
-        </p>
-        <div id="cvm-pg-asm-status" class="cvm-pg-asm-status" role="status" aria-live="polite"></div>
-        <div id="cvm-pg-asm-mount" class="cvm-pg-asm-mount" aria-label="m68k assembly output"></div>
-        <details id="cvm-pg-asm-stderr-wrap" class="cvm-pg-asm-stderr-wrap" hidden>
-          <summary>cc1 diagnostics</summary>
-          <pre id="cvm-pg-asm-stderr" class="cvm-pg-asm-stderr"></pre>
-        </details>
-      </details>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
         browser to read or edit the source.
