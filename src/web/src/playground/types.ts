@@ -177,6 +177,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVSN",
   },
   {
+    // wasm-wordpad — Mini word processor (cv-mac #125). Takes notepad
+    // up a rung with Font / Size / Style menus driving monostyle
+    // TextEdit (TENew, not TEStyleNew — per-run styling is a much
+    // bigger lift; monostyle covers the user-visible affordance and
+    // keeps the diff against Notepad comprehensible).
+    id: "wasm-wordpad",
+    label: "Wasm WordPad",
+    files: ["wordpad.c", "wordpad.r"],
+    rezFile: "wordpad.r",
+    outputName: "WasmWordPad.bin",
+    appType: "APPL",
+    appCreator: "CVWP",
+  },
+  {
     // wasm-clock — analog desk clock with digital readout (cv-mac #125).
     // Different Toolbox slice from the rest of the shelf: GetDateTime +
     // SecondsToDate, idle-tick redraw loop (1-second WaitNextEvent

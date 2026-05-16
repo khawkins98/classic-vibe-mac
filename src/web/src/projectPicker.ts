@@ -67,6 +67,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Small floating sticky-note window with a pale-yellow paper background and a single TextEdit field. Draggable, close-to-quit. Exercises QuickDraw colour (RGBForeColor / RGBBackColor) — the other TextEdit samples are monochrome.",
   },
+  "wasm-wordpad": {
+    emoji: "📄",
+    description:
+      "Mini word processor — Font (Geneva/Chicago/Monaco/Courier), Size (9/10/12/14/18/24), and Style (Plain/Bold/Italic/Underline) menus live-restyle a monostyle TextEdit. Apple/File/Edit shape mirrors Notepad. The next ladder rung after Notepad on the way to per-run TEStyleNew formatting.",
+  },
   "wasm-clock": {
     emoji: "🕰️",
     description:
