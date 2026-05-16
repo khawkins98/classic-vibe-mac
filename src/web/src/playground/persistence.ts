@@ -184,6 +184,25 @@ async function clearAllFiles(): Promise<void> {
   });
 }
 
+/** Drop every stored file for a single project. Used by the toolbar's
+ *  "Reset" affordance — paired with re-seeding from the bundled
+ *  sources, this gives the user a one-click "pull latest from the
+ *  server" path that discards their local IDB edits. */
+export async function clearProjectFiles(projectId: string): Promise<void> {
+  const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+  if (!proj) return;
+  for (const filename of proj.files) {
+    const k = fileKey(projectId, filename);
+    memFiles.delete(k);
+    if (persistent) {
+      await withStore(STORE_FILES, "readwrite", async (s) => {
+        s.delete(k);
+        return undefined;
+      });
+    }
+  }
+}
+
 /** Read a UI-state value. */
 export async function readUiState<T = unknown>(
   key: string,

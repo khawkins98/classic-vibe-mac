@@ -30,6 +30,7 @@ import {
   writeFile,
   readUiState,
   writeUiState,
+  clearProjectFiles,
 } from "./persistence";
 import { preprocess } from "./preprocessor";
 import { createVfs } from "./vfs";
@@ -765,6 +766,80 @@ export async function mountPlayground(
     }
   });
 
+  // Reset to bundled defaults — wipes IDB for the current project and
+  // re-seeds every file from `public/sample-projects/`. Useful when the
+  // sample sources have been updated server-side and the user wants
+  // the new defaults instead of their stale in-browser copies.
+  const resetBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      const projectId = current.project;
+      const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+      if (!proj) return;
+      const ok = window.confirm(
+        `Discard your edits to ${proj.label} and reload from the bundled ` +
+          `defaults?\n\nThis affects every file in this project. Your other ` +
+          `projects' edits are kept.`,
+      );
+      if (!ok) return;
+      resetBtn.disabled = true;
+      setStatus(statusEl, "Resetting to bundled defaults…", "info");
+      try {
+        // Drop the per-project IDB entries first so readOrSeedFile
+        // falls through to the bundled fetch on every file.
+        await clearProjectFiles(projectId);
+        // Walk every file in the project, re-fetch from bundle, and
+        // load each one back into IDB. Doing the whole set ensures
+        // multi-file projects (snake / textedit / notepad / etc.) get
+        // a fully consistent reset.
+        for (const f of proj.files) {
+          // readOrSeedFile fetches + persists when IDB is empty.
+          await readOrSeedFile(baseUrl, projectId, f);
+        }
+        // Refresh the editor with whatever is now in the active file.
+        const fresh = await readOrSeedFile(
+          baseUrl,
+          projectId,
+          current.filename,
+        );
+        loadingFile = true;
+        try {
+          view.dispatch({
+            changes: {
+              from: 0,
+              to: view.state.doc.length,
+              insert: fresh,
+            },
+            selection: { anchor: 0, head: 0 },
+            scrollIntoView: true,
+          });
+        } finally {
+          loadingFile = false;
+        }
+        // Clear dirty markers for every file in the project — they
+        // now match the bundled source.
+        for (const f of proj.files) {
+          dirtyVersions.delete(fileKey(projectId, f));
+        }
+        updateTabBar();
+        setStatus(
+          statusEl,
+          `${proj.label} reset to bundled defaults (${proj.files.length} ` +
+            `file${proj.files.length === 1 ? "" : "s"} reloaded).`,
+          "ok",
+        );
+      } catch (err) {
+        setStatus(
+          statusEl,
+          `Reset failed: ${(err as Error).message}`,
+          "err",
+        );
+      } finally {
+        resetBtn.disabled = false;
+      }
+    });
+  }
+
   buildBtn.addEventListener("click", async () => {
     await flushSave();
     const projectId = current.project;
@@ -1023,7 +1098,19 @@ function renderShell(persistent: boolean, preservedCount: number): string {
           <span class="cvm-pg-iconbtn__icon" aria-hidden="true">💾</span>
           <span class="cvm-pg-iconbtn__label">Download</span>
         </button>
+        <button type="button" id="cvm-pg-reset"
+                class="cvm-pg-iconbtn"
+                title="Discard your edits and reload this project from the latest bundled defaults shipped with the page">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">↻</span>
+          <span class="cvm-pg-iconbtn__label">Reset</span>
+        </button>
       </div>
+      <p class="cvm-pg-toolbar-note">
+        <em>Reset</em> pulls down the latest bundled version of every
+        file in this project, discarding your in-browser edits. Useful
+        when the sample sources have been updated server-side and you
+        want the new defaults.
+      </p>
       <div class="cvm-pg-status-row">
         <p class="cvm-pg-status" id="cvm-pg-status" role="status" aria-live="polite"></p>
         <button type="button" id="cvm-pg-whatjusthappened" class="cvm-pg-btn-what" hidden>
