@@ -407,6 +407,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     complexity: 3,
   },
   {
+    // wasm-debug-console — exercises the IDE Output panel's Console
+    // tab via the cvm_log() API. Click the window to log a line; the
+    // Console tab surfaces it within ~1s. Pairs with the static
+    // header library cvm_log.h that any user project can pull in.
+    id: "wasm-debug-console",
+    label: "Debug Console demo",
+    files: ["console.c", "console.r", "cvm_log.h"],
+    rezFile: "console.r",
+    outputName: "DebugConsole.bin",
+    appType: "APPL",
+    appCreator: "CVDC",
+    complexity: 3,
+  },
+  {
     // wasm-dialog — ModalDialog with an editable text field (cv-mac
     // #125). Fills the "Modal dialogs with editable fields" gap. Click
     // the button → modal with prompt + edit-text + OK/Cancel; OK reads

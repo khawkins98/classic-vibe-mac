@@ -198,6 +198,14 @@ export type EmulatorWorkerMessage =
    */
   | { type: "drawing_data"; bytes: Uint8Array | null }
   /**
+   * Response to a `poll_console` message. Incremental — `bytes` contains
+   * only the data appended to /Shared/__cvm_console.log since the previous
+   * poll's `totalSize`. The main-thread watcher keeps a running offset so
+   * it can decode just the new tail. `totalSize` is the current file size
+   * (so the watcher can detect file truncation / reset). MacRoman bytes.
+   */
+  | { type: "console_data"; bytes: Uint8Array | null; totalSize: number }
+  /**
    * Sent by the worker when BasiliskII calls etherInit().
    * The main thread should call EthernetZoneProvider.connect(macAddress).
    */
@@ -232,4 +240,12 @@ export type EmulatorWorkerRuntimeMessage =
    * Ask the worker to read /Shared/__drawing.bin and reply with
    * `drawing_data`. Sent every 2 s by DrawingWatcher on the main thread.
    */
-  | { type: "poll_drawing" };
+  | { type: "poll_drawing" }
+  /**
+   * Ask the worker to read /Shared/__cvm_console.log starting at byte
+   * `fromOffset` and reply with `console_data`. Sent every 1 s by
+   * ConsoleWatcher on the main thread. The incremental contract keeps
+   * the message size proportional to new log volume rather than full
+   * file size.
+   */
+  | { type: "poll_console"; fromOffset: number };
