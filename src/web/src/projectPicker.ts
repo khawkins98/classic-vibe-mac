@@ -62,6 +62,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "TextEdit + a real Mac menu bar. Apple / File / Edit menus, Cmd-key shortcuts (⌘N, ⌘Q, ⌘X, ⌘C, ⌘V), and a working About dialog. The ladder rung between an edit field and a mini word processor.",
   },
+  "wasm-stickynote": {
+    emoji: "🟨",
+    description:
+      "Small floating sticky-note window with a pale-yellow paper background and a single TextEdit field. Draggable, close-to-quit. Exercises QuickDraw colour (RGBForeColor / RGBBackColor) — the other TextEdit samples are monochrome.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
