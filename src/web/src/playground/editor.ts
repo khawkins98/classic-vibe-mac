@@ -52,6 +52,34 @@ import {
   clearEditorDiagnostics,
 } from "./error-markers";
 
+/** Strip MEMFS / temp paths so diagnostic file matches the editor's
+ *  bare filename. cc1 reports e.g. `/tmp/hello.c`; the editor knows
+ *  it as `hello.c`. */
+function basename(path: string): string {
+  const i = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return i === -1 ? path : path.slice(i + 1);
+}
+
+/**
+ * Forward a structured diagnostic to the Output Build log as a
+ * clickable line (wired in main.ts). The build log dispatches a
+ * cvm:jump-to-source event when clicked; the editor listens for that
+ * event below and switches the open file + moves the cursor.
+ */
+function postBuildLogDiagnostic(d: {
+  file: string;
+  line: number;
+  column: number;
+  severity: "error" | "warning";
+  message: string;
+}): void {
+  window.dispatchEvent(
+    new CustomEvent("cvm:buildlog-diagnostic", {
+      detail: { ...d, file: basename(d.file) },
+    }),
+  );
+}
+
 /** UI-state IDB keys. */
 const UI_PROJECT = "openProject";
 const UI_FILE = "openFile";
@@ -572,6 +600,43 @@ export async function mountPlayground(
     // the user might be tab-cycling and we don't want to fire mid-cycle.
     scheduleAsmCompile("switch");
   }
+
+  /** Move the editor cursor to (line, column) within `file`. Switches
+   *  the open tab if `file` differs from current. Used by the Build
+   *  log's click-to-jump on diagnostic entries. */
+  async function jumpToSource(
+    file: string,
+    line: number,
+    column: number,
+  ): Promise<void> {
+    // Switch tabs first if needed; the dispatch below races otherwise.
+    if (file !== current.filename) {
+      const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+      if (!proj || !proj.files.includes(file)) return;
+      await switchTo(current.project, file);
+    }
+    const doc = view.state.doc;
+    const safeLine = Math.max(1, Math.min(line, doc.lines));
+    const ln = doc.line(safeLine);
+    const col = Math.max(0, Math.min(column - 1, ln.to - ln.from));
+    const pos = ln.from + col;
+    view.dispatch({
+      selection: { anchor: pos, head: pos },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  // Cross-module hook: main.ts's build-log click handler dispatches
+  // this event when the user clicks a diagnostic line.
+  window.addEventListener("cvm:jump-to-source", ((e: Event) => {
+    const d = (e as CustomEvent<{
+      file: string;
+      line: number;
+      column: number;
+    }>).detail;
+    void jumpToSource(d.file, d.line, d.column);
+  }) as EventListener);
 
   projectSelect.addEventListener("change", () => {
     const newId = projectSelect.value;
@@ -1152,6 +1217,7 @@ async function runBuildMixedCAndR(
     Rez: "1", DeRez: "0", true: "1", false: "0", TRUE: "1", FALSE: "0",
   });
   setEditorDiagnostics(view, pp.diagnostics, activeFile);
+  for (const d of pp.diagnostics) postBuildLogDiagnostic(d);
   if (pp.diagnostics.some((d) => d.severity === "error")) {
     return {
       ok: false,
@@ -1162,6 +1228,8 @@ async function runBuildMixedCAndR(
   const rez = await compile(baseUrl, pp.output, proj.rezFile);
   const allDiags = [...pp.diagnostics, ...rez.diagnostics];
   setEditorDiagnostics(view, allDiags, activeFile);
+  // Only post rez's own diagnostics (we already posted pp's above).
+  for (const d of rez.diagnostics) postBuildLogDiagnostic(d);
   if (!rez.ok || !rez.resourceFork) {
     return { ok: false, totalMs: performance.now() - t0, diagnostics: allDiags };
   }
@@ -1263,6 +1331,12 @@ async function runBuildInBrowserC(
     optLevel: getOptLevel(),
   });
   setEditorDiagnostics(view, r.diagnostics, activeFile);
+  // Forward every diagnostic to the Output Build log as a clickable
+  // line. Warnings show up too — they're often the most useful thing
+  // to surface for "your build succeeded but there's an issue".
+  for (const d of r.diagnostics) {
+    postBuildLogDiagnostic(d);
+  }
 
   if (!r.ok || !r.bin) {
     return {

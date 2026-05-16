@@ -2122,6 +2122,33 @@ body.cvm-paused .emulator-canvas {
   word-break: break-word;
   background: var(--paper);
 }
+/* Clickable diagnostic entry inside the Build log. Looks like a
+   hyperlink — blue underlined text — and triggers a jump-to-source
+   on click. */
+.cvm-buildlog__diag {
+  display: inline;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  color: #003388;
+}
+.cvm-buildlog__diag--error {
+  color: #aa0000;
+}
+.cvm-buildlog__diag--warning {
+  color: #886600;
+}
+.cvm-buildlog__diag:hover,
+.cvm-buildlog__diag:focus-visible {
+  background: var(--selection);
+  color: var(--paper);
+  outline: none;
+}
 .cvm-output__hint {
   margin: 12px;
   padding: 12px;
