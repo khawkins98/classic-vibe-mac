@@ -32,6 +32,7 @@ import { tags as t } from "@lezer/highlight";
 import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
+import { toolboxHoverTooltip } from "./toolbox-tooltip";
 import JSZip from "jszip";
 
 import { SAMPLE_PROJECTS, TOOLCHAIN_VERSION, type SampleProject } from "./types";
@@ -338,6 +339,11 @@ export async function mountPlayground(
       // for cpp/rez. Palette mirrors the m68k earth tones so the
       // C view and the Show-Assembly view feel like the same app.
       syntaxHighlighting(playgroundHighlight),
+      // Inside-Macintosh-style hover card over Toolbox API symbols
+      // (cv-mac #196 Phase 3 MVP). Data + lookup in
+      // toolbox-tooltip.ts. Misses (i.e. user variables, locals)
+      // are silent so the tooltip doesn't flicker on every word.
+      toolboxHoverTooltip,
       keymap.of([
         indentWithTab,
         ...defaultKeymap,
