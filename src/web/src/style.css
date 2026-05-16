@@ -2222,3 +2222,173 @@ body.cvm-paused .emulator-canvas {
     font-size: 18px;
   }
 }
+
+/* --- Platinum scrollbars -------------------------------------------- */
+/*
+ * Mac OS 8 Platinum scrollbars: grey track, beveled thumb with the
+ * three-dot Platinum "grip", up/down arrow buttons at each end. Applied
+ * inside every Mac-flavoured surface (WinBox panes, palettes, the
+ * editor, the build log). Outside those — the BasiliskII canvas
+ * doesn't need them, neither do dropdown menus or tooltips — we let
+ * the browser default win.
+ *
+ * Firefox doesn't honour ::-webkit-scrollbar; we hand it a
+ * scrollbar-color/width pair so it at least picks up the Platinum
+ * palette without arrows.
+ */
+.cvm-mac-winbox,
+.cvm-mac-winbox * {
+  /* Firefox fallback — thumb colour | track colour. */
+  scrollbar-color: var(--platinum) var(--platinum-light);
+  scrollbar-width: auto;
+}
+.cvm-mac-winbox ::-webkit-scrollbar,
+.cvm-mac-winbox::-webkit-scrollbar {
+  width: 15px;
+  height: 15px;
+  background: var(--platinum-light);
+}
+.cvm-mac-winbox ::-webkit-scrollbar-track,
+.cvm-mac-winbox::-webkit-scrollbar-track {
+  background:
+    /* fine grid that gives the Mac OS 8 track its woven look */
+    repeating-linear-gradient(
+      45deg,
+      var(--platinum-light) 0,
+      var(--platinum-light) 1px,
+      var(--platinum) 1px,
+      var(--platinum) 2px
+    );
+  border: 1px solid var(--shadow);
+}
+/* Beveled thumb — white top/left, dark grey bottom/right, three-dot
+   "grip" texture in the middle (the iconic Platinum scrollbar marker). */
+.cvm-mac-winbox ::-webkit-scrollbar-thumb,
+.cvm-mac-winbox::-webkit-scrollbar-thumb {
+  background-color: var(--platinum);
+  background-image:
+    /* three vertical dots, centred — only legible above ~30px thumb size */
+    radial-gradient(
+      circle at 50% calc(50% - 6px),
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle at 50% calc(50% + 6px),
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    );
+  border-top: 1px solid var(--highlight);
+  border-left: 1px solid var(--highlight);
+  border-right: 1px solid var(--shadow);
+  border-bottom: 1px solid var(--shadow);
+}
+.cvm-mac-winbox ::-webkit-scrollbar-thumb:hover,
+.cvm-mac-winbox::-webkit-scrollbar-thumb:hover {
+  background-color: var(--platinum-light);
+}
+.cvm-mac-winbox ::-webkit-scrollbar-thumb:active,
+.cvm-mac-winbox::-webkit-scrollbar-thumb:active {
+  /* Inverted bevel on press — the classic Mac "pushed in" affordance. */
+  border-top-color: var(--shadow);
+  border-left-color: var(--shadow);
+  border-right-color: var(--highlight);
+  border-bottom-color: var(--highlight);
+}
+/* Horizontal thumb: same bevel, three dots laid out horizontally. */
+.cvm-mac-winbox ::-webkit-scrollbar-thumb:horizontal,
+.cvm-mac-winbox::-webkit-scrollbar-thumb:horizontal {
+  background-image:
+    radial-gradient(
+      circle at calc(50% - 6px) 50%,
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    ),
+    radial-gradient(
+      circle at calc(50% + 6px) 50%,
+      var(--shadow) 0 1.2px,
+      transparent 1.2px
+    );
+}
+/* Arrow buttons at the ends — small Platinum squares with a black
+   triangle. WebKit gives us four button variants we have to enumerate
+   (vert single-end, vert double-end, plus horizontal). We render the
+   triangle as a CSS mask so we get the bevel from the button itself. */
+.cvm-mac-winbox ::-webkit-scrollbar-button,
+.cvm-mac-winbox::-webkit-scrollbar-button {
+  display: block;
+  width: 15px;
+  height: 15px;
+  background-color: var(--platinum);
+  border-top: 1px solid var(--highlight);
+  border-left: 1px solid var(--highlight);
+  border-right: 1px solid var(--shadow);
+  border-bottom: 1px solid var(--shadow);
+}
+.cvm-mac-winbox ::-webkit-scrollbar-button:active,
+.cvm-mac-winbox::-webkit-scrollbar-button:active {
+  border-top-color: var(--shadow);
+  border-left-color: var(--shadow);
+  border-right-color: var(--highlight);
+  border-bottom-color: var(--highlight);
+}
+/* Triangle glyphs — pure CSS via clip-path on a pseudo-element. We
+   centre a 7×7 ink triangle inside each 15×15 button. */
+.cvm-mac-winbox ::-webkit-scrollbar-button:vertical:decrement,
+.cvm-mac-winbox::-webkit-scrollbar-button:vertical:decrement {
+  background-image:
+    linear-gradient(135deg, transparent 50%, var(--ink) 50%) no-repeat,
+    linear-gradient(225deg, transparent 50%, var(--ink) 50%) no-repeat;
+  background-size: 4px 4px, 4px 4px;
+  background-position: 4px 6px, 7px 6px;
+}
+.cvm-mac-winbox ::-webkit-scrollbar-button:vertical:increment,
+.cvm-mac-winbox::-webkit-scrollbar-button:vertical:increment {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%) no-repeat,
+    linear-gradient(315deg, transparent 50%, var(--ink) 50%) no-repeat;
+  background-size: 4px 4px, 4px 4px;
+  background-position: 4px 5px, 7px 5px;
+}
+.cvm-mac-winbox ::-webkit-scrollbar-button:horizontal:decrement,
+.cvm-mac-winbox::-webkit-scrollbar-button:horizontal:decrement {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink) 50%) no-repeat,
+    linear-gradient(135deg, transparent 50%, var(--ink) 50%) no-repeat;
+  background-size: 4px 4px, 4px 4px;
+  background-position: 5px 4px, 5px 7px;
+}
+.cvm-mac-winbox ::-webkit-scrollbar-button:horizontal:increment,
+.cvm-mac-winbox::-webkit-scrollbar-button:horizontal:increment {
+  background-image:
+    linear-gradient(225deg, transparent 50%, var(--ink) 50%) no-repeat,
+    linear-gradient(315deg, transparent 50%, var(--ink) 50%) no-repeat;
+  background-size: 4px 4px, 4px 4px;
+  background-position: 6px 4px, 6px 7px;
+}
+/* Suppress the "double-end" button pairs WebKit synthesises — Mac OS 8
+   only had single arrows at each end, not double-stack arrows. */
+.cvm-mac-winbox ::-webkit-scrollbar-button:start:increment,
+.cvm-mac-winbox ::-webkit-scrollbar-button:end:decrement,
+.cvm-mac-winbox::-webkit-scrollbar-button:start:increment,
+.cvm-mac-winbox::-webkit-scrollbar-button:end:decrement {
+  display: none;
+}
+/* Corner where vertical + horizontal scrollbars meet. Matches the grow
+   box treatment if both are visible. */
+.cvm-mac-winbox ::-webkit-scrollbar-corner,
+.cvm-mac-winbox::-webkit-scrollbar-corner {
+  background: var(--platinum);
+  border-top: 1px solid var(--shadow);
+  border-left: 1px solid var(--shadow);
+}
