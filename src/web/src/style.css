@@ -243,14 +243,6 @@ body {
   flex-direction: column;
 }
 
-.window--narrow {
-  max-width: 520px;
-}
-
-.window--wide {
-  max-width: 880px;
-}
-
 .window__titlebar {
   display: flex;
   align-items: center;
@@ -662,43 +654,6 @@ body.cvm-paused .emulator-canvas {
   border: 0;
 }
 
-/* --- Desktop icon (decorative) ------------------------------------- */
-
-.desktop-icon {
-  position: fixed;
-  top: 44px;
-  right: 24px;
-  width: 64px;
-  text-align: center;
-  font-family: var(--font-chrome);
-  font-size: 11px;
-  color: var(--ink);
-  user-select: none;
-  pointer-events: none;
-}
-
-.desktop-icon__glyph {
-  width: 32px;
-  height: 32px;
-  margin: 0 auto 4px;
-  display: block;
-  image-rendering: pixelated;
-}
-
-.desktop-icon__label {
-  background: var(--paper);
-  padding: 0 3px;
-  display: inline-block;
-}
-
-/* Hide the desktop icon on narrow screens so it doesn't crowd the
-   stacked windows. */
-@media (max-width: 720px) {
-  .desktop-icon {
-    display: none;
-  }
-}
-
 /* --- Subtle hover lift on windows ---------------------------------- */
 
 .window {
@@ -712,11 +667,12 @@ body.cvm-paused .emulator-canvas {
 /* --- Playground (in-browser source viewer + editor) ----------------- */
 
 /*
- * The playground sits in its own `<section class="window window--wide">`
- * directly below the Macintosh window. It uses `window--wide` (max-width
- * 880px) to match the emulator above it. Side-by-side layout at >=1200px
- * is intentionally deferred to Phase 2 — the current chrome's centered
- * stack reads well in mobile + desktop and we don't want to regress that.
+ * The playground markup carries `.window` + `.window--playground` so it
+ * can inherit the shared `.window`-family chrome (titlebar, body, hover
+ * lift). With the IDE layout the playground content is mounted inside
+ * the Editor WinBox pane rather than its own standalone window, but the
+ * `.window--playground` selector is still used for the `[hidden]` toggle
+ * that lets idePanes.ts swap visibility without re-mounting.
  */
 
 .window--playground[hidden] {
@@ -1475,33 +1431,6 @@ body.cvm-paused .emulator-canvas {
     overflow: hidden;
   }
 
-  /* The desktop icon is decorative. Hide it on screens wide enough
-     for the IDE layout. */
-  .desktop-icon {
-    display: none;
-  }
-
-  /* Below-fold marketing content: vertical stack, centered, with
-     comfortable padding. Scrollable below the IDE grid. */
-  .cvm-below-fold {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    max-width: 880px;
-    margin: 32px auto;
-    padding: 0 16px 64px;
-  }
-  .cvm-below-fold .window {
-    max-width: 100%;
-  }
-}
-
-/* Below-fold defaults at every width: just normal block flow. */
-.cvm-below-fold {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 32px;
 }
 
 /* --- Files panel (left column) -------------------------------------- */
