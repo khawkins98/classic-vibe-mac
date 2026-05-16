@@ -13,6 +13,7 @@
     "preview": "npm run preview --workspace=src/web",
     "test": "npm run test:unit && npm run test:e2e && npm run test:visual",
     "test:unit": "npm run test:unit:c && npm run test:unit:js",
+    "audit:wasm-shelf": "node scripts/audit-wasm-samples.mjs",
     "test:unit:c": "make -C tests/unit run",
     "test:unit:js": "node tests/unit/preprocessor.test.mjs && node tests/unit/hfs-patcher.test.mjs && node tests/unit/shared-poller.test.mjs",
     "test:e2e": "playwright test --config=playwright.config.ts",
