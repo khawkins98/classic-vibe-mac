@@ -361,7 +361,7 @@ window.addEventListener("cvm:buildlog-diagnostic", ((e: Event) => {
   appendBuildLogDiagnostic(d.file, d.line, d.column, d.severity, d.message);
 }) as EventListener);
 
-const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]"];
+const BUILD_LOG_PREFIXES = ["[cvm]", "[build-c]", "[build-r]", "[asm]", "[cvm-playground]", "[cvm-stats]"];
 if (buildLogEl) {
   // Mirror our own identity stamp into the log immediately.
   appendBuildLog(
