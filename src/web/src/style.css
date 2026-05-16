@@ -775,6 +775,21 @@ body.cvm-paused .emulator-canvas {
   padding: 8px 4px;
   border-bottom: 1px solid var(--shadow);
 }
+/* Caption under the toolbar — explains what Reset does without making
+   the button itself shout. Small, italic, indented to align with the
+   buttons. */
+.cvm-pg-toolbar-note {
+  margin: 4px 8px 8px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--shadow);
+  line-height: 1.45;
+}
+.cvm-pg-toolbar-note em {
+  font-style: normal;
+  font-weight: bold;
+  color: var(--ink);
+}
 .cvm-pg-iconbtn {
   display: inline-flex;
   flex-direction: column;
