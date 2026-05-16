@@ -38,16 +38,7 @@ This README serves three different visitors:
 
 ## What it looks like
 
-![Live deployed page: a Mac System 7 desktop runs at the top with two demo apps open — Reader showing the :Shared: folder of bundled HTML pages, and MacWeather rendering current conditions plus a 3-day forecast in 1-bit pixel art. Below the desktop, a "classic-vibe-mac" Read Me window explains the project. Below that, a source-viewer panel lists the Mac apps' C and Rez files — the in-browser editor where visitors can read (and, increasingly, change) the same code that's running above.](public/screenshot-deployed.png)
-
-> _The screenshot above is from an earlier deploy. The current page
-> ships a full Mac OS 7/8-style IDE with four draggable WinBox panes
-> (Project / Playground / Macintosh / Output), a real pull-down
-> menubar (Apple / File / Edit / View / Special / Windows / Help),
-> Cmd-key shortcuts, type-ahead, F10 menubar entry, and a
-> nine-sample wasm shelf the user can edit and rebuild in-browser.
-> See [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) §6 for the
-> current layout. Refresh of the hero image is a follow-up._
+![Live deployed page: a Mac OS 7/8-style IDE with a top menubar (Apple / File / Edit / View / Special / Windows / Help, with a "cv-mac <hash>" build stamp and clock on the right), and four draggable WinBox panes. Left: Project picker with the current source files. Centre: Playground — Build / Build & Run / Download / Reset toolbar above a CodeMirror editor showing the bundled C source for the current sample. Right: Macintosh — System 7.5.5 booted in BasiliskII running Reader, MacWeather, Hello Mac, and Mini vMac Doc. Bottom right: Output panel with a Build Log tab capturing per-stage timings. Every WinBox carries Mac OS 8 Platinum chrome (striped titlebar with recessed paper title field, Platinum scrollbars).](public/screenshot-deployed.png)
 
 The deployed page is three things on one screen, all running in the
 visitor's tab:
