@@ -74,6 +74,7 @@ import { preprocess } from "./preprocessor";
 import { createVfs } from "./vfs";
 import { compile } from "./rez";
 import { consumeFetchMs } from "./fetchStats";
+import { dispatchBuildPhase } from "./buildProgressWindow";
 import {
   spliceResourceFork,
   triggerDownload,
@@ -945,30 +946,36 @@ export async function mountPlayground(
 
     buildBtn.disabled = true;
     setStatus(statusEl, "Compiling…", "info");
+    dispatchBuildPhase({
+      phase: "preparing",
+      title: `Building ${proj.label}…`,
+    });
 
     try {
+      dispatchBuildPhase({ phase: "compiling" });
       const result = await runBuild(baseUrl, proj, view, current.filename);
       if (result.ok) {
         const stampedName = withBuildTimestamp(proj.outputName);
+        dispatchBuildPhase({ phase: "packaging" });
         setStatus(
           statusEl,
           `Built ${stampedName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
           "ok",
         );
         triggerDownload(result.bytes!, stampedName);
+        dispatchBuildPhase({ phase: "done" });
       } else {
         const first = result.diagnostics[0];
         const msg = first
           ? `${first.severity}: ${first.message} (${first.file}:${first.line})`
           : "Build failed (no diagnostics)";
         setStatus(statusEl, msg, "err");
+        dispatchBuildPhase({ phase: "error", message: msg });
       }
     } catch (e) {
-      setStatus(
-        statusEl,
-        `Build error: ${(e as Error).message}`,
-        "err",
-      );
+      const msg = (e as Error).message;
+      setStatus(statusEl, `Build error: ${msg}`, "err");
+      dispatchBuildPhase({ phase: "error", message: msg });
     } finally {
       buildBtn.disabled = false;
     }
@@ -998,8 +1005,13 @@ export async function mountPlayground(
     rootEl.setAttribute("data-rebooting", "");
     const tStart = performance.now();
     setStatus(statusEl, "Compiling…", "info");
+    dispatchBuildPhase({
+      phase: "preparing",
+      title: `Building ${proj.label}…`,
+    });
 
     try {
+      dispatchBuildPhase({ phase: "compiling" });
       const result = await runBuild(baseUrl, proj, view, current.filename);
       if (!result.ok) {
         const first = result.diagnostics[0];
@@ -1007,9 +1019,11 @@ export async function mountPlayground(
           ? `${first.severity}: ${first.message} (${first.file}:${first.line})`
           : "Build failed (no diagnostics)";
         setStatus(statusEl, msg, "err");
+        dispatchBuildPhase({ phase: "error", message: msg });
         return;
       }
       const buildMs = performance.now() - tStart;
+      dispatchBuildPhase({ phase: "packaging" });
       setStatus(
         statusEl,
         `Built in ${buildMs.toFixed(0)}ms — patching disk…`,
@@ -1088,9 +1102,12 @@ export async function mountPlayground(
         extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
       });
       setStatus(statusEl, "Mounting disk…", "info");
+      dispatchBuildPhase({ phase: "mounting" });
       // Hand to emulator reboot — main.ts wired this up.
+      dispatchBuildPhase({ phase: "booting" });
       await hotLoad({ bytes: patched, volumeName: volName });
       const totalMs = performance.now() - tStart;
+      dispatchBuildPhase({ phase: "done" });
       // Surface the binary size alongside the wall time. The Build-only
       // path already does this via formatBytes(); Build & Run was
       // silent on size. Useful for "is my last edit smaller / bigger
@@ -1128,11 +1145,9 @@ export async function mountPlayground(
         }
       }
     } catch (e) {
-      setStatus(
-        statusEl,
-        `Build & Run error: ${(e as Error).message}`,
-        "err",
-      );
+      const msg = (e as Error).message;
+      setStatus(statusEl, `Build & Run error: ${msg}`, "err");
+      dispatchBuildPhase({ phase: "error", message: msg });
     } finally {
       buildBtn.disabled = false;
       buildRunBtn.disabled = false;
