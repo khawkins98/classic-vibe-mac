@@ -19,9 +19,9 @@
     "test:visual": "playwright test --config=tests/visual/playwright.config.ts"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
-    "@playwright/test": "^1.48.2",
-    "@types/node": "^22.9.0",
-    "typescript": "^5.5.4"
+    "@anthropic-ai/sdk": "^0.96.0",
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^25.8.0",
+    "typescript": "^6.0.3"
   }
 }
