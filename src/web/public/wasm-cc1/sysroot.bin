@@ -37760,3 +37760,87 @@ void wordfree(wordexp_t *);
 #endif
 
 #endif /* _WORDEXP_H_  */
+/* Controls.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <Controls.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: Control Manager. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __CONTROLS_H__
+#define __CONTROLS_H__
+#include <Multiverse.h>
+#endif
+/* Lists.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <Lists.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: List Manager. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __LISTS_H__
+#define __LISTS_H__
+#include <Multiverse.h>
+#endif
+/* Scrap.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <Scrap.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: Scrap Manager. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __SCRAP_H__
+#define __SCRAP_H__
+#include <Multiverse.h>
+#endif
+/* Aliases.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <Aliases.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: Alias Manager. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __ALIASES_H__
+#define __ALIASES_H__
+#include <Multiverse.h>
+#endif
+/* Palettes.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <Palettes.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: Palette Manager. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __PALETTES_H__
+#define __PALETTES_H__
+#include <Multiverse.h>
+#endif
+/* QDOffscreen.h — synthetic shim header (wasm-retro-cc bundle, 2026-05-16).
+ *
+ * The in-browser sysroot consolidates every Mac Toolbox API into
+ * Multiverse.h instead of shipping the per-subsystem umbrella headers
+ * separately. This shim makes `#include <QDOffscreen.h>` resolve to the
+ * same prototypes a native Retro68 install would expose, so source
+ * works in both the playground and a Docker-built CMake target.
+ *
+ * Subsystem: Offscreen QuickDraw / GWorld. Prototypes themselves live in <Multiverse.h>.
+ */
+#ifndef __QDOFFSCREEN_H__
+#define __QDOFFSCREEN_H__
+#include <Multiverse.h>
+#endif
