@@ -28,14 +28,13 @@ test.describe("playground Reset button", () => {
     test.setTimeout(60_000);
     await page.goto(process.env.CVM_BASE_URL ?? "/");
 
-    // The cvm-pg-reset button + cvm-pg-toolbar-note caption are both
-    // emitted by editor.ts. Assert they're attached so a regression
-    // that drops the markup fails fast.
+    // The cvm-pg-reset button is emitted by editor.ts. Assert it's
+    // attached so a regression that drops the markup fails fast.
+    // (#218 removed the .cvm-pg-toolbar-note caption — the destructive-
+    // action explanation now lives in the confirm() dialog instead,
+    // which the test exercises below.)
     const resetBtn = page.locator("#cvm-pg-reset");
-    const note = page.locator(".cvm-pg-toolbar-note");
     await expect(resetBtn).toBeAttached();
-    await expect(note).toBeAttached();
-    await expect(note).toContainText(/Reset/i);
 
     // Auto-accept the confirm() dialog Reset prompts before destroying
     // edits — that's the contract — so the test acknowledges and proceeds.
