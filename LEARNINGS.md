@@ -1578,6 +1578,37 @@ Rule of thumb crystallised from this: when the verification environment doesn't 
   Both paths run independently; their respective lazy-load promises don't fight. Browser HTTP cache hits the same URL for shared assets (notably `cc1.wasm`), so a user who opens Show Assembly first and then clicks Build .c re-uses the cached compiler.
 **Action:** Documented in the bundle's README under "Why two sysroot blobs". The bridge's `loadHeadersBlob` / `loadLibsBlob` cache promises live in `cc1.ts` module scope so multiple `compileToBin` calls within a session re-use the parsed blob without re-fetching or re-parsing.
 
+### 2026-05-16 — "CI green" lied for two weeks because the wasm-shelf wasn't in CI
+**Context:** A cross-repo audit (cv-mac #195, kicked off because a doc claimed nine wasm-* samples while the directory had 21) led to compiling every sample headlessly via the in-browser toolchain. Three of the 21 were silently broken: wasm-calculator (`/* pending operator: 0/+/-/*/ */` — the first `*/` closed the comment early, leaving a stray `*/` token), wasm-scrollwin (`#include <Controls.h>` against an in-browser sysroot that consolidates everything into `Multiverse.h`), wasm-dialog (legacy `SelIText`/`GetIText` against an `libInterface.a` that ships only the modern Universal Headers names). Every single one had been broken for some time and CI was green throughout.
+
+**Finding:** Our `Cross-compile classic Mac apps (68k)` job builds the CMake apps using Retro68 in Docker — a different toolchain than what the playground uses. The wasm-shelf samples are compiled by the *browser's* wasm-cc1, which CI never touches. The browser-only path had no automation. The signal of "this sample is broken" was "a user clicked Build and the toolbar said failed" — which requires the user to click that specific sample, which most don't.
+
+**Action (#213):** `scripts/audit-wasm-samples.mjs` walks every `src/app/wasm-*/` directory and runs the vendored toolchain end-to-end (cc1 → as → ld → Elf2Mac) on it, ~5 s for all 21 samples. Plumbed as a new CI job. Catches sample-or-toolchain regressions at PR-review time. Also exposed as `npm run audit:wasm-shelf` so you can run it locally before pushing.
+
+**Pattern to remember:** "Tests pass" is only meaningful with respect to a code path the tests cover. When the production path and the test path diverge (native cross-compile vs in-browser cc1, here), assume nothing about the untested side. A 3-second `audit-by-compiling-all` script is cheaper than 15 minutes of "user clicks Build and reports".
+
+### 2026-05-16 — Cross-tab source handoff via URL fragment: three subtle races to know about
+**Context:** Adding a "Run in classic-vibe-mac" button to the wasm-retro-cc demo (#32 + cv-mac #194) — click on the demo, your C source opens in the cv-mac playground ready to Build & Run. The handoff is a base64-encoded URL fragment (`#cvm-import-source=<base64url>`). All client-side, no server.
+
+**The three races that bit us:**
+
+1. **Editor autosave overwrites the import.** First implementation: read the fragment AFTER `mountPlayground` resolves, write it to IDB, switch the project. Result: the editor had already loaded its initial content from IDB *before* my write, and the autosave (1 s debounce) wrote that initial content back, stomping the import. Fix: do the IDB write BEFORE `mountPlayground` is called so the editor's first read picks up the imported source.
+
+2. **`initPersistence`'s smart-migration silently refreshes "unknown-version" content.** Fresh tab's IDB has no `bundleVersion` key. On boot, `initPersistence` interprets unset-version as "first run, migrate everything," walks each project, and silently replaces any file with no recorded `seedHash` with the bundled default. Our just-written import had no seedHash → got stomped. Fix: write `bundleVersion = BUNDLE_VERSION` to IDB at the same time as the import, marking storage as "current, no migration needed."
+
+3. **Fragment, not query string.** GitHub Pages preserves fragments verbatim but does weird things with query strings under subpath deployments. Also: fragments never reach the server, which matters since the source might be private code the user hasn't published yet.
+
+**Pattern to remember:** Browser persistence layers have implicit "migrate on first run" semantics that race against direct writes. When piggybacking on someone else's IDB, write the version sentinel they use to mark "no migration needed" alongside your write.
+
+### 2026-05-16 — When to abstract, and when not to (the Toolchain interface)
+**Context:** cv-mac #100 Phase C asked for a Toolchain backend abstraction so future PowerPC support (per #98) could slot in. The issue's sketch proposed a deep interface — separate `compileSources()` / `linkObjects()` / `packageExecutable()` phases plus capability flags.
+
+**Finding:** The deep separation was overkill for the actual use case. Every existing caller works against `compileToBin`'s shape — sources in, MacBinary out, plus diagnostics + per-stage timings. A backend that wants to swap out *only* the linker but keep the same compiler isn't a use case we have or are likely to get — every alternative target (PowerPC, ORCA/C, TI-99, whatever) is a distinct toolchain end-to-end, not a mix-and-match of stages.
+
+**Action:** Shipped a thin `Toolchain` interface with one `compile()` method that wraps the existing `compileToBin`, plus a tiny registry. Capabilities expose what the IDE actually queries (multifile, mixedResources, cxx, optLevels). The single registered backend is `retro68-68k`; PowerPC adds a second entry, no plumbing change required.
+
+**Pattern to remember:** YAGNI applies even to ostensibly-future-proofing abstractions. The right level of abstraction is the level your *current* consumers actually use; abstracting further bakes in assumptions about the second backend that may not match what it actually needs. The deeper compile/link/package split can be added if and when a backend wants it; the thin interface doesn't preclude it.
+
 ### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
 **Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
 **Finding:** Two distinct header files coexist in the Retro68 SDK:
