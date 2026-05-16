@@ -277,7 +277,7 @@ your idea fits one of these, you'll have fun:
   drawn pixel-by-pixel with `MoveTo` + `Line` + `PaintRect`.
 - **Anything where the aesthetic _is_ the message.** A System 7
   About box for your portfolio site. A 1-bit dithered headline. A
-  "this looks like 1993 because it _is_ running 1993" demo. The
+  "this looks like the '90s because it _is_ running the '90s" demo. The
   emulator running real System 7 is the entire point.
 
 ### Compared to modern web/native dev
@@ -290,7 +290,7 @@ trade.
 - **The GPU.** No WebGL, no WebGPU, no shaders. QuickDraw is
   software rendering at 1× a 640×480 framebuffer.
 - **The npm ecosystem.** No `npm install left-pad`. Your
-  dependencies are: the Mac Toolbox (frozen 1993), Retro68's
+  dependencies are: the Mac Toolbox (frozen mid-90s), Retro68's
   RIncludes, what you write yourself in C.
 - **RAM.** ~16 MB for the whole guest Mac. Each app gets a
   partition declared in `SIZE -1`; Reader runs with ~512KB

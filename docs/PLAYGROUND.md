@@ -33,7 +33,7 @@ The Epic itself, with the live status tracker, lives at
 > — Epic #21
 
 The user has explicitly called this the project's core differentiator.
-It's the feature that turns a "1993 Macintosh that lives at a URL"
+It's the feature that turns a "1990s Macintosh that lives at a URL"
 into a place where someone can actually _make_ something without
 installing a toolchain.
 
