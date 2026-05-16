@@ -54,7 +54,12 @@ import {
 } from "./toolbox-reference-window";
 import JSZip from "jszip";
 
-import { SAMPLE_PROJECTS, TOOLCHAIN_VERSION, type SampleProject } from "./types";
+import {
+  SAMPLE_PROJECTS,
+  TOOLCHAIN_VERSION,
+  complexityStars,
+  type SampleProject,
+} from "./types";
 import type { Diagnostic } from "./preprocessor";
 import {
   initPersistence,
@@ -199,9 +204,12 @@ export async function mountPlayground(
     ? savedFile
     : project.files[0]!;
 
-  // Seed project dropdown.
+  // Seed project dropdown. Star-prefix the option text so visitors
+  // can read the project's complexity level at a glance (#233 stepped-
+  // complexity demo curation). `★★★☆☆ Wasm Snake (game)` etc.
   projectSelect.innerHTML = SAMPLE_PROJECTS.map(
-    (p) => `<option value="${p.id}">${escapeHtml(p.label)}</option>`,
+    (p) =>
+      `<option value="${p.id}">${complexityStars(p.complexity)}  ${escapeHtml(p.label)}</option>`,
   ).join("");
   projectSelect.value = project.id;
 

@@ -46,6 +46,40 @@ export interface SampleProject {
   appType: string;
   /** Doc-only: Mac OS HFS Creator code. */
   appCreator: string;
+  /**
+   * Complexity rating, 1-5 stars, shown as a `★`/`☆` prefix in the
+   * project dropdown so visitors can find an on-ramp matched to their
+   * current comfort level (cv-mac #233 — stepped-complexity demo
+   * curation). Rough scale:
+   *   1 — trivial; one file, < 50 lines, one concept (open a window,
+   *       print a string). The "this is what a Mac app looks like at
+   *       absolute minimum" rung.
+   *   2 — single concept, single file (.c + .r). Demonstrates one
+   *       Toolbox surface cleanly (sound, cursor, patterns, colour,
+   *       etc.) without stacking other affordances on top.
+   *   3 — interactive single-window app. Real event loop, menus or
+   *       dialogs, user input, drawing or text editing — the "I could
+   *       actually use this" tier (snake, calculator, notepad,
+   *       scrollwin, files).
+   *   4 — multi-window or multi-file. Front-window dispatch, refCon
+   *       state, OR split source organization (engine/UI separation,
+   *       shared headers). Where the program structure starts to
+   *       matter as much as the Toolbox surface.
+   *   5 — multi-file with binary assets (custom PICT/CICN/snd
+   *       resources, multi-screen state, app-specific data files).
+   *       This tier is the ceiling cv-mac will start filling as
+   *       #233 onboards real period apps.
+   */
+  complexity: 1 | 2 | 3 | 4 | 5;
+}
+
+/**
+ * Render a project's complexity rating as a 5-character ★/☆ string
+ * suitable for plain-text contexts like a `<select>` option label.
+ * `★★★☆☆` for a level-3 project, etc.
+ */
+export function complexityStars(level: 1 | 2 | 3 | 4 | 5): string {
+  return "★".repeat(level) + "☆".repeat(5 - level);
 }
 
 /**
@@ -90,6 +124,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     // disambiguates apps by creator at icon-binding time, and we
     // don't ship a custom icon for this demo.
     appCreator: "????",
+    complexity: 1,
   },
   {
     // wasm-hello-multi — multi-file C demo (cv-mac #100 Phase A).
@@ -104,6 +139,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmHelloMulti.bin",
     appType: "APPL",
     appCreator: "????",
+    complexity: 4,
   },
   {
     // wasm-hello-window — mixed C + .r demo (cv-mac #100 Phase B).
@@ -118,6 +154,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmHelloWindow.bin",
     appType: "APPL",
     appCreator: "CVWW",
+    complexity: 1,
   },
   {
     // wasm-snake — a playable Snake clone (cv-mac #100 Phase D demo).
@@ -132,6 +169,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmSnake.bin",
     appType: "APPL",
     appCreator: "CVSN",
+    complexity: 3,
   },
   {
     // wasm-textedit — TextEdit demo, foundation for a future word
@@ -147,6 +185,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmTextEdit.bin",
     appType: "APPL",
     appCreator: "CVTE",
+    complexity: 3,
   },
   {
     // wasm-notepad — Wasm TextEdit + a real menu bar (cv-mac #125).
@@ -161,6 +200,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmNotepad.bin",
     appType: "APPL",
     appCreator: "CVNP",
+    complexity: 3,
   },
   {
     // wasm-stickynote — small floating sticky-note window (cv-mac #125).
@@ -175,6 +215,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmStickyNote.bin",
     appType: "APPL",
     appCreator: "CVSN",
+    complexity: 2,
   },
   {
     // wasm-wordpad — Mini word processor (cv-mac #125). Takes notepad
@@ -189,6 +230,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmWordPad.bin",
     appType: "APPL",
     appCreator: "CVWP",
+    complexity: 3,
   },
   {
     // wasm-clock — analog desk clock with digital readout (cv-mac #125).
@@ -204,6 +246,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmClock.bin",
     appType: "APPL",
     appCreator: "CVCK",
+    complexity: 2,
   },
   {
     // wasm-multiwin — three windows, one event loop. Every other sample
@@ -218,6 +261,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmMultiWin.bin",
     appType: "APPL",
     appCreator: "CVMW",
+    complexity: 4,
   },
   {
     // wasm-cursor — region-driven Cursor Manager demo. Four labelled
@@ -231,6 +275,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmCursor.bin",
     appType: "APPL",
     appCreator: "CVCR",
+    complexity: 2,
   },
   {
     // wasm-files — File I/O via StandardGetFile / StandardPutFile.
@@ -244,6 +289,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmFiles.bin",
     appType: "APPL",
     appCreator: "CVFL",
+    complexity: 3,
   },
   {
     // wasm-gworld — modern System 7+ offscreen double-buffer via
@@ -259,6 +305,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmGWorld.bin",
     appType: "APPL",
     appCreator: "CVGW",
+    complexity: 3,
   },
   {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
@@ -273,6 +320,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmCalculator.bin",
     appType: "APPL",
     appCreator: "CVCA",
+    complexity: 3,
   },
   {
     // wasm-scribble — mouse-tracking draw demo (cv-mac #125). Yet
@@ -286,6 +334,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmScribble.bin",
     appType: "APPL",
     appCreator: "CVSC",
+    complexity: 2,
   },
   {
     // wasm-scrollwin — scrolling list demo (cv-mac #125). Fills the
@@ -300,6 +349,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmScrollWin.bin",
     appType: "APPL",
     appCreator: "CVSW",
+    complexity: 3,
   },
   {
     // wasm-patterns — QuickDraw pattern gallery (cv-mac #125). Fills
@@ -313,6 +363,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmPatterns.bin",
     appType: "APPL",
     appCreator: "CVPT",
+    complexity: 2,
   },
   {
     // wasm-bounce — offscreen BitMap + CopyBits, no-flicker animation
@@ -327,6 +378,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmBounce.bin",
     appType: "APPL",
     appCreator: "CVBO",
+    complexity: 3,
   },
   {
     // wasm-dialog — ModalDialog with an editable text field (cv-mac
@@ -340,6 +392,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmDialog.bin",
     appType: "APPL",
     appCreator: "CVDL",
+    complexity: 3,
   },
   {
     // wasm-sound — Sound Manager SysBeep demo (cv-mac #125). Fills
@@ -355,6 +408,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmSound.bin",
     appType: "APPL",
     appCreator: "CVSO",
+    complexity: 2,
   },
   {
     // wasm-color — Color QuickDraw RGBForeColor demo (cv-mac #125).
@@ -369,6 +423,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     outputName: "WasmColor.bin",
     appType: "APPL",
     appCreator: "CVCR",
+    complexity: 2,
   },
 ];
 
