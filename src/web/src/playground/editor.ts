@@ -1007,10 +1007,16 @@ export async function mountPlayground(
         "info",
       );
       // Fetch the empty HFS template and patch it with the new binary.
-      // The volume label is "Apps" (baked into the template). We name
-      // the file inside it after the project's outputName minus the .bin
-      // extension so the Finder sees, e.g., "Reader" / "MacWeather".
+      // We name the file inside the volume after the project's
+      // outputName minus the .bin extension so the Finder shows,
+      // e.g., "Reader" / "MacWeather", and we rename the *volume*
+      // after the project's display label so the disk on the
+      // desktop is also project-specific — closes cv-mac #220
+      // ("the mounted disk is generically named 'Apps'"). HFS caps
+      // volume names at 27 bytes; truncate defensively if a future
+      // project's label exceeds it.
       const fname = proj.outputName.replace(/\.bin$/i, "");
+      const volName = proj.label.slice(0, 27);
       const tmplResp = await fetch(`${baseUrl}playground/empty-secondary.dsk`);
       if (!tmplResp.ok) {
         throw new Error(
@@ -1022,10 +1028,11 @@ export async function mountPlayground(
         templateBytes: tmplBytes,
         macBinary: result.bytes!,
         filename: fname,
+        volumeName: volName,
       });
       setStatus(statusEl, "Mounting disk…", "info");
       // Hand to emulator reboot — main.ts wired this up.
-      await hotLoad({ bytes: patched, volumeName: "Apps" });
+      await hotLoad({ bytes: patched, volumeName: volName });
       const totalMs = performance.now() - tStart;
       // Surface the binary size alongside the wall time. The Build-only
       // path already does this via formatBytes(); Build & Run was
@@ -1033,7 +1040,7 @@ export async function mountPlayground(
       // than before?" diagnostic glances.
       setStatus(
         statusEl,
-        `Done in ${totalMs.toFixed(0)}ms (${formatBytes(result.bytes!.length)}) — double-click "Apps" on the desktop.`,
+        `Done in ${totalMs.toFixed(0)}ms (${formatBytes(result.bytes!.length)}) — double-click "${volName}" on the desktop.`,
         "ok",
       );
 
@@ -1042,7 +1049,7 @@ export async function mountPlayground(
         appName: fname,
         rezFile: current.filename,
         totalMs,
-        volumeName: "Apps",
+        volumeName: volName,
       };
       // Unhide the "What just happened?" button — only after a real hot-load.
       whatBtn.hidden = false;
