@@ -177,6 +177,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVSN",
   },
   {
+    // wasm-clock — analog desk clock with digital readout (cv-mac #125).
+    // Different Toolbox slice from the rest of the shelf: GetDateTime +
+    // SecondsToDate, idle-tick redraw loop (1-second WaitNextEvent
+    // timeout, no busy-wait), all QuickDraw drawing (FrameOval / MoveTo
+    // / LineTo / FillOval). Includes a hand-rolled 60-entry sin/cos
+    // table to avoid libm — keeps the .bin tiny.
+    id: "wasm-clock",
+    label: "Wasm Clock",
+    files: ["clock.c", "clock.r"],
+    rezFile: "clock.r",
+    outputName: "WasmClock.bin",
+    appType: "APPL",
+    appCreator: "CVCK",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display

@@ -67,6 +67,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Small floating sticky-note window with a pale-yellow paper background and a single TextEdit field. Draggable, close-to-quit. Exercises QuickDraw colour (RGBForeColor / RGBBackColor) — the other TextEdit samples are monochrome.",
   },
+  "wasm-clock": {
+    emoji: "🕰️",
+    description:
+      "Analog desk clock with a digital readout below. GetDateTime + SecondsToDate for the time; a 60-tick WaitNextEvent timeout ticks the second hand once a second; QuickDraw FrameOval / MoveTo / LineTo / FillOval for the hands and pivot. Hand-rolled sin/cos table — no libm pulled in.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
