@@ -584,25 +584,15 @@ body.cvm-paused .emulator-canvas {
 
 /* --- Typography inside windows ------------------------------------- */
 
-.window__body h1,
-.window__body h2,
-.window__body h3 {
-  font-family: var(--font-chrome);
-  font-weight: normal;
-  margin: 0 0 0.6em;
-  line-height: 1.2;
-}
-
-.window__body h1 {
-  font-size: 22px;
-}
-
-.window__body h2 {
-  font-size: 14px;
-  margin-top: 1.4em;
-  border-bottom: 1px dotted var(--shadow);
-  padding-bottom: 2px;
-}
+/* h1/h2/h3 rules retired in #225's wake — the only consumers were the
+   Read Me + Emulator Config sections that lived below the fold. The
+   surviving `.window` consumers (the playground via editor.ts, the
+   Pixel Pad preview via drawing-watcher.ts) emit only <p>/<pre>; the
+   Help, About, and Picker palettes use their own typography classes
+   (cvm-help__title, cvm-picker__heading) rather than this base.
+   The <p> rule below is still load-bearing — playground banners, the
+   editor's status line, and the drawing-watcher preview all rely on
+   it for the standard within-window paragraph rhythm. */
 
 .window__body p {
   margin: 0 0 0.9em;
@@ -2258,9 +2248,6 @@ body.cvm-paused .emulator-canvas {
   }
   .window__body {
     padding: 14px 14px;
-  }
-  .window__body h1 {
-    font-size: 18px;
   }
 }
 
