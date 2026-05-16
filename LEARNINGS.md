@@ -1787,6 +1787,29 @@ Glypha's source compiles unchanged and behaves correctly. Sysroot still uses its
 
 **Incremental-poll contract worth keeping:** `poll_X { fromOffset }` → `data { bytes: Tail, totalSize }` lets the watcher carry a running offset, ship only what's new, AND detect truncation (when `totalSize < lastOffset` the source called something like `cvm_log_reset()` — wipe the UI). This is materially nicer than the all-or-nothing `poll_X` → `data { full }` shape PixelPad uses, and a good template for the next file-based watcher.
 
+### 2026-05-17 — Diagnostic-via-instrumentation: patch the vendored error handler, don't try to read the user's mind
+**Context:** Glypha III (#255) silent-exits on launch (#256) — at least three independent failure modes stack on top of each other (the ToolTrap shim semantic bug, the missing PICT resources, eventually the missing 'snd ' resources). The user-visible symptom is identical for all of them: app vanishes within a second, no dialog, no message anywhere. Debugging blind is awful.
+
+**Action:** Instead of trying to teach the host (cv-mac) to recognise *what* failed inside the Mac app, **patch the vendored app's own fatal-error handler to surface its message through the Debug Console** before it tears the app down. For Glypha that meant two lines at the top of `Utilities.c:RedAlert` (#265):
+
+```c
+cvm_log("RedAlert (fatal):");
+cvm_log_p(theStr);
+ParamText(theStr, "\p", "\p", "\p");   /* unchanged below */
+Alert(kRedAlertID, 0L);
+ExitToShell();
+```
+
+Now every fatal exit emits the exact message string (e.g. "A Graphic Couldn't Be Loaded") into the Output → Console pane within ~1s. The user sees *why* the app died without needing to attach a debugger, read the source, or even understand what `RedAlert` is.
+
+**Why this beats the alternatives:**
+
+  - **Trap interception** (`_DebugStr` / `_ExitToShell` in the emulator): emulator-patch maintenance cost forever. Not justified for a debug aid.
+  - **Stack trace on crash**: 68k doesn't have unwinding metadata. You'd need MacsBug or a custom trap-driven tracer. Heavy infrastructure for an opt-in case.
+  - **Logging at every `RedAlert` call site**: 9+ touchpoints in Glypha alone, none of them stable across re-onboarding. Patching the handler is 1 touchpoint at the choke point.
+
+**Pattern to remember:** Any vendored app you onboard will have its own error funnel — `RedAlert`, `Fatal`, `AbortApp`, `Die`, whatever the original author named it. The first thing to do after the app compiles but before debugging *runtime* problems is **find that funnel and wire it into `cvm_log`** — one minimal touch that turns every future fatal into a visible, attributable line. Treats vendored source like a black box but with one diagnostic poke at the boundary. Generalises to any port: Mac, microcontroller, embedded, whatever — the choke point for fatals is almost always one or two functions that you can instrument once and reap for the rest of the port's life.
+
 ### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
 **Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
 **Finding:** Two distinct header files coexist in the Retro68 SDK:
