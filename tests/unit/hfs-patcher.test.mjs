@@ -44,6 +44,8 @@ function transpile() {
 const outDir = transpile();
 const mod = await import(join(outDir, "hfs-patcher.js"));
 const { patchEmptyVolumeWithBinary, parseMacBinary, __test } = mod;
+const iconMod = await import(join(outDir, "floppy-icon.js"));
+const { buildIconResourceFork } = iconMod;
 
 let pass = 0;
 let fail = 0;
@@ -362,6 +364,91 @@ if (hfsutilsAvailable) {
       );
     } finally {
       spawnSync("humount", [tmpPath]);
+    }
+  });
+
+  test("extraFiles: resource fork is injected and round-trips via hcopy -m", () => {
+    // cv-mac #233 Option B infrastructure: a pre-built `.rsrc.bin`
+    // file shipped alongside the app, the app would `OpenResFile`
+    // it at runtime to read CICN/ICN#/snd/etc. resources without
+    // baking them into the app's own resource fork.
+    //
+    // Reuses the resource-fork encoder from floppy-icon.ts (which
+    // builds an ICN# resource at the conventional Mac volume-icon
+    // ID -16455) — same encoder shape any future demo would use to
+    // produce its sprites.rsrc.bin. We assert the bytes round-trip
+    // unchanged through HFS into hcopy's output.
+    const rsrc = buildIconResourceFork();
+    assert.ok(rsrc.length > 256, `expected resource fork > 256 bytes, got ${rsrc.length}`);
+    {
+      const patched = patchEmptyVolumeWithBinary({
+        templateBytes: template,
+        macBinary: syntheticAppl,
+        filename: "hello_toolbox",
+        extraFiles: [
+          {
+            // Name sorts after "hello_toolbox" — case-folded 'i' > 'h'.
+            filename: "icon.rsrc",
+            type: 0x72737263, // 'rsrc'
+            creator: 0x52534544, // 'RSED' (ResEdit)
+            dataFork: new Uint8Array(0),
+            resourceFork: rsrc,
+          },
+        ],
+      });
+      const tmpPath = join(mkdtempSync(join(tmpdir(), "cvm-hfs-rfork-")), "p.dsk");
+      writeFileSync(tmpPath, Buffer.from(patched));
+      const mount = spawnSync("hmount", [tmpPath]);
+      assert.equal(mount.status, 0, `hmount failed: ${mount.stderr.toString()}`);
+      try {
+        // hls -al shows both forks; the resource-fork column should match.
+        const ls = spawnSync("hls", ["-la"]);
+        assert.equal(ls.status, 0, `hls failed: ${ls.stderr.toString()}`);
+        const out = ls.stdout.toString();
+        assert.match(out, /icon\.rsrc/, `hls didn't list icon.rsrc: ${out}`);
+        assert.match(out, /rsrc\/RSED/, `hls didn't show rsrc/RSED type: ${out}`);
+
+        // Pull the resource fork out via hcopy -r and verify byte-for-byte.
+        // Resource forks need the -r (raw) flag; hcopy without flags
+        // does MacBinary II wrapping which would not be a byte-perfect
+        // match for our raw resource-fork bytes.
+        // Actually for resource fork extraction, hcopy uses ":fork:rsrc"
+        // suffix syntax in some hfsutils versions; the most portable way
+        // is hcopy -m (MacBinary) and then strip the header. Simpler
+        // for this test: use hcopy -m and verify the rsrc fork bytes
+        // INSIDE the MacBinary header.
+        const copyDir = mkdtempSync(join(tmpdir(), "cvm-hfs-rfork-out-"));
+        const copyPath = join(copyDir, "icon.bin");
+        const copy = spawnSync("hcopy", ["-m", ":icon.rsrc", copyPath]);
+        assert.equal(
+          copy.status,
+          0,
+          `hcopy MacBinary failed: ${copy.stderr.toString()}`,
+        );
+        const macbin = new Uint8Array(readFileSync(copyPath));
+        // MacBinary II header: dataLen at offset 83, rsrcLen at offset 87.
+        // dataStart = 128, padded to multiple of 128. rsrcStart =
+        // dataStart + ceil(dataLen / 128) * 128.
+        const dv = new DataView(macbin.buffer, macbin.byteOffset, macbin.byteLength);
+        const dataLen = dv.getUint32(83, false);
+        const rsrcLen = dv.getUint32(87, false);
+        const dataStart = 128;
+        const dataPad = Math.ceil(dataLen / 128) * 128;
+        const rsrcStart = dataStart + dataPad;
+        const gotRsrc = macbin.subarray(rsrcStart, rsrcStart + rsrcLen);
+        assert.equal(
+          rsrcLen,
+          rsrc.length,
+          `rsrc fork length: wrote ${rsrc.length}, MacBinary says ${rsrcLen}`,
+        );
+        assert.deepStrictEqual(
+          Array.from(gotRsrc),
+          Array.from(rsrc),
+          "resource-fork bytes didn't round-trip through HFS",
+        );
+      } finally {
+        spawnSync("humount", [tmpPath]);
+      }
     }
   });
 }
