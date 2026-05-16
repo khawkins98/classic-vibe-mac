@@ -2209,6 +2209,20 @@ body.cvm-paused .emulator-canvas {
   display: flex;
   flex-direction: column;
 }
+/* Sticky session-stats banner — pinned above the Build Log so the
+   cumulative [cvm-stats] line (build count / total compile time /
+   cache hits / time saved) stays visible while individual build
+   entries scroll. Mac OS 8 system-font caption with a thin shadow
+   rule underneath. */
+.cvm-output__statsbar {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  color: var(--shadow-dark);
+  background: var(--platinum-light);
+  border-bottom: 1px solid var(--shadow);
+}
 .cvm-output__log {
   flex: 1 1 auto;
   margin: 0;

@@ -369,6 +369,22 @@ if (buildLogEl) {
   );
   appendBuildLog(`[cvm] loaded=${new Date().toISOString()} — click a project on the left to begin.`);
 
+  // Sticky stats banner — main pane in the Build Log tab that
+  // updates in place with the most recent [cvm-stats] session summary.
+  // The banner stays hidden until the first build emits stats; after
+  // that it's pinned above the scrolling log so the cache payoff is
+  // observable at a glance instead of scrolling away with other lines.
+  const statsBarEl = document.getElementById("cvm-buildlog-statsbar");
+  function updateStatsBar(line: string): void {
+    if (!statsBarEl) return;
+    // Strip the "[cvm-stats] " prefix so the banner reads as a
+    // standalone summary; keep the rest verbatim.
+    const idx = line.indexOf("]");
+    statsBarEl.textContent =
+      idx > -1 ? line.slice(idx + 1).trim() : line;
+    statsBarEl.hidden = false;
+  }
+
   // Proxy console.info so future cvm.* lines also land here. Don't proxy
   // every console method — info is enough for our build-pipeline output.
   const origInfo = console.info.bind(console);
@@ -383,6 +399,10 @@ if (buildLogEl) {
         .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
         .join(" ");
       appendBuildLog(text);
+      // [cvm-stats] lines additionally drive the sticky banner.
+      if (first.startsWith("[cvm-stats]")) {
+        updateStatsBar(text);
+      }
     }
   };
 }

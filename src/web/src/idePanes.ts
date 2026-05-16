@@ -147,6 +147,12 @@ function outputHtml(): string {
            data-pane="buildlog"
            role="tabpanel"
            aria-label="Build log">
+        <!-- Session-stats sticky banner — main.ts populates after the
+             first build emits a [cvm-stats] line. Hidden by default
+             so an empty session shows a clean log. -->
+        <div id="cvm-buildlog-statsbar"
+             class="cvm-output__statsbar"
+             hidden></div>
         <pre id="cvm-output-buildlog" class="cvm-output__log"></pre>
       </div>
       <div class="cvm-output__pane"
