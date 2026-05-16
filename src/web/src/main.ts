@@ -569,7 +569,7 @@ if (playgroundEl) {
   // Hot-load callback: hands the patched HFS image to the loader, which
   // tears down the worker, spawns a fresh one with the new disk in the
   // secondary slot, and resolves once the second boot is complete.
-  void importReady.then((imported) => {
+  void importReady.then(async (imported) => {
     if (imported) {
       // Pin the dropdown to wasm-hello so the editor mounts that
       // project — regardless of which project the dropdown last
@@ -578,7 +578,7 @@ if (playgroundEl) {
       const sel = getProjectDropdown();
       if (sel) sel.value = "wasm-hello";
     }
-    return mountPlayground(
+    const mount = mountPlayground(
       playgroundEl,
       import.meta.env.BASE_URL,
       emulatorHandle
@@ -593,6 +593,19 @@ if (playgroundEl) {
           }
         : undefined,
     );
+    if (imported) {
+      // Wait a tick for the playground to finish painting, then drop
+      // a one-line confirmation into the Playground's status row so
+      // the user knows their source from the wasm-retro-cc demo
+      // actually made it across (and gets a nudge toward Build & Run).
+      await mount;
+      const statusEl = document.getElementById("cvm-pg-status");
+      if (statusEl) {
+        statusEl.textContent =
+          "Imported from wasm-retro-cc — your source is in wasm-hello/hello.c. Hit Build & Run to launch it.";
+        statusEl.classList.add("cvm-pg-status--info");
+      }
+    }
   });
 }
 
