@@ -1650,6 +1650,42 @@ Rule of thumb crystallised from this: when the verification environment doesn't 
 
 **Side-effect:** The audit pattern also surfaces the inverse — TS that *does* emit a class but the CSS doesn't exist (missing styles). Less common but worth a glance when you're already grep-spelunking.
 
+### 2026-05-16 — HFS catalog walking: gotchas + offsets, captured for the next time
+**Context:** cv-mac #245 (suppress boot-time Finder window auto-opening) required walking the boot disk's HFS catalog B-tree to find every directory record and zero its `DXInfo.frOpenChain` field. We already manipulate the in-memory secondary disk's catalog in `hfs-patcher.ts`, but that's a tiny baked template with a known single-leaf-node layout. The boot disk is 384 catalog nodes spread across multiple leaves; needed a real walker.
+
+**Findings worth carrying forward — they're not in `hfs-patcher.ts`'s comments because we sidestepped them on the small disk:**
+
+  - **`drCTExtRec[0].startBlock` is at MDB offset 150**, not 146. (`146` is `drCTFlSize`, the catalog file size in bytes; the 22-as-u16 there is the EXTENTS overflow file's count, which happens to match the small template's catalog start by coincidence — a great way to be wrong without noticing.)
+  - **BTHeader record offsets are `+14/16/20/24/28/32` from node start** (bthDepth/bthRoot/bthNRecs/bthFNode/bthLNode/bthNodeSize). Got these off-by-4 first try because I'd cached "fields are 2 bytes each from +14" — they're not; `bthRoot` is u32 not u16, so the offsets walk in 2/4/4/4/4/2 increments.
+  - **The leaf chain is followed via `fLink` from `bthFNode`**, with the last leaf's fLink = 0. Don't trust `bthLNode` as a termination signal — it's reported, but my probe found 97 leaves following fLink when bthLNode claimed node 25 (i.e., the count was wrong somewhere). The visited-set defensive loop check is load-bearing.
+  - **The catalog disk offset is `drAlBlSt × 512 + extentStartBlock × drAlBlkSiz`.** `drAlBlSt` is in 512-byte logical blocks (not alloc-block units), so you can't just multiply both sides by drAlBlkSiz.
+
+**Pattern to remember:** When working with a binary format that has multiple structures of similar-looking sizes (HFS MDB has *two* extent records: one for the extents overflow file at +134, one for the catalog file at +150 — both 12 bytes of `{startBlock(u16) + count(u16)}` × 3), don't reach for the offset from memory. Probe a known-good file for a value you can verify (the small `empty-secondary.dsk` has catalogFirstAllocBlock = 22; scan the MDB for u16s == 22; cross-check against the layout doc; **then** write the constant down).
+
+### 2026-05-16 — Custom volume icons via Icon\r + HasCustomIcon flag
+**Context:** cv-mac #244 — the hot-loaded secondary disk was showing as a generic removable-cartridge icon on the Mac desktop. User wanted it to look like a 3.5" floppy. BasiliskII assigns the icon based on the driver mounting the disk — changing the driver is deep work. Custom icons are the cheap alternative: a per-file/per-folder override the Finder honours.
+
+**The three-part trick:**
+
+  1. **Invisible file at the volume root literally named `Icon\r`** — that's "Icon" + 0x0d CR byte. The Finder hard-codes this filename when looking for custom icons. The CR byte is the same convention the upstream community image used for the Aladdin folder's icon files (which we hit in #243's recursive pruning); it's not project-specific weirdness.
+  2. **`ICN#` resource at the conventional ID `-16455`** inside the icon file's resource fork. 32×32 1-bit icon (128 bytes) + 32×32 1-bit mask (128 bytes) = 256 bytes total resource body. Optionally `icl4`/`icl8` at the same ID for color (we ship 1-bit only — Mac OS falls back to it on color displays).
+  3. **HasCustomIcon bit (frFlags bit 10, mask 0x0400)** flipped on the volume root's DInfo. Without this bit, the Finder ignores the icon file entirely.
+
+**Resource-fork encoding (HFS) is straightforward but fiddly:** 16-byte header (data + map offsets and sizes) → 240 bytes of system/app reserved → resource data section (u32 length + resource bytes per resource) → resource map (header copy + type list + ref list + name list). For one `ICN#` at one ID with no name: 666 bytes total file. See `floppy-icon.ts:buildIconResourceFork` for the encoder.
+
+**Cross-link:** Same surface as #245 — both touch `DInfo`/`DXInfo` fields in directory catalog records. The `frFlags` bits we flip for HasCustomIcon are at data offset 30 within cdrDirRec; `frOpenChain` (the field #245 zeroes for window suppression) is at data offset 42. Two fields, same record, same dynamic-keyLength gotcha (always compute `dataOff = rec0 + 1 + keyLength` rather than hard-coding `rec0 + 12` — that bug surfaced in `bumpRootDirValence` during #241's rename work and bit us again here).
+
+**Pattern to remember:** When the obvious cheap path involves emulator-level changes (here: registering the disk as a floppy media type to get the floppy icon), check if the *data* can be patched instead. A 666-byte resource fork + one flag bit is way cheaper than an emulator patch — and works without any driver-layer knowledge.
+
+### 2026-05-16 — `frOpenChain` truncation: 3 of 4 boot windows in one bit-flip
+**Context:** cv-mac #245 wanted to suppress four boot-time Finder windows (Mini vMac Boot v2 root, Applications, Disk Copy 6.1.2, Shared). The Finder's "auto-open these" list is a linked chain of folder CNIDs threaded through every folder's `DXInfo.frOpenChain` field, starting at the volume root.
+
+**Action:** Zeroed `frOpenChain` on every directory record in the boot disk's catalog (via `scripts/suppress-boot-windows.mjs`, wired into `build-boot-disk.sh`). Truncated the chain at the root → none of the chained folders auto-open.
+
+**Result:** 3 of 4 windows closed (verified by post-boot Playwright screenshot). The fourth (Shared) is an extfs-mounted volume with no catalog entry — its window state lives only in the boot disk's Desktop DB. That's a separate ticket (#245 stays open with narrowed scope).
+
+**Pattern to remember:** When a binary format has both a "structured live data" surface (catalog) and a "denormalized derived cache" surface (Desktop DB), patch the structured one first — it's documented, the change is local, and the cache typically rebuilds correctly from it. Reverse-engineering the cache format only earns its keep if the structured-data patch *doesn't* work, which is an empirical question worth answering cheaply first. Two hours of catalog patching closed 3/4 of #245 without ever touching Desktop DB; the remaining 1/4 might force Desktop DB work, or might fall to a different mechanism entirely (extfs-side rather than disk-side).
+
 ### 2026-05-16 — When to abstract, and when not to (the Toolchain interface)
 **Context:** cv-mac #100 Phase C asked for a Toolchain backend abstraction so future PowerPC support (per #98) could slot in. The issue's sketch proposed a deep interface — separate `compileSources()` / `linkObjects()` / `packageExecutable()` phases plus capability flags.
 
