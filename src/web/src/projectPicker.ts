@@ -35,107 +35,107 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
   "wasm-hello": {
     emoji: "✨",
     description:
-      "Smallest in-browser-built demo. Single hello.c, no resources, no window — just InitGraf + DrawString on the desktop port. Start here to see the full wasm-cc1 pipeline in action.",
+      "The smallest in-browser-built app. Single hello.c, no resources, no window. Start here to confirm the wasm-cc1 pipeline works on your machine.",
   },
   "wasm-hello-multi": {
     emoji: "📚",
     description:
-      "Multi-file C. main.c + greet.c + greet.h linked together by ld. Demonstrates the multi-translation-unit build path landed in cv-mac #113.",
+      "Multi-file C. main.c + greet.c + greet.h, linked together by ld. The simplest demo that exercises the multi-translation-unit build path.",
   },
   "wasm-hello-window": {
     emoji: "🪟",
     description:
-      "Mixed C + .r build. Compiles a real WIND resource alongside the C code and splices the two forks. Same path used by Wasm Snake.",
+      "Mixed C + .r build. Compiles a real WIND resource next to the C code and splices the two forks. Same path Wasm Snake uses.",
   },
   "wasm-snake": {
     emoji: "🐍",
     description:
-      "Playable Snake clone. Arrow keys steer, eat apples to grow, click to restart on game over. Demonstrates a real event loop, TickCount-driven movement, QuickDraw rendering — all built in your browser.",
+      "Playable Snake clone. Arrow keys steer, eat apples to grow, click to restart. A real event loop, TickCount-driven movement, QuickDraw rendering, all built in your browser.",
   },
   "wasm-textedit": {
     emoji: "✏️",
     description:
-      "Editable TextEdit field in a draggable window. Type to insert, click to position the caret, click the close box to quit. Built on the Toolbox's native TEHandle — the foundation a real word processor would extend.",
+      "Editable TextEdit field in a draggable window. Type to insert, click to move the caret, click the close box to quit. Uses the Toolbox's native TEHandle, which is what a real word processor would build on.",
   },
   "wasm-notepad": {
     emoji: "📝",
     description:
-      "TextEdit + a real Mac menu bar. Apple / File / Edit menus, Cmd-key shortcuts (⌘N, ⌘Q, ⌘X, ⌘C, ⌘V), and a working About dialog. The ladder rung between an edit field and a mini word processor.",
+      "TextEdit with a real Mac menu bar. Apple / File / Edit menus, Cmd-key shortcuts (⌘N, ⌘Q, ⌘X, ⌘C, ⌘V), and a working About dialog. One step closer to a small word processor than wasm-textedit.",
   },
   "wasm-stickynote": {
     emoji: "🟨",
     description:
-      "Small floating sticky-note window with a pale-yellow paper background and a single TextEdit field. Draggable, close-to-quit. Exercises QuickDraw colour (RGBForeColor / RGBBackColor) — the other TextEdit samples are monochrome.",
+      "Small floating sticky-note window. Pale yellow paper, one TextEdit field, draggable, close to quit. The only TextEdit sample that uses colour QuickDraw (RGBForeColor / RGBBackColor).",
   },
   "wasm-wordpad": {
     emoji: "📄",
     description:
-      "Mini word processor — Font (Geneva/Chicago/Monaco/Courier), Size (9/10/12/14/18/24), and Style (Plain/Bold/Italic/Underline) menus live-restyle a monostyle TextEdit. Apple/File/Edit shape mirrors Notepad. The next ladder rung after Notepad on the way to per-run TEStyleNew formatting.",
+      "A small word processor. Font (Geneva, Chicago, Monaco, Courier), Size (9 through 24), and Style (Plain, Bold, Italic, Underline) menus restyle the whole document at once. Same Apple / File / Edit shape as Notepad.",
   },
   "wasm-clock": {
     emoji: "🕰️",
     description:
-      "Analog desk clock with a digital readout below. GetDateTime + SecondsToDate for the time; a 60-tick WaitNextEvent timeout ticks the second hand once a second; QuickDraw FrameOval / MoveTo / LineTo / FillOval for the hands and pivot. Hand-rolled sin/cos table — no libm pulled in.",
+      "Analog desk clock with a digital readout. GetDateTime + SecondsToDate for the time, a 1-second WaitNextEvent timeout to tick the second hand, QuickDraw for the face. Hand-rolled sin/cos table so it doesn't pull in libm.",
   },
   "wasm-multiwin": {
     emoji: "🪟",
     description:
-      "Three windows open at launch, one event loop. Click any back window to raise it (SelectWindow), drag any titlebar to move, close any to dismiss. Each window stores its own pattern index in its refCon and fills itself with a different system pattern. Last close exits.",
+      "Three windows open at launch, one event loop. Click a back window to raise it, drag any titlebar to move, close any to dismiss. Each window stores its own pattern index in its refCon. The app exits when the last one closes.",
   },
   "wasm-cursor": {
     emoji: "🖱️",
     description:
-      "Cursor Manager demo. Four labelled quadrants — moving the mouse between them swaps the cursor via GetCursor + SetCursor (arrow / I-beam / watch / cross-hair). Classic Mac \"poll the mouse on idle, change cursor by region\" pattern since the OS has no enter/leave events.",
+      "Cursor Manager demo. Four labelled quadrants; moving the mouse between them swaps the cursor (arrow, I-beam, watch, cross-hair) via GetCursor and SetCursor. The Mac has no enter/leave events, so the code polls the mouse on idle and changes the cursor when the region changes.",
   },
   "wasm-files": {
     emoji: "💾",
     description:
-      "File I/O round-trip. Open pops StandardGetFile to pick any TEXT file from any mounted volume; Save pops StandardPutFile and writes the TextEdit contents via FSpCreate + FSWrite + SetEOF. First sample on the shelf that touches the filesystem.",
+      "File I/O round-trip. Open pops StandardGetFile to pick any TEXT file from any mounted volume; Save pops StandardPutFile and writes the TextEdit contents via FSpCreate + FSWrite + SetEOF. The first sample on the shelf that reads and writes the filesystem.",
   },
   "wasm-gworld": {
     emoji: "🌀",
     description:
-      "Modern offscreen double-buffer via NewGWorld. Four shapes (square / circle / diamond / triangle) bounce around a 320×200 scene; each frame redraws into the GWorld and CopyBits-blits to the window — flicker-free, the clean System 7+ way. The upgrade path from wasm-bounce's hand-rolled NewPtr+SetPortBits BitMap.",
+      "Modern offscreen double-buffer via NewGWorld. Four shapes (square, circle, diamond, triangle) bounce around a 320x200 scene; each frame redraws into the GWorld and CopyBits-blits to the window. The System 7+ way to do what wasm-bounce does by hand.",
   },
   "wasm-calculator": {
     emoji: "🔢",
     description:
-      "4-function calculator. 16 buttons drawn directly to the window port, hit-tested via PtInRect, display formatted with NumToString. Demonstrates the playground can ship classic Mac apps without any TextEdit / scrap entanglement.",
+      "4-function calculator. 16 buttons drawn straight to the window port, hit-tested with PtInRect, display formatted with NumToString. A non-TextEdit demo, no scrap involvement.",
   },
   "wasm-scribble": {
     emoji: "🖌",
     description:
-      "Mouse-tracking draw demo. Click + drag in the window to draw; the inner StillDown / GetMouse / LineTo loop is the classic Mac drag-to-draw pattern from Inside Mac: Macintosh Toolbox Essentials ch. 1. Click Clear to wipe; click outside the window to quit.",
+      "Mouse-tracking draw demo. Click and drag to draw; the inner StillDown / GetMouse / LineTo loop is the same drag-to-draw pattern from Inside Mac: Macintosh Toolbox Essentials ch. 1. Click Clear to wipe, click outside the window to quit.",
   },
   "wasm-scrollwin": {
     emoji: "📜",
     description:
-      "Scrolling list with a real Mac scroll bar. NewControl(scrollBarProc) + TrackControl with a live actionProc for the arrows and page regions. Arrow keys also scroll. 50 items, fits about 13 at a time — drag the thumb to jump.",
+      "Scrolling list with a real Mac scroll bar. NewControl(scrollBarProc) + TrackControl with a live actionProc for the arrows and page regions. Arrow keys scroll too. 50 items, about 13 visible at a time, drag the thumb to jump.",
   },
   "wasm-patterns": {
     emoji: "🧵",
     description:
-      "QuickDraw pattern gallery. Four system patterns (white/ltGray/gray/dkGray) plus eight hand-rolled 8x8 bitmaps — stripes, checkers, dots, bricks, weave. Demonstrates the canonical 8-byte Pattern shape and FillRect.",
+      "QuickDraw pattern gallery. The four system patterns (white, ltGray, gray, dkGray) plus eight hand-rolled 8x8 bitmaps: stripes, checkers, dots, bricks, weave. Shows what the canonical 8-byte Pattern shape can do with FillRect.",
   },
   "wasm-bounce": {
     emoji: "🏐",
     description:
-      "Bouncing ball with no-flicker double-buffer rendering. Hand-constructs an offscreen 1-bit BitMap, draws into it each tick, then CopyBits the whole frame onto the window in one shot — the canonical animated-Mac-app pattern.",
+      "Bouncing ball with no-flicker rendering. Builds an offscreen 1-bit BitMap by hand, draws into it each tick, then CopyBits the whole frame onto the window in one shot. The pre-Color-QuickDraw way; wasm-gworld is the modern version.",
   },
   "wasm-dialog": {
     emoji: "💬",
     description:
-      "ModalDialog with an editable text field. Click the button → modal opens with a prompt, EditText field, OK + Cancel. OK reads the typed answer with GetIText and draws \"Hello, <name>!\" back to the main window.",
+      "ModalDialog with an editable text field. Click the button to open a modal with a prompt, EditText field, OK, and Cancel. OK reads the typed answer with GetDialogItemText and draws \"Hello, <name>!\" back to the main window.",
   },
   "wasm-sound": {
     emoji: "🔔",
     description:
-      "Sound Manager SysBeep demo — \"Beep\" plays one alert tone, \"Triple Beep\" plays three back-to-back. BasiliskII collapses SysBeep's duration parameter to a fixed-length alert, so making the difference audible means firing multiple beeps rather than asking for a longer one.",
+      "Sound Manager SysBeep demo. \"Beep\" plays one alert tone, \"Triple Beep\" plays three in a row. BasiliskII squashes SysBeep's duration parameter down to a fixed-length tone, so the only way to make a noticeable difference is to fire the trap multiple times.",
   },
   "wasm-color": {
     emoji: "🌈",
     description:
-      "Color QuickDraw demo: the canonical 1990 Macintosh II 6-colour palette painted as labelled stripes (red, yellow, green, cyan, blue, magenta). RGBColor + RGBForeColor + PaintRect. On a 1-bit display the colours quantise to black/white — Color QuickDraw's documented degradation path.",
+      "Color QuickDraw demo: the classic 1990 Macintosh II 6-colour palette painted as labelled stripes (red, yellow, green, cyan, blue, magenta) via RGBColor + RGBForeColor + PaintRect. On a 1-bit display these quantise to black and white, which is Color QuickDraw's documented degradation behaviour.",
   },
 };
 
