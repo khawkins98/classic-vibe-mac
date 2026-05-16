@@ -1600,6 +1600,26 @@ Rule of thumb crystallised from this: when the verification environment doesn't 
 
 **Pattern to remember:** Browser persistence layers have implicit "migrate on first run" semantics that race against direct writes. When piggybacking on someone else's IDB, write the version sentinel they use to mark "no migration needed" alongside your write.
 
+### 2026-05-16 — Smoke tests that fail because dead content was removed
+**Context:** #225 ripped out the legacy below-the-fold "Read Me" + "Emulator Config" sections — pure deletion of content that no longer composed with the WinBox palette system. CI broke on a Playwright smoke test (`tests/e2e/placeholder.spec.ts`) that asserted `page.locator("h1").toHaveText("classic-vibe-mac")`. The `<h1>` lived inside the Read Me section we just deleted.
+
+**Finding:** The smoke test was technically doing its job — it caught a missing DOM element — but the element wasn't load-bearing for the page's actual purpose. The h1 was *Read Me chrome*, and the Read Me itself was vestigial. A smoke test asserting on chrome that's about to be deliberately removed is testing the wrong invariant: it locks in chrome that should be free to evolve, rather than identity that should be stable.
+
+**Action:** Replaced the h1 assertion with two checks that survive layout changes: the `.menubar` element is attached, and the `#cvm-menubar-version` chip contains "cv-mac". Both are page-identity signals (page renders, page knows what it is) without nailing down a specific chrome surface.
+
+**Pattern to remember:** When a deletion PR breaks a smoke test, the question to ask first is "is this test asserting on chrome or on identity?" If chrome, the test was over-coupled and the deletion is exposing real test debt; update the test rather than restore the chrome. If identity (does the page boot? does the canvas mount? does the menubar render?), restore or rework. The smoke test should outlive several layout passes — if it doesn't, it's the test that needs to broaden.
+
+**Side-effect cleanup:** Removing a chrome surface also tends to leave dead CSS that styled only that surface. After #225 the `.window__body h1/h2/h3` typography rules became dead — Read Me was their only consumer; the surviving `.window` users (playground, drawing-watcher preview) emit only `<p>`/`<pre>`. A separate small follow-up dropped them. Worth grepping for "what styled the thing we just deleted" as part of any chrome-removal PR — CSS rules don't get reported by `tsc` or the build, so they rot silently.
+
+### 2026-05-16 — The "explain the never-pressed button" pattern (chrome captions for destructive actions)
+**Context:** #218 item 3 retired a `.cvm-pg-toolbar-note` paragraph that sat permanently under the Playground toolbar explaining what Reset does: *"Reset throws away your edits and reloads this project from the original bundled source…"* The ticket noted the explanation belonged in the action's confirmation modal, not in permanent page chrome — and the existing code already had a `window.confirm()` covering it.
+
+**Finding:** The caption was permanent vertical chrome explaining a button most users never press, on a panel returning users see every session. The information was correct and the prose was good, but the *placement* taxed every visitor on every load to mitigate a risk only a small fraction of visitors will ever face. The destructive-action confirm dialog, which fires at the moment-of-need, is the right home for that information — the user sees it only when they're about to do the destructive thing.
+
+**Pattern to remember:** Permanent caption text below a button is a smell. Ask: does the user need this info *every time they see this button*, or *only when they're about to use it*? If the latter, move the prose into the confirm dialog (or a tooltip on hover for non-destructive actions). Permanent chrome is for actions the user uses frequently and benefits from constant reminders about; it's not for risk mitigation on rarely-used buttons.
+
+**Bonus:** The Reset path already had `window.confirm()` covering the destructive risk. The chrome caption was load-bearing for *nobody* once the confirm was in place — pure duplication that nobody noticed because nobody re-audits successful onboarding copy. Removing it shrank the panel ~50 px without losing any user-facing function.
+
 ### 2026-05-16 — When to abstract, and when not to (the Toolchain interface)
 **Context:** cv-mac #100 Phase C asked for a Toolchain backend abstraction so future PowerPC support (per #98) could slot in. The issue's sketch proposed a deep interface — separate `compileSources()` / `linkObjects()` / `packageExecutable()` phases plus capability flags.
 
