@@ -233,6 +233,19 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVCR",
   },
   {
+    // wasm-files — File I/O via StandardGetFile / StandardPutFile.
+    // The most visible coverage gap on the shelf, finally filled:
+    // FSpCreate / FSpOpenDF / FSRead / FSWrite / SetEOF round-trip
+    // TEXT files through a system Open/Save dialog.
+    id: "wasm-files",
+    label: "Wasm Files (read/write)",
+    files: ["files.c", "files.r"],
+    rezFile: "files.r",
+    outputName: "WasmFiles.bin",
+    appType: "APPL",
+    appCreator: "CVFL",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display
