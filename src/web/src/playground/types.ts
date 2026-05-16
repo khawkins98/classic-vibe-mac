@@ -47,7 +47,7 @@ export interface SampleProject {
   /** Doc-only: Mac OS HFS Creator code. */
   appCreator: string;
   /**
-   * Complexity rating, 1-5 stars, shown as a `★`/`☆` prefix in the
+   * Complexity rating, 1-6 stars, shown as a `★`/`☆` prefix in the
    * project dropdown so visitors can find an on-ramp matched to their
    * current comfort level (cv-mac #233 — stepped-complexity demo
    * curation). Rough scale:
@@ -65,21 +65,47 @@ export interface SampleProject {
    *       state, OR split source organization (engine/UI separation,
    *       shared headers). Where the program structure starts to
    *       matter as much as the Toolbox surface.
-   *   5 — multi-file with binary assets (custom PICT/CICN/snd
-   *       resources, multi-screen state, app-specific data files).
-   *       This tier is the ceiling cv-mac will start filling as
-   *       #233 onboards real period apps.
+   *   5 — multi-file with *in-source* binary assets (custom ICN#/
+   *       CICN/PICT compiled from Rez hex literals). The asset and
+   *       the code travel together in the same project; the build
+   *       pipeline just compiles them.
+   *   6 — multi-file with a *separate external* binary asset file
+   *       (`.rsrc.bin`) shipped alongside the app on the same disk
+   *       and loaded at runtime via `OpenResFile`. The asset is no
+   *       longer in source — it's a build-time-produced artefact
+   *       the splice infra (#251) ferries onto the disk. The rung
+   *       where "the app has dependencies on data files" first
+   *       becomes real.
    */
-  complexity: 1 | 2 | 3 | 4 | 5;
+  complexity: 1 | 2 | 3 | 4 | 5 | 6;
+  /**
+   * Optional list of binary resource files (`.rsrc.bin`) shipped
+   * alongside this app on the same hot-load disk. Each file's
+   * resource fork is loaded at build time and spliced into the
+   * disk via `PatchOptions.extraFiles.resourceFork` (#251 infra).
+   * The app reads them at runtime via `OpenResFile(<filename
+   * without .bin>)` — convention: an `icons.rsrc.bin` file is
+   * opened as `OpenResFile("Icons")` on the disk (the `.bin`
+   * suffix is stripped because it's a host-side host-filesystem
+   * convention; the on-disk Mac file is just `Icons`).
+   *
+   * Filenames sort case-insensitively *after* the main app's
+   * filename in HFS catalog key order (same constraint as
+   * `PatchOptions.extraFiles`). For most apps this is satisfied
+   * naturally — app names start with a capital letter (e.g.
+   * "Reader" or no-affix "wasm-icon-gallery" project's output
+   * "WasmIconGallery") and asset filenames start lower-case.
+   */
+  binaryAssets?: string[];
 }
 
 /**
- * Render a project's complexity rating as a 5-character ★/☆ string
+ * Render a project's complexity rating as a 6-character ★/☆ string
  * suitable for plain-text contexts like a `<select>` option label.
- * `★★★☆☆` for a level-3 project, etc.
+ * `★★★☆☆☆` for a level-3 project; `★★★★★★` for the top tier.
  */
-export function complexityStars(level: 1 | 2 | 3 | 4 | 5): string {
-  return "★".repeat(level) + "☆".repeat(5 - level);
+export function complexityStars(level: 1 | 2 | 3 | 4 | 5 | 6): string {
+  return "★".repeat(level) + "☆".repeat(6 - level);
 }
 
 /**
@@ -448,6 +474,35 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVAR",
     complexity: 5,
+  },
+  {
+    // wasm-icon-gallery — first ★★★★★★ demo (cv-mac #233, the
+    // "next level" rung above wasm-arkanoid). Demonstrates the
+    // splice infrastructure landed in #251 (ExtraFile.resourceFork)
+    // with a real external binary resource file:
+    //   - Multi-file C: main + gallery (resource loading) + render
+    //     + shared header
+    //   - In-source resources: WIND, MBAR, two MENUs, ALRT + DITL
+    //     (no in-source ICN# — that's the whole point)
+    //   - External asset: icons.rsrc.bin shipped on the same disk,
+    //     containing six 32×32 ICN# resources at IDs 128-133
+    //     (heart, star, diamond, circle, triangle, square),
+    //     generated offline by scripts/build-icon-gallery-rsrc.mjs
+    //   - Runtime: OpenResFile("Icons") + GetResource('ICN#', N)
+    //     + PlotIcon to draw the 3×2 grid
+    // The .rsrc.bin file is a host-side binary the editor can't
+    // meaningfully display as text — IDE-side handling for that
+    // class of file is a later PR; for now it's listed under
+    // binaryAssets and the editor's file picker skips it.
+    id: "wasm-icon-gallery",
+    label: "Wasm Icon Gallery",
+    files: ["main.c", "gallery.c", "gallery.h", "render.c", "gallery.r"],
+    rezFile: "gallery.r",
+    outputName: "WasmIconGallery.bin",
+    appType: "APPL",
+    appCreator: "CVIG",
+    complexity: 6,
+    binaryAssets: ["icons.rsrc.bin"],
   },
 ];
 

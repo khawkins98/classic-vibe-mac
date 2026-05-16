@@ -220,23 +220,58 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-arkanoid", f),
   })),
+  // wasm-icon-gallery — first ★★★★★★ demo (cv-mac #233 6-star tier).
+  // Multi-file C + external binary asset (icons.rsrc.bin) shipped on
+  // the disk alongside the app and loaded at runtime via OpenResFile.
+  // icons.rsrc.bin is generated offline by
+  // scripts/build-icon-gallery-rsrc.mjs and committed as a binary;
+  // the seed plugin copies it to public/sample-projects/ as bytes
+  // (not utf8-round-tripped — see the readSeedContents binary handling).
+  ...["main.c", "gallery.c", "gallery.h", "render.c", "gallery.r", "icons.rsrc.bin"].map((f) => ({
+    project: "wasm-icon-gallery",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-icon-gallery", f),
+  })),
 ];
 
+/** Files with these suffixes are treated as binary blobs (read with
+ *  no encoding, hashed by their raw bytes, written verbatim) instead
+ *  of utf8-round-tripped through string. cv-mac #233 6-star tier:
+ *  .rsrc.bin files contain Mac resource forks (non-text bytes) that
+ *  the app loads via OpenResFile at runtime; utf8 corruption breaks
+ *  the format. */
+function isBinarySeed(filename: string): boolean {
+  return /\.(rsrc\.bin|bin|pict|snd|png|jpg|jpeg)$/i.test(filename);
+}
 
-function readSeedContents(): { contents: Map<string, string>; hash: string } {
+
+function readSeedContents(): {
+  contents: Map<string, string>;
+  binaries: Map<string, Buffer>;
+  hash: string;
+} {
   const contents = new Map<string, string>();
+  const binaries = new Map<string, Buffer>();
   const hasher = createHash("sha256");
   for (const spec of SEED_FILES) {
-    let body = "";
-    if (existsSync(spec.sourcePath)) {
-      body = readFileSync(spec.sourcePath, "utf8");
+    const key = `${spec.project}/${spec.filename}`;
+    hasher.update(`${key}\n`);
+    if (isBinarySeed(spec.filename)) {
+      const body = existsSync(spec.sourcePath)
+        ? readFileSync(spec.sourcePath)
+        : Buffer.alloc(0);
+      binaries.set(key, body);
+      hasher.update(body);
+    } else {
+      const body = existsSync(spec.sourcePath)
+        ? readFileSync(spec.sourcePath, "utf8")
+        : "";
+      contents.set(key, body);
+      hasher.update(body);
     }
-    contents.set(`${spec.project}/${spec.filename}`, body);
-    hasher.update(`${spec.project}/${spec.filename}\n`);
-    hasher.update(body);
     hasher.update("\n--\n");
   }
-  return { contents, hash: hasher.digest("hex").slice(0, 16) };
+  return { contents, binaries, hash: hasher.digest("hex").slice(0, 16) };
 }
 
 // Hash the wasm-cc1 toolchain bundle (cc1/as/ld/Elf2Mac + sysroot blobs).
@@ -267,19 +302,33 @@ function readToolchainHash(): string {
   return hasher.digest("hex").slice(0, 16);
 }
 
-function writeSeedToPublic(contents: Map<string, string>): void {
+function writeSeedToPublic(
+  contents: Map<string, string>,
+  binaries: Map<string, Buffer>,
+): void {
   for (const [key, body] of contents) {
     const out = join(PUBLIC_DIR, "sample-projects", key);
     mkdirSync(dirname(out), { recursive: true });
-    // Write only if changed to keep Vite's fs watcher quiet.
     let needsWrite = true;
     try {
       const existing = readFileSync(out, "utf8");
       if (existing === body) needsWrite = false;
     } catch {
-      // file doesn't exist
+      /* file doesn't exist */
     }
     if (needsWrite) writeFileSync(out, body, "utf8");
+  }
+  for (const [key, body] of binaries) {
+    const out = join(PUBLIC_DIR, "sample-projects", key);
+    mkdirSync(dirname(out), { recursive: true });
+    let needsWrite = true;
+    try {
+      const existing = readFileSync(out);
+      if (existing.equals(body)) needsWrite = false;
+    } catch {
+      /* file doesn't exist */
+    }
+    if (needsWrite) writeFileSync(out, body);
   }
 }
 
@@ -289,9 +338,9 @@ function playgroundSeedPlugin(): Plugin {
     name: "cvm-playground-seed",
     enforce: "pre",
     config() {
-      const { contents, hash } = readSeedContents();
+      const { contents, binaries, hash } = readSeedContents();
       bundleHash = hash;
-      writeSeedToPublic(contents);
+      writeSeedToPublic(contents, binaries);
       return {
         define: {
           __CVM_BUNDLE_VERSION__: JSON.stringify(hash),
@@ -315,9 +364,9 @@ function playgroundSeedPlugin(): Plugin {
       }
       const onChange = (path: string) => {
         if (SEED_FILES.some((s) => s.sourcePath === path)) {
-          const { contents, hash } = readSeedContents();
+          const { contents, binaries, hash } = readSeedContents();
           bundleHash = hash;
-          writeSeedToPublic(contents);
+          writeSeedToPublic(contents, binaries);
           server.ws.send({ type: "full-reload" });
         }
       };
