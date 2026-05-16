@@ -56,11 +56,11 @@ const HELP_HTML = /* html */ `
   <ol>
     <li>Pick a project in the <strong>Project</strong> pane on the
         left, or open <em>File → Open Project…</em> for a richer
-        picker. Eleven samples ship — a Toolbox-surface ladder from
-        <strong>Wasm Hello</strong> (DrawString) up through
-        <strong>Wasm Notepad</strong> (TextEdit + menu bar),
-        <strong>Wasm Scribble</strong> (mouse-tracking), and
-        <strong>Wasm Bounce</strong> (offscreen-buffer animation).</li>
+        picker. 21 samples ship — a Toolbox-surface ladder from
+        <strong>Wasm Hello</strong> (DrawString) up through a small
+        word processor, an analog clock, a paint app, a file I/O
+        round-trip via StandardGetFile, multi-window dispatch with
+        SelectWindow, region-driven cursor swap, and more.</li>
     <li>Edit the source in the center editor. Edits save automatically
         to your browser (IndexedDB).</li>
     <li>Click <em>Build &amp; Run</em>. The page compiles your changes
