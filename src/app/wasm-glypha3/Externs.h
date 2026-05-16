@@ -64,12 +64,29 @@ typedef unsigned long KeyMap[4];
 #define _KeyMap_defined
 #endif
 
-/* ToolTrap — Trap Manager constant for the "is this Toolbox trap
- * available?" check Glypha's Utilities.c:TrapExists uses. Inside
- * Mac: Operating System Utilities documents 0xA800 as the OS-trap
- * vs Toolbox-trap discriminator value.  */
+/* ToolTrap — selector value for NGetTrapAddress's TrapType arg.
+ * Glypha's CodeWarrior-era source uses `ToolTrap` (and would use
+ * `OSTrap`) as the selectors, matching the symbol names in classic
+ * MacHeaders. The Universal Headers in our sysroot spell the same
+ * enum members `kToolboxTrapType` (= 1) / `kOSTrapType` (= 0), so
+ * we alias.
+ *
+ * Cautionary tale: an earlier shim defined `ToolTrap 0xA800` — that
+ * value IS a Trap Manager constant (the Toolbox-trap range mask) and
+ * the symbol shows up under that meaning in some period docs, but
+ * `TrapType` is `signed char` (SInt8): passing 0xA800 (= 43008) as a
+ * TrapType truncates to 0 (i.e. OSTrap), and every TrapExists() call
+ * for a Toolbox trap returns the wrong answer. The truncation isn't
+ * even a warning if you don't compile with `-Wconversion`. Inside
+ * Mac documents both meanings; only the enum form is type-correct.
+ *
+ * cf. classic-vibe-mac LEARNINGS "2026-05-16 — Universal-Headers
+ * compatibility shim block" for the wider pattern. */
 #ifndef ToolTrap
-#define ToolTrap 0xA800
+#define ToolTrap kToolboxTrapType
+#endif
+#ifndef OSTrap
+#define OSTrap kOSTrapType
 #endif
 
 /* Sound Manager init bits — initMono / initNoInterp aren't in our
