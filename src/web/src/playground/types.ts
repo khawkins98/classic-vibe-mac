@@ -163,6 +163,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVNP",
   },
   {
+    // wasm-stickynote — small floating sticky-note window (cv-mac #125).
+    // Smaller than wasm-notepad: no menubar, no scrap, just a 220×140
+    // draggable window with a yellow paper background and a single
+    // TextEdit field. Exercises RGBBackColor / RGBForeColor — neither
+    // of the other TextEdit samples touches QuickDraw colour.
+    id: "wasm-stickynote",
+    label: "Wasm Sticky Note",
+    files: ["stickynote.c", "stickynote.r"],
+    rezFile: "stickynote.r",
+    outputName: "WasmStickyNote.bin",
+    appType: "APPL",
+    appCreator: "CVSN",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display
