@@ -623,6 +623,29 @@ fi
 humount "${OUTPUT}" >/dev/null
 trap - EXIT
 
+# --- Step 2.7: suppress Finder auto-opening windows on boot (#245) ----
+#
+# The upstream community image was saved with several Finder windows
+# left open — the boot volume's root, Applications, Disk Copy 6.1.2.
+# The Finder remembers those via a linked-list of folder CNIDs
+# threaded through every folder's `DXInfo.frOpenChain` field, starting
+# at the volume root. Zeroing the chain truncates the list — none of
+# the chained folders auto-open at boot.
+#
+# Done in a Node script because the patching needs precise byte-level
+# catalog walking that hfsutils doesn't expose. Idempotent — the
+# script reports as "already zero" if the chain is already broken.
+#
+# Caveat: the Shared volume (extfs) isn't in the boot disk's catalog,
+# so its window state lives elsewhere (Desktop DB). That's a separate
+# follow-up if the chain truncation alone isn't enough.
+if [[ -x "$(command -v node)" ]]; then
+  node "${SCRIPT_DIR}/suppress-boot-windows.mjs" "${OUTPUT}" \
+    || echo "[boot-disk]   WARN: suppress-boot-windows.mjs failed; continuing"
+else
+  echo "[boot-disk]   WARN: node not on PATH; skipping window-suppression pass"
+fi
+
 echo "[boot-disk] wrote ${OUTPUT} ($(size_of "${OUTPUT}") bytes)"
 
 # --- Step 3: chunk for the BasiliskII WASM consumer ----------------------
