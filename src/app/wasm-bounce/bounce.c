@@ -19,7 +19,8 @@
  *
  * (Strictly, NewGWorld is the Color QuickDraw way; we use the older
  * NewPtr+BitMap pattern because it always works on 68k System 7 and
- * needs no extra includes. Same end result.)
+ * needs no extra includes. Same end result. See `wasm-gworld` for
+ * the modern System 7+ version — same visual outcome, different API.)
  *
  * Pairs with bounce.r (WIND 128 + SIZE -1 + signature 'CVBO').
  */
