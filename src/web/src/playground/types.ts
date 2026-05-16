@@ -206,6 +206,20 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVCK",
   },
   {
+    // wasm-multiwin — three windows, one event loop. Every other sample
+    // on the shelf opens a single window; this one demonstrates the
+    // front-window dispatch model (SelectWindow on a back-window
+    // click, refCon-stashed per-window state, GetIndPattern fill,
+    // last-close exits).
+    id: "wasm-multiwin",
+    label: "Wasm Multi-Window",
+    files: ["multiwin.c", "multiwin.r"],
+    rezFile: "multiwin.r",
+    outputName: "WasmMultiWin.bin",
+    appType: "APPL",
+    appCreator: "CVMW",
+  },
+  {
     // wasm-calculator — 4-function calculator (cv-mac #125). Distinct
     // ladder rung from the TextEdit samples: demonstrates hand-drawn
     // QuickDraw buttons, PtInRect hit-testing, NumToString display

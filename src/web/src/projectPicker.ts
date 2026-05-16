@@ -77,6 +77,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Analog desk clock with a digital readout below. GetDateTime + SecondsToDate for the time; a 60-tick WaitNextEvent timeout ticks the second hand once a second; QuickDraw FrameOval / MoveTo / LineTo / FillOval for the hands and pivot. Hand-rolled sin/cos table — no libm pulled in.",
   },
+  "wasm-multiwin": {
+    emoji: "🪟",
+    description:
+      "Three windows open at launch, one event loop. Click any back window to raise it (SelectWindow), drag any titlebar to move, close any to dismiss. Each window stores its own pattern index in its refCon and fills itself with a different system pattern. Last close exits.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
