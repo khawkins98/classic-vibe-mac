@@ -333,16 +333,57 @@ for path in "${SYSTEM_FOLDER_DELETE[@]}"; do
   fi
 done
 
-# Disinfectant INIT lives at a path whose filename starts with a
-# literal 0x01 SOH byte — a classic Mac sort-control hack ("active
-# vampire" trick) to make the file sort above alphabetical neighbours.
-# Bash array elements don't carry that byte through cleanly without
-# inadvertent doubling, so handle it as a one-off call using ANSI-C
-# quoting in-place.
-if hdel $':System Folder:Extensions:\x01Disinfectant INIT' 2>/dev/null; then
-  echo "[boot-disk]   pruned cruft: :System Folder:Extensions:Disinfectant INIT (SOH-prefixed)"
+# Items with non-ASCII bytes in the filename need ANSI-C quoting:
+#   - Disinfectant INIT: filename starts with literal 0x01 SOH byte
+#     (classic Mac "active vampire" sort-control hack — makes the
+#     file sort above alphabetical neighbours).
+#   - StuffIt Lite™: filename ends with 0xAA MacRoman ™ — same kind
+#     of broken alias as the six in the array above (target StuffIt
+#     Lite was a 1990s shareware archiver not present on this image),
+#     just with a trademark glyph in the name.
+# Bash arrays don't carry those bytes through cleanly without
+# inadvertent escape-doubling, so each gets a one-off hdel call.
+for entry in \
+  $':System Folder:Extensions:\x01Disinfectant INIT|Disinfectant INIT (SOH-prefixed)' \
+  $':System Folder:Apple Menu Items:StuffIt Lite\xaa|StuffIt Lite™'; do
+  path="${entry%%|*}"
+  label="${entry##*|}"
+  if hdel "$path" 2>/dev/null; then
+    echo "[boot-disk]   pruned cruft: :System Folder:…:${label}"
+  else
+    echo "[boot-disk]   skipped (not present): :System Folder:…:${label}"
+  fi
+done
+
+# Aladdin/ folder (StuffIt Translators) — recursive teardown.
+# hfsutils ships hrmdir (empty dirs only) but no hrm -r, so unroll
+# the 2-level structure manually. Layout (verified at hmount time):
+#   :System Folder:Extensions:Aladdin:
+#     Icon\r                       (custom folder-icon file; filename
+#                                   uses the classic Mac "Icon\r"
+#                                   convention with literal 0x0d CR)
+#     Translators/
+#       BinHex4 Translator         (SITo/SIT! files, used by StuffIt
+#       CompactPro Translator       Lite — not installed; pure dead
+#       Icon\r                      weight without their parent app)
+#       MacBinary Translator
+#       PKG Expand Translator
+#       UnPack Translator
+# Each hdel/hrmdir is best-effort: warns but continues if absent.
+ALADDIN=":System Folder:Extensions:Aladdin"
+if hls -al "${ALADDIN}:" >/dev/null 2>&1; then
+  hdel "${ALADDIN}:Translators:BinHex4 Translator" 2>/dev/null || true
+  hdel "${ALADDIN}:Translators:CompactPro Translator" 2>/dev/null || true
+  hdel "${ALADDIN}:Translators:MacBinary Translator" 2>/dev/null || true
+  hdel "${ALADDIN}:Translators:PKG Expand Translator" 2>/dev/null || true
+  hdel "${ALADDIN}:Translators:UnPack Translator" 2>/dev/null || true
+  hdel $':System Folder:Extensions:Aladdin:Translators:Icon\r' 2>/dev/null || true
+  hrmdir "${ALADDIN}:Translators" 2>/dev/null || true
+  hdel $':System Folder:Extensions:Aladdin:Icon\r' 2>/dev/null || true
+  hrmdir "${ALADDIN}" 2>/dev/null || true
+  echo "[boot-disk]   pruned cruft: :System Folder:Extensions:Aladdin/ (recursive)"
 else
-  echo "[boot-disk]   skipped (not present): :System Folder:Extensions:Disinfectant INIT"
+  echo "[boot-disk]   skipped (not present): :System Folder:Extensions:Aladdin/"
 fi
 
 # Inspect (and report) the System Folder's blessed bit. hattrib without
