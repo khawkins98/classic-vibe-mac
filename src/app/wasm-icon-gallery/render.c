@@ -34,7 +34,12 @@ static void DrawHeader(void) {
     TextFont(systemFont);
     TextSize(0);
     MoveTo(GRID_LEFT, 24);
-    DrawString("\pIcons loaded from icons.rsrc (★★★★★★)");
+    /* MacRoman doesn't include U+2605 (★), so we can't put literal
+     * stars in a Pascal string here — the UTF-8 bytes would render
+     * as three garbled MacRoman characters per star. Use an ASCII
+     * label instead; the star rating still appears in the project
+     * dropdown via the host-side `complexityStars()` helper. */
+    DrawString("\pIcons loaded from icons.rsrc  (6-star tier)");
 }
 
 static void DrawCell(short index, short col, short row) {

@@ -120,7 +120,7 @@ resource 'DITL' (128) {
         StaticText { disabled,
             "A small brick-breaker, compiled in your browser. "
             "Multi-file C + Rez resources + a hand-drawn icon. "
-            "★★★★★ tier of the cv-mac shelf. Try editing engine.c "
+            "5-star tier of the cv-mac shelf. Try editing engine.c "
             "to change paddle speed, or change the brick rows in "
             "engine.h to make it harder."
         };
