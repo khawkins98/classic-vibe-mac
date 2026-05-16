@@ -6,20 +6,25 @@
  * / attention tone, but no other sample in the shelf showcases it
  * as a deliberate audible affordance.
  *
- *   SysBeep(short duration)   — play the system alert tone for
- *                                `duration` ticks (60 ticks = 1 sec)
+ *   SysBeep(short duration)   — play the system alert tone.
+ *
+ * On the original 68k Mac SysBeep's `duration` argument scales the
+ * tone's length in ticks. BasiliskII (like most Mac emulators) takes
+ * a shortcut: SysBeep triggers a fixed-length alert sample regardless
+ * of duration. So you can't make the user *hear* a longer beep just
+ * by passing a larger N. To distinguish two audibly different beep
+ * behaviours we instead fire SysBeep multiple times in a row.
  *
  * Two buttons:
- *   - "Short Beep" plays SysBeep at 5 ticks per click, growing 5
- *     ticks each press (5, 10, 15, …) until it wraps at 60.
- *   - "Long Beep"  plays SysBeep(60) — a solid 1-second tone.
+ *   - "Beep"         — one SysBeep(10)
+ *   - "Triple Beep"  — three SysBeep(10)s, ~20 ticks apart, the only
+ *                       reliable way to make duration variation reach
+ *                       the user under BasiliskII
  *
  * Hooking into the richer Sound Manager (SndPlay on an 'snd '
  * resource) is the next step; the toolchain support for the full
  * Sound.h linkage isn't confirmed in our wasm-retro-cc sysroot
- * yet, so we keep this sample to the always-available SysBeep
- * trap. SysBeep alone is part of the Sound Manager — the simplest
- * and oldest entry-point in it.
+ * yet, so we keep this sample to the always-available SysBeep trap.
  *
  * Pairs with sound.r (WIND 128 + SIZE -1 + signature 'CVSO').
  */
@@ -75,14 +80,16 @@ static void DrawIntro(void) {
     intro.right = gWin->portRect.right; intro.bottom = 36;
     EraseRect(&intro);
     unsigned char l1[] = {
-        30,
+        29,
         'S','o','u','n','d',' ','M','a','n','a','g','e','r',':',' ',
-        'S','y','s','B','e','e','p',' ','d','u','r','a','t','i','o'
+        'S','y','s','B','e','e','p',' ','x',' ','1',' ','o','r',' '
     };
     MoveTo(12, 18);
     DrawString(l1);
-    unsigned char l2[] = { 3, 'n','.','.' };
+    unsigned char l2[] = { 2, 'x',' ' };
     DrawString(l2);
+    unsigned char l3[] = { 1, '3' };
+    DrawString(l3);
 }
 
 int main(void) {
@@ -106,8 +113,16 @@ int main(void) {
 
     ShowWindow(gWin);
     DrawIntro();
-    unsigned char btnShort[] = { 10, 'S','h','o','r','t',' ','B','e','e','p' };
-    unsigned char btnLong[]  = {  9, 'L','o','n','g',' ','B','e','e','p' };
+    /* BasiliskII (and most Mac emulators) play the system alert tone as
+     * a fixed-length sample regardless of SysBeep's duration argument —
+     * the duration param is honored by the original 68k Mac sound
+     * driver but the emulator's hostside backend collapses to a single
+     * "play the alert" event. So "Short" / "Long" via duration alone
+     * sound identical. Workaround: distinguish *audibly* by firing
+     * SysBeep N times back-to-back with a tick gap, which the emulator
+     * does play distinctly. */
+    unsigned char btnShort[] = { 4, 'B','e','e','p' };
+    unsigned char btnLong[]  = { 11, 'T','r','i','p','l','e',' ','B','e','e','p' };
     DrawButton(&gShortRect, btnShort);
     DrawButton(&gLongRect, btnLong);
     DrawCounter();
@@ -126,14 +141,22 @@ int main(void) {
                     if (PtInRect(local, &gShortRect)) {
                         InvertRoundRect(&gShortRect, 8, 8);
                         gClickCount++;
-                        short dur = ((gClickCount % 12) + 1) * 5;
-                        SysBeep(dur);
+                        SysBeep(10);
                         InvertRoundRect(&gShortRect, 8, 8);
                         DrawCounter();
                     } else if (PtInRect(local, &gLongRect)) {
                         InvertRoundRect(&gLongRect, 8, 8);
                         gClickCount++;
-                        SysBeep(60);
+                        /* Three back-to-back beeps, ~20 ticks apart, so
+                         * the emulator's fixed-length alert tone plays
+                         * three times. Audibly distinct from a single
+                         * beep — the only way to make duration-based
+                         * variation reach the user. */
+                        for (short i = 0; i < 3; i++) {
+                            SysBeep(10);
+                            unsigned long t0 = TickCount();
+                            while (TickCount() - t0 < 20) { /* wait */ }
+                        }
                         InvertRoundRect(&gLongRect, 8, 8);
                         DrawCounter();
                     }
