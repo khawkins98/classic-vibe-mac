@@ -16,6 +16,7 @@
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
+import { search, searchKeymap } from "@codemirror/search";
 import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
@@ -260,7 +261,14 @@ export async function mountPlayground(
     extensions: [
       lineNumbers(),
       history(),
-      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+      // CodeMirror's built-in search panel. The keymap (⌘F open, ⌘G
+      // next, ⇧⌘G prev, ⌘⌥F replace, Esc close) lands after
+      // defaultKeymap so it can override any conflicting bindings.
+      // `top: true` puts the panel above the editor instead of below
+      // (more Mac-OS-8 Find-dialog-like — panels at the bottom feel
+      // VS-Code-y).
+      search({ top: true }),
+      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       langCompartment.of(extensionsForFile(filename)),
       ...lintExtensions(),
       EditorView.theme(
