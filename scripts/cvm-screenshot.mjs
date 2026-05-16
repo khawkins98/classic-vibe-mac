@@ -17,6 +17,18 @@ const page = await ctx.newPage();
 await page.goto(url, { waitUntil: "domcontentloaded" });
 // Give WinBox + chrome a beat to settle.
 await page.waitForTimeout(800);
+
+// Switch to wasm-sound (multi-file: sound.c + sound.r) so the
+// tab bar has more than one tab to show. Falls back silently if
+// the picker isn't present or the project isn't available.
+try {
+  const picker = page.locator("#cvm-files-project");
+  if ((await picker.count()) > 0) {
+    await picker.selectOption("wasm-sound");
+    await page.waitForTimeout(400);
+  }
+} catch { /* fall through to single-tab capture */ }
+
 await page.screenshot({ path: out, fullPage: false });
 
 // Also capture a crop of the Files pane (left side) where the project
@@ -31,6 +43,21 @@ if ((await filesPane.count()) > 0) {
 const toolbar = page.locator(".cvm-pg-toolbar--icons");
 if ((await toolbar.count()) > 0) {
   await toolbar.first().screenshot({ path: out.replace(".png", "-toolbar.png") });
+}
+
+// Tight crop of the tabbar + top of the editor body — the surface
+// #229 item 4 (tabs merge with content panel) is targeting.
+const tabbar = page.locator("#cvm-pg-tabbar");
+if ((await tabbar.count()) > 0) {
+  // Capture a slightly-larger region than just the tabbar so we see
+  // how the active tab transitions into the editor body.
+  const box = await tabbar.boundingBox();
+  if (box) {
+    await page.screenshot({
+      path: out.replace(".png", "-tabs.png"),
+      clip: { x: box.x - 4, y: box.y - 4, width: box.width + 8, height: box.height + 60 },
+    });
+  }
 }
 
 console.log(`saved ${out} (+ files/toolbar crops)`);
