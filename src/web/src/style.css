@@ -1262,17 +1262,37 @@ body.cvm-paused .emulator-canvas {
 
 /*
  * Default-button double-ring: the classic Mac "pressing Return triggers
- * this button" visual cue. We overlay a 2px solid ring via outline.
- * The .cvm-pg-button class from the toolbar provides all bevel/font styles.
+ * this button" visual cue. We overlay a 2px solid ring via outline and
+ * a subtle 1px ink drop-shadow underneath so the button reads as
+ * raised — the System 7 / Mac OS 8 default-button "lifted" affordance.
+ * Keyboard focus draws a dotted ring 1px outside the solid ring, also
+ * pure Mac.
  */
 .cvm-modal__btn--default {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
+  /* 1px ink-shadow offset down+right — the subtle "raised" look. */
+  box-shadow: 1px 1px 0 var(--ink);
+  /* Slight nudge up to offset the shadow visually so it doesn't push
+     the button down inside its row. */
+  transform: translate(-0.5px, -0.5px);
 }
-
 .cvm-modal__btn--default:focus-visible {
+  /* Inner solid ring + outer dotted focus ring. The two rings nesting
+     is the System 7 affordance: solid = "this is default", dotted =
+     "this is keyboard-focused". */
   outline: 2px solid var(--ink);
   outline-offset: 3px;
+  box-shadow:
+    1px 1px 0 var(--ink),
+    0 0 0 1px var(--paper),
+    0 0 0 2px var(--ink);
+}
+.cvm-modal__btn--default:active {
+  /* Pressed: lose the lift, push the button down by the shadow offset
+     so the click feels physical. */
+  box-shadow: none;
+  transform: translate(0, 0);
 }
 
 /* "What just happened?" help button — inline with the status line */
@@ -2093,10 +2113,20 @@ body.cvm-paused .emulator-canvas {
 .cvm-explainer__btn--default {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
+  box-shadow: 1px 1px 0 var(--ink);
+  transform: translate(-0.5px, -0.5px);
+}
+.cvm-explainer__btn--default:active {
+  box-shadow: none;
+  transform: translate(0, 0);
 }
 .cvm-explainer__btn--default:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 3px;
+  box-shadow:
+    1px 1px 0 var(--ink),
+    0 0 0 1px var(--paper),
+    0 0 0 2px var(--ink);
 }
 
 /* Explainer + picker chrome is provided by .cvm-mac-winbox (consolidated
