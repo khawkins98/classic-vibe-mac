@@ -425,6 +425,30 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appCreator: "CVCR",
     complexity: 2,
   },
+  {
+    // wasm-arkanoid — first ★★★★★ demo (cv-mac #233 Option A).
+    // A small brick-breaker compiled in your browser. Demonstrates
+    // the top tier of the complexity scale:
+    //   - multi-file C: main.c (Toolbox glue) + engine.c (pure game
+    //     logic, no Toolbox calls) + render.c (QuickDraw) + a shared
+    //     engine.h. Each file fits in one screen.
+    //   - binary asset: arkanoid.r ships an ICN# 128 resource
+    //     authored as a literal hex bitmap for the about-box icon.
+    //     Loaded via the Resource Manager + rendered with PlotIconID
+    //     from the standard ALRT mechanism.
+    //   - real-game scope: paddle + ball physics + 5×10 brick grid +
+    //     collision resolution + scoring + lives + win/lose + pause.
+    // Path B build (cc1 → as → ld → Elf2Mac for the .c files;
+    // WASM-Rez for the .r; spliceResourceFork merges the forks).
+    id: "wasm-arkanoid",
+    label: "Wasm Arkanoid",
+    files: ["main.c", "engine.c", "engine.h", "render.c", "arkanoid.r"],
+    rezFile: "arkanoid.r",
+    outputName: "WasmArkanoid.bin",
+    appType: "APPL",
+    appCreator: "CVAR",
+    complexity: 5,
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
