@@ -6,7 +6,18 @@
  * This header provides the Mac-side helpers your app calls to put text
  * into that file.
  *
- *   #include "cvm_log.h"
+ * Two ways to pull this in from any cv-mac playground project:
+ *
+ *   #include <cvm_log.h>      // system header — mounted by cc1.ts on
+ *                             // the playground sysroot. Preferred. No
+ *                             // need to bundle this file with your
+ *                             // project.
+ *
+ *   #include "cvm_log.h"      // project-local — only works if you've
+ *                             // also added cvm_log.h to your project's
+ *                             // file list (vite.config.ts SEED_FILES).
+ *                             // Useful if you want to read/edit the
+ *                             // implementation alongside your own code.
  *
  *   cvm_log("Initialised.");                 // C string (NUL-terminated)
  *   cvm_log_p("\pPlayer scored.");           // Pascal string literal
