@@ -17,8 +17,12 @@ import { test, expect } from "@playwright/test";
 test("landing page renders the system 7 chrome", async ({ page }) => {
   await page.goto("/");
 
-  // Headline that lives in the Read Me window.
-  await expect(page.locator("h1")).toHaveText("classic-vibe-mac");
+  // The Mac-style menubar at the top renders. (#225 retired the
+  // below-the-fold Read Me section that used to host an <h1> — page
+  // identity now lives in the menubar's version chip + document
+  // title instead.)
+  await expect(page.locator(".menubar")).toBeAttached();
+  await expect(page.locator("#cvm-menubar-version")).toContainText("cv-mac");
 
   // The Macintosh emulator window exists, and the loader's mount point is
   // present in the DOM so the worker has somewhere to land.
