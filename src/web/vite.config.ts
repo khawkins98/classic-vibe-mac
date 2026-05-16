@@ -211,6 +211,15 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-color", f),
   })),
+  // wasm-arkanoid — first ★★★★★ demo (cv-mac #233 Option A).
+  // Multi-file C (main + engine + render + header) plus a Rez file
+  // with an embedded ICN# 128 — the "binary asset" the top tier
+  // demonstrates.
+  ...["main.c", "engine.c", "engine.h", "render.c", "arkanoid.r"].map((f) => ({
+    project: "wasm-arkanoid",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-arkanoid", f),
+  })),
 ];
 
 
