@@ -271,6 +271,37 @@ done < <(hls -a : 2>/dev/null)
 echo "[boot-disk] volume root (after cleanup):"
 hls -a : || true
 
+# --- Step 2.2: prune known-cruft items inside :System Folder: ---------
+#
+# The upstream community image carries a handful of period utilities
+# that are not load-bearing for any cv-mac demo and just splash their
+# branding on every boot. cv-mac #221 starts the pruning here; the
+# ticket's Pass 2 (full audit of Startup Items / Extensions / Control
+# Panels / Apple Menu Items) can extend this list as the inherited
+# inventory gets further scoped.
+#
+# Entries are full Mac-style paths (':' separators, no leading or
+# trailing colon). Each `hdel` is best-effort — if a future upstream
+# image revision drops the item, the build still succeeds and the
+# warning lands in the build log.
+#
+# Initial list (Pass 1 — #221):
+#   ":System Folder:Extensions:Backdrop"
+#     Tim Maroney's 1987 vMac mascot painter (RDEV/BkDp, 6 KB).
+#     Splashes "Backdrop … Centram Systems West, Berkeley, CA" on
+#     every boot. Public-domain utility, no consumer in cv-mac.
+SYSTEM_FOLDER_DELETE=(
+  ":System Folder:Extensions:Backdrop"
+)
+
+for path in "${SYSTEM_FOLDER_DELETE[@]}"; do
+  if hdel "${path}" 2>/dev/null; then
+    echo "[boot-disk]   pruned cruft: ${path}"
+  else
+    echo "[boot-disk]   skipped (not present): ${path}"
+  fi
+done
+
 # Inspect (and report) the System Folder's blessed bit. hattrib without
 # any flags prints the current attributes; our volume should already
 # have System Folder blessed since this image is community-prepared
