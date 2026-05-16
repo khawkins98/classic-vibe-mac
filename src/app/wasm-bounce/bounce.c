@@ -35,6 +35,12 @@
 #include <Events.h>
 #include <Memory.h>
 
+/* Live trace into cv-mac's Output → Console pane. Optional; the
+ * include resolves against the playground sysroot, so any
+ * cv-mac-built project gets it without bundling.
+ * See cvm_log.h for the API. */
+#include <cvm_log.h>
+
 #define kWindowID 128
 
 /* Offscreen buffer dimensions. Must be a multiple of 16 wide so
@@ -136,6 +142,39 @@ static void DrawHeader(void) {
     DrawString(title);
 }
 
+/* Build "tick #N at (X,Y) v=(vX,vY)" Pascal-style without printf
+ * (which would pull in stdio + a lot of newlib weight for a demo).
+ * Reuses a single Str255 buffer per call. */
+static void AppendPInt(Str255 s, long v) {
+    char digits[12];
+    int n = 0;
+    Boolean neg = (v < 0);
+    if (neg) v = -v;
+    if (v == 0) digits[n++] = '0';
+    while (v > 0 && n < 12) { digits[n++] = '0' + (v % 10); v /= 10; }
+    if (neg && s[0] < 254) s[++s[0]] = '-';
+    while (n > 0 && s[0] < 254) s[++s[0]] = digits[--n];
+}
+static void AppendPStr(Str255 s, const char *c) {
+    while (*c && s[0] < 254) s[++s[0]] = *c++;
+}
+static void LogBallState(long tick) {
+    Str255 line;
+    line[0] = 0;
+    AppendPStr(line, "tick #");
+    AppendPInt(line, tick);
+    AppendPStr(line, " at (");
+    AppendPInt(line, gBallX);
+    AppendPStr(line, ",");
+    AppendPInt(line, gBallY);
+    AppendPStr(line, ") v=(");
+    AppendPInt(line, gVX);
+    AppendPStr(line, ",");
+    AppendPInt(line, gVY);
+    AppendPStr(line, ")");
+    cvm_log_p(line);
+}
+
 int main(void) {
     InitGraf(&qd.thePort);
     InitFonts();
@@ -145,19 +184,27 @@ int main(void) {
     InitDialogs(0);
     InitCursor();
 
+    /* Start the Console with a clean slate per run. The watcher
+     * detects the truncation and wipes the pane. */
+    cvm_log_reset();
+    cvm_log("wasm-bounce: starting up");
+
     gWin = GetNewWindow(kWindowID, NULL, (WindowPtr)(-1));
-    if (!gWin) { SysBeep(10); return 1; }
+    if (!gWin) { cvm_log("GetNewWindow failed"); SysBeep(10); return 1; }
     SetPort((GrafPtr)gWin);
     TextFont(0); TextSize(12);
     ShowWindow(gWin);
     DrawHeader();
     if (!InitOffscreen()) {
+        cvm_log("InitOffscreen failed (NewPtr)");
         SysBeep(10);
         return 1;
     }
+    cvm_log("offscreen ready -- entering event loop");
 
     Boolean done = false;
     unsigned long lastTick = TickCount();
+    long tickCount = 0;
     while (!done) {
         EventRecord ev;
         WaitNextEvent(everyEvent, &ev, 1, NULL);
@@ -168,9 +215,13 @@ int main(void) {
                 if (part == inContent && w == gWin) {
                     /* Any content click exits — simpler than an Apple
                      * menu Quit for a demo. */
+                    cvm_log("content click -- exiting");
                     done = true;
                 } else if (part == inGoAway && w == gWin) {
-                    if (TrackGoAway(gWin, ev.where)) done = true;
+                    if (TrackGoAway(gWin, ev.where)) {
+                        cvm_log("close-box click -- exiting");
+                        done = true;
+                    }
                 } else if (part == inDrag && w == gWin) {
                     Rect bounds = qd.screenBits.bounds;
                     bounds.top += 20;
@@ -194,8 +245,14 @@ int main(void) {
             TickBall();
             DrawFrame();
             BlitToWindow();
+            tickCount++;
+            /* Log ball position once per second (~30 frames). Any more
+             * would flood the pane; any less makes the live trace
+             * feel sluggish. */
+            if (tickCount % 30 == 0) LogBallState(tickCount);
         }
     }
     if (gOffData) DisposePtr(gOffData);
+    cvm_log("wasm-bounce: clean exit");
     return 0;
 }
