@@ -129,15 +129,31 @@ defaults — useful when the sample sources are updated server-side.
 The **Download** button packages the current project as a `.zip` the
 user can re-import via File → Open .zip.
 
-The CodeMirror editor inside Playground (minimalSetup + the C
-language pack + the search panel) seeds from
+The CodeMirror editor inside Playground seeds from
 `src/web/public/sample-projects/` on first load and rehydrates from
-IndexedDB on subsequent loads, so edits survive reloads. ⌘F opens
-the search panel; ⌘G / ⇧⌘G walk matches; ⌘⌥F switches to
-find-and-replace. UI state (open file, cursor position) is
-persisted on a 1 s debounce. Build Log entries are clickable —
-click a `file:line:col` diagnostic to jump the editor's cursor
-there. See [`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
+IndexedDB on subsequent loads, so edits survive reloads. Editor
+niceties land via the standard CodeMirror 6 extension stack:
+syntax highlighting for `.c` and `.r` (warm earth-tone palette
+matching the m68k assembly viewer), bracket matching, auto-close
+brackets/parens/quotes, fold gutter for collapsing functions and
+`#if 0` blocks, indent-on-input, active-line highlight, and
+selection-match highlighting. ⌘F opens the search panel; ⌘G /
+⇧⌘G walk matches; ⌘⌥F switches to find-and-replace. UI state
+(open file, cursor position) is persisted on a 1 s debounce.
+Build Log entries are clickable — click a `file:line:col`
+diagnostic to jump the editor's cursor there. See
+[`PLAYGROUND.md`](./PLAYGROUND.md) Phase 1.
+
+Hover a Toolbox call (`NewGWorld`, `WaitNextEvent`, `TEKey`, etc.)
+and a Mac-OS-8-styled card pops with the Inside-Macintosh
+signature, a one-paragraph description, and a "See also" list.
+⌘-click the same call to open a pinned WinBox reference window
+with clickable See-Also navigation — same data, persistent. Also
+reachable from <em>Help → Toolbox Reference…</em>. Coverage is
+~80 entries today (the Toolbox surface the bundled
+<code>wasm-*</code> samples actually touch); adding entries is a
+one-line edit to
+[`src/web/src/playground/toolbox-reference.json`](../src/web/src/playground/toolbox-reference.json).
 
 Per-build telemetry surfaces as `[build-c] …` lines (per-stage cc1
 / as / ld / Elf2Mac timings) and a `[cvm-stats] session: N builds,
