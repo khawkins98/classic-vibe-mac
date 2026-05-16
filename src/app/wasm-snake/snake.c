@@ -42,6 +42,9 @@
 
 /* ── Grid + window geometry ──────────────────────────────────────── */
 
+/* ← try changing CELL_PX or GRID_W / GRID_H to resize the playfield!
+ * Then update the WIND 128 bounds in snake.r so the window fits the
+ * new grid (GAME_LEFT * 2 + CELL_PX * GRID_W ≈ window width). */
 #define CELL_PX        14
 #define GRID_W         24
 #define GRID_H         16
