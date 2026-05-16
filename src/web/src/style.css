@@ -1307,6 +1307,17 @@ body.cvm-paused .emulator-canvas {
   margin: 0;
   flex: 1;
 }
+/* Highlight treatment for the cross-tab import-from-wasm-retro-cc
+   confirmation message. Subtle Platinum-yellow bar with an ink left
+   edge so it reads as a one-shot notice rather than a normal status
+   line. Cleared on the next Build (the editor's own status writes
+   reset the class). */
+.cvm-pg-status-row .cvm-pg-status--info {
+  background: #fff8b8;
+  border-left: 3px solid var(--ink);
+  padding: 4px 8px;
+  font-weight: bold;
+}
 
 .cvm-pg-btn-what {
   flex-shrink: 0;
