@@ -132,6 +132,12 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-cursor", f),
   })),
+  // wasm-files — File I/O via StandardGetFile / StandardPutFile.
+  ...["files.c", "files.r"].map((f) => ({
+    project: "wasm-files",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-files", f),
+  })),
   // wasm-wordpad — Mini word processor (#125). Font / Size / Style
   // menus driving a monostyle TextEdit; the next ladder rung after
   // Notepad. The last item in the #125 sprint.
