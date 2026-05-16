@@ -109,6 +109,14 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-stickynote", f),
   })),
+  // wasm-clock — analog desk clock with digital readout (#125). New
+  // Toolbox slice for the shelf: GetDateTime + SecondsToDate, idle-tick
+  // redraw loop, all QuickDraw drawing, hand-rolled sin/cos table.
+  ...["clock.c", "clock.r"].map((f) => ({
+    project: "wasm-clock",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-clock", f),
+  })),
   // wasm-calculator — 4-function calculator (#125). Different surface
   // from the TextEdit ladder: hand-drawn buttons + PtInRect hit-testing
   // + NumToString display. No TextEdit, no scrap.
