@@ -1620,6 +1620,36 @@ Rule of thumb crystallised from this: when the verification environment doesn't 
 
 **Bonus:** The Reset path already had `window.confirm()` covering the destructive risk. The chrome caption was load-bearing for *nobody* once the confirm was in place — pure duplication that nobody noticed because nobody re-audits successful onboarding copy. Removing it shrank the panel ~50 px without losing any user-facing function.
 
+### 2026-05-16 — HFS volume name lives in *three* places that must agree
+**Context:** cv-mac #220 — every Build & Run produced a generically-labeled "Apps" floppy on the Mac desktop, no matter which project. Goal: rename the in-memory disk to the project name ("Wasm Sound", "Wasm Hello") so the visual ties the disk to its source.
+
+**The detour I went down first:** The obvious patch is MDB drVN (the volume-name field at MDB+36, a Pascal string in a 28-byte slot). Patched just that, mounted via `hmount`: *"Volume name is 'Wasm Hello'"* — looks great. Then `hls -al :` returned *"Expected volume 'Apps' not found"*. The catalog still has "Apps" baked into the root directory's own record.
+
+**Finding:** HFS keeps the volume name in three places that all must agree:
+  1. **MDB drVN** — what the Finder shows on the desktop. The "official" answer.
+  2. **Catalog leaf node 1, rec0** — the root directory's own catalog entry. Keyed by `parentID=1 + name="Apps"`. `hfsutils`'s `hls` and Disk First Aid look this up *by name* and fail with "Expected volume X not found" if it doesn't match drVN.
+  3. **Catalog leaf node 1, rec1 (thread record)** — the root-dir thread record's `thdCName` field, a Pascal string padded to 32 bytes inside the cdrThdRec. Disk First Aid cross-checks this against drVN.
+
+(2) is the hard one — renaming changes the key's `keyLength`, which shifts every subsequent record in the leaf node and requires updating the offset trailer too. (1) is a one-byte length + bytes write. (3) is in-place within the existing 32-byte name field.
+
+**Pattern to remember:** When a value is denormalized across multiple data structures, find them *all* before patching. Cheap-path patching the "obvious" copy and assuming the others are derived (or that the consumer reads the obvious one) is how you produce data that *looks* right under casual inspection (`hmount` worked!) but breaks anything more thorough (`hls`, Disk First Aid). The follow-up `hls` failure was the easy one — silent half-corruption that only Disk First Aid catches is the dangerous failure mode.
+
+**Bonus bug surfaced by the rename:** `bumpRootDirValence` had hardcoded `dataOff = rec0 + 12` — only correct when keyLength=11 (i.e. name="Apps", the template default). After a rename to "Wasm Hello" (keyLength=17), the data area moves to `rec0 + 18`, and the hardcoded 12 was scribbling `dirVal+1` into the key area. Fixed by computing `dataOff = rec0 + 1 + keyLength` dynamically. Generalises: **hardcoded offsets in serialization code are landmines waiting for the next adjacent change** — compute offsets from the structure, not from a known-good example.
+
+### 2026-05-16 — Dead-CSS-as-deletion-fallout: a pattern that keeps recurring
+**Context:** Repeated three times in one PR-batch sprint: a UI surface gets deleted, and CSS that only styled that surface stays behind as dead code. The build doesn't flag it (CSS rules aren't reachable in any TS analysis), so it accumulates until someone deliberately grep-audits.
+
+**Cases this sprint:**
+  - `.window__body h1/h2/h3` rules — dead after #225 ripped out the below-the-fold Read Me section. Found in #230.
+  - `.cvm-pg-opt*` rules (toolbar optimization picker) — dead since #123 moved the picker into the Preferences palette. Found in #231 (months after the move; I'd even unknowingly *modified* the dead rules in #218's `row` layout pass).
+  - `.cvm-ide .cvm-pg-tabbar { display: none }` — dead because `.cvm-ide` is never applied to any element in TS. Survived multiple chrome refactors because nothing surfaced "this rule never matches" as a signal.
+
+**Pattern to remember:** **When a deletion PR removes a chrome surface, grep CSS for rules whose only consumer was that surface as a follow-up step.** CSS has no compile-time reachability check — dead rules rot silently, sometimes get accidentally modified by later PRs that don't notice nothing renders. The grep is cheap (`grep -n "<removed-class>" src/web/src/style.css`), runs in seconds, and prevents the "I refactored the dead rule and shipped no visible change" failure mode.
+
+**Tooling generalisation:** A lint that warns on CSS classes referenced only inside style.css (no TS / HTML emission) would catch this automatically. Not adding it speculatively — but if the dead-CSS finds recur in the next sprint, it earns its keep. For now: the audit checklist line is *"removed a chrome surface → grep its classes."*
+
+**Side-effect:** The audit pattern also surfaces the inverse — TS that *does* emit a class but the CSS doesn't exist (missing styles). Less common but worth a glance when you're already grep-spelunking.
+
 ### 2026-05-16 — When to abstract, and when not to (the Toolchain interface)
 **Context:** cv-mac #100 Phase C asked for a Toolchain backend abstraction so future PowerPC support (per #98) could slot in. The issue's sketch proposed a deep interface — separate `compileSources()` / `linkObjects()` / `packageExecutable()` phases plus capability flags.
 
