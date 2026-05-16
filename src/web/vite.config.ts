@@ -138,6 +138,12 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-files", f),
   })),
+  // wasm-gworld — modern NewGWorld + LockPixels + CopyBits double-buffer.
+  ...["gworld.c", "gworld.r"].map((f) => ({
+    project: "wasm-gworld",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-gworld", f),
+  })),
   // wasm-wordpad — Mini word processor (#125). Font / Size / Style
   // menus driving a monostyle TextEdit; the next ladder rung after
   // Notepad. The last item in the #125 sprint.
