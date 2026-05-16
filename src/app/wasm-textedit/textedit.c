@@ -34,6 +34,9 @@
 
 QDGlobals qd;
 
+/* ← try changing this starter text! Rewrite the bytes (and update the
+ * leading length byte to match the new length) and Build & Run — the
+ * new text appears in the editor field on launch. */
 static const unsigned char SAMPLE_PSTR[] = {
     71,
     'T','y','p','e',' ','i','n','t','o',' ','t','h','i','s',' ',
