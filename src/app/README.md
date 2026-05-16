@@ -210,6 +210,35 @@ Different flow from the CMake apps — no CMake, no CI, no boot disk:
 > [wasm-retro-cc tracker](https://github.com/khawkins98/wasm-retro-cc/issues)
 > as a missing-symbol report. Cv-mac's #125 issue links examples.
 
+#### In-browser sysroot quirks worth knowing
+
+The in-browser cc1 ships only the consolidated `Multiverse.h` (every
+Toolbox prototype in one file), not Retro68's per-API umbrella headers.
+Practical implications when writing wasm-shelf samples:
+
+- **Headers that work** — `<Types.h>`, `<Quickdraw.h>`, `<Fonts.h>`,
+  `<Windows.h>`, `<Menus.h>`, `<TextEdit.h>`, `<Dialogs.h>`,
+  `<Events.h>`, `<Memory.h>`, `<OSUtils.h>`. These are present and
+  pull in Multiverse.h transitively.
+- **Headers that *don't* exist as separate files** in the in-browser
+  sysroot — `<Controls.h>`, `<Lists.h>`, `<Scrap.h>` and similar
+  fine-grained Toolbox subsystem headers. Their APIs are still available
+  via the cascading inclusion above; omit the explicit include rather
+  than fight it. The native CMake build *does* have these as separate
+  files, so dual-purpose code can include them under
+  `#ifndef __wasm__` (any sentinel works — the native path won't see it).
+- **API name drift** — `libInterface.a` in the in-browser bundle
+  exports only the modern Universal Headers names. The legacy aliases
+  (`SelIText` → `SelectDialogItemText`, `GetIText` → `GetDialogItemText`,
+  etc.) are not in there. Use the modern names — they work on both
+  paths.
+- **`FALSE` / `TRUE`** at file scope (e.g. `static Boolean done = FALSE;`)
+  isn't always exposed across SDK variants. Either use `0`/`1` directly
+  or guard with `#ifndef FALSE / #define FALSE 0`.
+
+These all surfaced in the #125 audit; every existing wasm-* sample
+either avoids the issue or has the workaround in place.
+
 ## Architectural pattern: Toolbox shell + pure-C engine
 
 Every app is split deliberately:
