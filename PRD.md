@@ -11,7 +11,7 @@ licensing. Want to see what writing for System 7.5.5 feels like in
 
 This project closes both gaps in the same browser tab:
 
-1. A 1993 Macintosh boots at a URL with five real demo apps already
+1. A 1990s Macintosh boots at a URL with five real demo apps already
    running, so visitors can use one before deciding to build one.
 2. A source-code editor sits below the Mac with the same C and Rez
    files that produced the apps running above it. Edits persist
