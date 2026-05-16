@@ -1029,6 +1029,7 @@ export async function mountPlayground(
         macBinary: result.bytes!,
         filename: fname,
         volumeName: volName,
+        installCustomFloppyIcon: true,
       });
       setStatus(statusEl, "Mounting disk…", "info");
       // Hand to emulator reboot — main.ts wired this up.
