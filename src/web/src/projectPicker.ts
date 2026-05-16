@@ -87,6 +87,11 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Cursor Manager demo. Four labelled quadrants — moving the mouse between them swaps the cursor via GetCursor + SetCursor (arrow / I-beam / watch / cross-hair). Classic Mac \"poll the mouse on idle, change cursor by region\" pattern since the OS has no enter/leave events.",
   },
+  "wasm-files": {
+    emoji: "💾",
+    description:
+      "File I/O round-trip. Open pops StandardGetFile to pick any TEXT file from any mounted volume; Save pops StandardPutFile and writes the TextEdit contents via FSpCreate + FSWrite + SetEOF. First sample on the shelf that touches the filesystem.",
+  },
   "wasm-calculator": {
     emoji: "🔢",
     description:
