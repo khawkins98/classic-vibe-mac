@@ -30,6 +30,20 @@
 #include <Events.h>
 #include <Memory.h>
 
+/* The Retro68 sysroot we vendor for the in-browser cc1 path doesn't
+ * expose the FALSE/TRUE macros at file scope across all SDK variants
+ * (`'FALSE' undeclared here (not in a function)` at top-level
+ * `static Boolean gDone = FALSE;`). Define them locally — both
+ * expansions are valid initialisers for the Retro68 `Boolean` typedef
+ * (`unsigned char`) and don't conflict if Multiverse.h does happen to
+ * define them, since the values match. */
+#ifndef FALSE
+# define FALSE 0
+#endif
+#ifndef TRUE
+# define TRUE 1
+#endif
+
 #define kWindowID  128
 #define kAlertID   128
 
