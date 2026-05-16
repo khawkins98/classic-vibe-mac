@@ -51,6 +51,7 @@ export interface MenubarActions {
   openAbout: () => void;
   openPreferences: () => void;
   openHelp: () => void;
+  openToolboxReference: () => void;
   openProjectPicker: () => void;
   openZipPicker: () => void;
   downloadCurrentZip: () => void;
@@ -534,7 +535,11 @@ function buildMenuSchema(a: MenubarActions): Record<string, MenuEntry[]> {
         disabled: () => !a.canRebootEmulator(),
       },
     ],
-    help: [{ label: "classic-vibe-mac Help", action: a.openHelp, shortcut: "?" }],
+    help: [
+      { label: "classic-vibe-mac Help", action: a.openHelp, shortcut: "?" },
+      { separator: true },
+      { label: "Toolbox Reference…", action: a.openToolboxReference },
+    ],
   };
 }
 
