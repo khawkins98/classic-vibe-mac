@@ -192,6 +192,19 @@ Different flow from the CMake apps — no CMake, no CI, no boot disk:
 4. Add a `PICKER_ENTRIES` blurb in [`src/web/src/projectPicker.ts`](../web/src/projectPicker.ts) (emoji + one-line description).
 5. `npm run build` from `src/web/` — done. The picker now lists your sample.
 
+> **CI caveat for wasm-shelf samples.** The repo's `Cross-compile
+> classic Mac apps (68k)` job builds against Retro68's Docker image
+> (the same toolchain CMake uses for the boot-disk apps), **not**
+> against the in-browser wasm-retro-cc sysroot. So passing CI on a
+> wasm-* sample only proves the source is structurally valid. Whether
+> it actually links in the browser depends on what's vendored in the
+> wasm-retro-cc sysroot — some Toolbox surfaces (e.g. full Sound
+> Manager `SndPlay`, `NewGWorld`) may need additional library glue.
+> The honest test is: click Build & Run in the playground. If you
+> hit a link error, file it in the
+> [wasm-retro-cc tracker](https://github.com/khawkins98/wasm-retro-cc/issues)
+> as a missing-symbol report. Cv-mac's #125 issue links examples.
+
 ## Architectural pattern: Toolbox shell + pure-C engine
 
 Every app is split deliberately:
