@@ -52,7 +52,10 @@ src/app/
 ├── wasm-textedit/          ├── textedit.c + textedit.r
 ├── wasm-notepad/           ├── notepad.c + notepad.r
 ├── wasm-stickynote/        ├── stickynote.c + stickynote.r
+├── wasm-wordpad/           ├── wordpad.c + wordpad.r
 ├── wasm-clock/             ├── clock.c + clock.r
+├── wasm-multiwin/          ├── multiwin.c + multiwin.r
+├── wasm-cursor/            ├── cursor.c + cursor.r
 ├── wasm-calculator/        ├── calc.c + calc.r
 ├── wasm-scribble/          ├── scribble.c + scribble.r
 ├── wasm-scrollwin/         ├── scrollwin.c + scrollwin.r
@@ -170,7 +173,10 @@ variations on a theme.
 | `wasm-textedit/` | `textedit.c` + `.r` | `TENew`/`TEClick`/`TEKey`/`TEUpdate`/`TEIdle`/`TESelect` | 130 |
 | `wasm-notepad/` | `notepad.c` + `.r` | `MBAR`/`MenuSelect`/`MenuKey`, `TECut`/`TECopy`/`TEPaste` (system scrap), `StopAlert` dialogs | 180 |
 | `wasm-stickynote/` | `stickynote.c` + `.r` | Pale-yellow `RGBBackColor` + `EraseRect` paper, single TextEdit field, draggable noGrowDocProc window — the colour-QuickDraw entry in the TextEdit ladder | 150 |
+| `wasm-wordpad/` | `wordpad.c` + `.r` | Mini word processor — Font/Size/Style menus driving monostyle TextEdit via `txFont`/`txSize`/`txFace` + `TECalText`. Bold/Italic/Underline accelerators (⌘B/⌘I/⌘U), live menu check marks. Next rung after Notepad | 260 |
 | `wasm-clock/` | `clock.c` + `.r` | `GetDateTime` + `SecondsToDate`, 60-tick idle redraw, `FrameOval`/`MoveTo`/`LineTo`/`FillOval` analog face, hand-rolled 60-entry sin/cos table (no libm) | 190 |
+| `wasm-multiwin/` | `multiwin.c` + `.r` | Three windows, one event loop — `SelectWindow` on back-window clicks, refCon-stashed per-window state (`SetWRefCon`/`GetWRefCon`), `FillRect` with QDGlobals patterns. Last close exits | 140 |
+| `wasm-cursor/` | `cursor.c` + `.r` | Region-driven Cursor Manager — four labelled quadrants, `GetCursor` + `SetCursor` to swap among arrow / I-beam / watch / cross-hair on `nullEvent` ticks. The Mac has no enter/leave events — poll the mouse, debounce on change | 150 |
 | `wasm-calculator/` | `calc.c` + `.r` | Hand-drawn `FrameRoundRect` buttons, `PtInRect` hit-test, `NumToString` display, `InvertRoundRect` press feedback | 170 |
 | `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
 | `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
