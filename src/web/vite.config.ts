@@ -232,6 +232,22 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-icon-gallery", f),
   })),
+  // wasm-glypha3 — first real period app onboard (cv-mac #233 Phase 2).
+  // John Calhoun's 1992 side-scroller, source released under MIT.
+  // 9 .c files + 1 shared header = ~6600 LOC + a minimal Rez stub
+  // (the upstream's 2.7 MB resource fork is its own follow-up).
+  // Vendored verbatim from softdorothy/Glypha3 with a small
+  // compatibility shim in Externs.h to bridge Universal-Headers gaps;
+  // see the patch block at the top of Externs.h for details.
+  ...[
+    "Main.c", "Enemy.c", "Graphics.c", "Interface.c",
+    "Play.c", "Prefs.c", "SetUpTakeDown.c", "Sound.c", "Utilities.c",
+    "Externs.h", "glypha3.r",
+  ].map((f) => ({
+    project: "wasm-glypha3",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-glypha3", f),
+  })),
 ];
 
 /** Files with these suffixes are treated as binary blobs (read with
