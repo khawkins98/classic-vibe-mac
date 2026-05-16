@@ -736,17 +736,22 @@ body.cvm-paused .emulator-canvas {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 3px 9px;
   font-family: var(--font-chrome);
   font-size: 11px;
-  background: var(--platinum-light);
+  /* Canonical Platinum button fill (#cccccc), not the lighter
+     `--platinum-light`. The Mac OS 8 HIG specifies #cccccc for
+     standard button surfaces — anything paler reads as Aqua-era. */
+  background: #cccccc;
   color: var(--ink);
   border: 1px solid var(--ink);
   box-shadow:
     inset 1px 1px 0 0 var(--highlight),
     inset -1px -1px 0 0 var(--shadow);
   cursor: pointer;
-  border-radius: 4px;
+  /* 2 px radius — Platinum buttons were *almost* square; 4 px reads
+     as iOS-era. See #229 item 1. */
+  border-radius: 2px;
 }
 .cvm-pg-iconbtn:active:not(:disabled) {
   box-shadow:
@@ -761,15 +766,32 @@ body.cvm-paused .emulator-canvas {
   outline: 2px solid var(--selection);
   outline-offset: 1px;
 }
+/* Default button (Build, Build & Run) — Platinum drew the default-
+   button affordance as a *thick black outline* around the button,
+   not as a gradient fill. The gradient previously here was an Aqua
+   (Mac OS X 10.0+) idiom imported by mistake. The outline is 2 px
+   wide with a 1 px offset so the button still reads as the primary
+   without changing its colour. */
 .cvm-pg-iconbtn--primary {
-  background: linear-gradient(to bottom, #f0f0f0, #c8c8c8);
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
   font-weight: bold;
 }
 .cvm-pg-iconbtn__icon {
-  /* Slightly larger than the label so the glyph still leads visually,
-     but small enough to sit on the same line — no more 2-line tower. */
-  font-size: 14px;
+  /* Tighter than the previous 14 px; the SVG icons are designed at
+     16 px for the period look but render fine at 14 px in the row
+     layout — keeps the toolbar a single 22 px strip rather than the
+     ~26 px the earlier emoji + label combo needed. */
+  display: inline-flex;
+  align-items: center;
+  width: 14px;
+  height: 14px;
   line-height: 1;
+}
+.cvm-pg-iconbtn__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 .cvm-pg-iconbtn__label {
   font-size: 11px;
