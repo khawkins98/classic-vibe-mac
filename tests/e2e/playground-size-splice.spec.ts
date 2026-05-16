@@ -27,7 +27,9 @@ test("compileToBin output carries a SIZE resource", async ({ page }) => {
     const build = await import(
       /* @vite-ignore */ `${location.origin}/src/playground/build.ts`
     );
-    const r = await cc1.compileToBin("/", src, "hello.c");
+    const r = await cc1.compileToBin("/", {
+      sources: [{ filename: "hello.c", content: src }],
+    });
     if (!r.ok || !r.bin) throw new Error("compileToBin failed");
     const final = build.spliceResourceFork({
       dataForkBin: r.bin,

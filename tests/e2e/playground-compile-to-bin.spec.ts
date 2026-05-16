@@ -58,7 +58,9 @@ test("compileToBin produces a MacBinary II APPL", async ({ page }) => {
     if (typeof mod.compileToBin !== "function") {
       throw new Error("compileToBin not exported from cc1.ts");
     }
-    const r = await mod.compileToBin("/", src, "hello.c");
+    const r = await mod.compileToBin("/", {
+      sources: [{ filename: "hello.c", content: src }],
+    });
     // Strip Uint8Array out of return — Playwright's evaluate
     // serializer doesn't deeply serialize them, so we just keep
     // length + header bytes + parsed fields the test asserts on.
@@ -111,8 +113,9 @@ test("compileToBin survives repeat calls (cc1 re-entrancy regression guard)", as
     const mod = await import(
       /* @vite-ignore */ `${location.origin}/src/playground/cc1.ts`
     );
-    const r1 = await mod.compileToBin("/", src, "hello.c");
-    const r2 = await mod.compileToBin("/", src, "hello.c");
+    const opts = { sources: [{ filename: "hello.c", content: src }] };
+    const r1 = await mod.compileToBin("/", opts);
+    const r2 = await mod.compileToBin("/", opts);
     return [
       { ok: r1.ok, failedStage: r1.failedStage, binLen: r1.bin?.length ?? 0 },
       { ok: r2.ok, failedStage: r2.failedStage, binLen: r2.bin?.length ?? 0 },
