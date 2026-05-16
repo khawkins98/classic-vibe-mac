@@ -243,6 +243,21 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVDL",
   },
+  {
+    // wasm-sound — Sound Manager SysBeep demo (cv-mac #125). Fills
+    // the Sound Manager gap with the simplest possible affordance —
+    // SysBeep with click-counter-modulated durations. Richer SndPlay
+    // on an 'snd ' resource is a future ladder rung; SysBeep itself
+    // is the oldest entry-point in the Sound Manager (a single
+    // A-trap, always available without library glue).
+    id: "wasm-sound",
+    label: "Wasm Sound",
+    files: ["sound.c", "sound.r"],
+    rezFile: "sound.r",
+    outputName: "WasmSound.bin",
+    appType: "APPL",
+    appCreator: "CVSO",
+  },
 ];
 
 /** Build-time constant: hash of every bundled sample file's contents. */
