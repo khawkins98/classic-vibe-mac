@@ -40,11 +40,29 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none';"
     />
-    <title>classic-vibe-mac</title>
+    <title>classic-vibe-mac — write Mac OS apps in your browser</title>
     <meta
       name="description"
-      content="A GitHub template that compiles a classic Mac OS app from C and runs it in your browser."
+      content="A 1993 Macintosh that lives at a URL. System 7.5.5 boots in your browser; 21 sample apps you can edit, hit Build, and watch the Mac re-launch with your changes. Compiles C end-to-end client-side via wasm-retro-cc."
     />
+
+    <!-- Open Graph / Facebook / iMessage / Slack share previews. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="classic-vibe-mac" />
+    <meta property="og:title" content="classic-vibe-mac — write Mac OS apps in your browser" />
+    <meta property="og:description" content="System 7.5.5 boots in your tab. Edit a sample's C source, hit Build & Run, and the Mac re-launches ~1 second later with your changes — no server, no install, no reload." />
+    <meta property="og:url" content="https://khawkins98.github.io/classic-vibe-mac/" />
+    <meta property="og:image" content="https://khawkins98.github.io/classic-vibe-mac/screenshot-deployed.png" />
+    <meta property="og:image:alt" content="A Mac OS 7/8-style IDE in the browser: top menubar with Apple / File / Edit / View / Special / Windows / Help, a cv-mac build stamp, and a clock. Four draggable WinBox panes tile the viewport: Project picker (left), Playground with Build / Build & Run / Download / Reset toolbar above a CodeMirror editor (centre), Macintosh pane running System 7.5.5 in BasiliskII (right), Output panel with the Build Log (bottom right)." />
+
+    <!-- Twitter / X large-image card. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="classic-vibe-mac — write Mac OS apps in your browser" />
+    <meta name="twitter:description" content="System 7.5.5 boots in your tab. Edit a sample's C source, hit Build & Run, and the Mac re-launches ~1 second later with your changes." />
+    <meta name="twitter:image" content="https://khawkins98.github.io/classic-vibe-mac/screenshot-deployed.png" />
+
+    <!-- Match the Mac OS 8 Platinum chrome for mobile browser surrounds. -->
+    <meta name="theme-color" content="#cccccc" />
     <link rel="stylesheet" href="/src/style.css" />
     <!--
       coi-serviceworker (MIT, gzuidhof/coi-serviceworker) — installs a
