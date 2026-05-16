@@ -1,6 +1,6 @@
 # classic-vibe-mac
 
-A 1993 Macintosh that lives at a URL — and lets you build apps for it
+A 1990s Macintosh that lives at a URL — and lets you build apps for it
 in the same tab. System 7.5.5 boots in your browser. Five demo apps
 launch from Startup Items. Open the source panel and you can edit
 them, hit Build, and the page returns a real `.bin`; hit Build & Run
@@ -261,7 +261,7 @@ A static GitHub Pages site ships HTML + JS + WASM + a chunked HFS
 disk image. The page registers a service-worker shim for cross-origin
 isolation, spawns a Web Worker, the worker pulls down BasiliskII's
 WASM core, instantiates it against the chunked boot disk, and the
-1993 Macintosh comes up in the visitor's tab. The same page also
+1990s Macintosh comes up in the visitor's tab. The same page also
 mounts a CodeMirror-based editor that reads sample C / Rez source
 out of `src/web/public/sample-projects/` (copied at Vite build time
 from `src/app/`), persists edits in IndexedDB, and exposes a

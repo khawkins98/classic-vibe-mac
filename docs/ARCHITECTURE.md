@@ -13,7 +13,7 @@ for the running gotcha log.
 
 ## The big picture
 
-A static GitHub Pages site boots a 1993 Macintosh in the visitor's
+A static GitHub Pages site boots a 1990s Macintosh in the visitor's
 browser tab. By default there is no relay and no auth; the site ships
 HTML + JS + WASM + a chunked HFS disk image, and every byte after
 that runs in the user's tab. The one opt-in exception is AppleTalk

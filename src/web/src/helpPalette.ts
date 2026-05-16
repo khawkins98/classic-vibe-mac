@@ -48,7 +48,7 @@ const HELP_HTML = /* html */ `
 <div class="cvm-help">
   <h2 class="cvm-help__title">classic-vibe-mac</h2>
   <p class="cvm-help__tagline">
-    A 1993 Macintosh that lives at a URL — and lets you build apps for
+    A 1990s Macintosh that lives at a URL — and lets you build apps for
     it in the same tab.
   </p>
 
