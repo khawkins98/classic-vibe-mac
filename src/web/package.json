@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.2",
     "@codemirror/commands": "^6.6.0",
     "@codemirror/lang-cpp": "^6.0.2",
     "@codemirror/language": "^6.12.3",

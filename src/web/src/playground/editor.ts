@@ -14,9 +14,21 @@
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
 import { search, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches } from "@codemirror/search";
+import {
+  HighlightStyle,
+  syntaxHighlighting,
+  bracketMatching,
+  indentOnInput,
+  foldGutter,
+  foldKeymap,
+  indentUnit,
+} from "@codemirror/language";
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { tags as t } from "@lezer/highlight";
 import { cpp } from "@codemirror/lang-cpp";
 import { rez } from "./lang-rez";
 import { m68k } from "./lang-m68k";
@@ -256,10 +268,47 @@ export async function mountPlayground(
   let scheduleAsmCompile: (reason: "edit" | "switch" | "open" | "opt-level") => void =
     () => {};
 
+  // HighlightStyle for the playground's main editor (cpp() + rez()).
+  // Mirrors the warm earth-tone palette m68kHighlight uses in
+  // lang-m68k.ts so the C source and the Show-Assembly pane feel like
+  // the same app rather than two unrelated editors. Subdued by
+  // design — neon IDE colours would clash with the System 7 chrome.
+  //
+  // Bug context (#196): editor.ts wired `cpp()` and `rez()` as
+  // language packs but never called syntaxHighlighting() on top, so
+  // the C view rendered monochrome while the assembly view (which
+  // ships its own HighlightStyle) had colour. This adds the missing
+  // styling for the main editor.
+  const playgroundHighlight = HighlightStyle.define([
+    { tag: t.comment,             color: "#7d6f64", fontStyle: "italic" },
+    { tag: t.lineComment,         color: "#7d6f64", fontStyle: "italic" },
+    { tag: t.blockComment,        color: "#7d6f64", fontStyle: "italic" },
+    { tag: t.keyword,             color: "#1c3e8a", fontWeight: "bold" }, // int, return, if, ...
+    { tag: t.controlKeyword,      color: "#1c3e8a", fontWeight: "bold" }, // if, while, for, ...
+    { tag: t.definitionKeyword,   color: "#1c3e8a", fontWeight: "bold" }, // typedef, struct, ...
+    { tag: t.modifier,            color: "#1c3e8a" },                    // static, const, ...
+    { tag: t.typeName,            color: "#155a8a" },                    // WindowPtr, Boolean, ...
+    { tag: t.string,              color: "#7a3e23" },
+    { tag: t.character,           color: "#7a3e23" },                    // 'A', '\n'
+    { tag: t.number,              color: "#155a8a" },
+    { tag: t.bool,                color: "#155a8a" },
+    { tag: t.null,                color: "#155a8a" },
+    { tag: t.meta,                color: "#7c4c00" },                    // #include, #define
+    { tag: t.processingInstruction, color: "#7c4c00" },
+    { tag: t.macroName,           color: "#7c4c00" },                    // FALSE, TRUE
+    { tag: t.function(t.variableName), color: "#603895" },                // function calls
+    { tag: t.function(t.definition(t.variableName)),
+                                  color: "#603895", fontWeight: "bold" }, // function definitions
+    { tag: t.operator,            color: "#5c4d3c" },
+    { tag: t.punctuation,         color: "#5c4d3c" },
+    { tag: t.bracket,             color: "#5c4d3c" },
+  ]);
+
   const editorState = EditorState.create({
     doc: initialContent,
     extensions: [
       lineNumbers(),
+      foldGutter(),
       history(),
       // CodeMirror's built-in search panel. The keymap (⌘F open, ⌘G
       // next, ⇧⌘G prev, ⌘⌥F replace, Esc close) lands after
@@ -268,7 +317,35 @@ export async function mountPlayground(
       // (more Mac-OS-8 Find-dialog-like — panels at the bottom feel
       // VS-Code-y).
       search({ top: true }),
-      keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+      // Editor niceties (cv-mac #196 Phase 2). Each one is a one-liner
+      // and a real readability win in a C buffer:
+      //   - bracketMatching: highlights matching {/}, (/), [/].
+      //   - closeBrackets: auto-inserts the closing brace/paren/quote.
+      //   - indentOnInput + indentUnit(2): Enter inside { } indents.
+      //   - highlightActiveLine: subtle band on the caret line.
+      //   - highlightSelectionMatches: select gWorld → every other
+      //     occurrence lights up. Great for source reading.
+      bracketMatching(),
+      closeBrackets(),
+      indentOnInput(),
+      indentUnit.of("  "),
+      highlightActiveLine(),
+      highlightSelectionMatches(),
+      // Syntax colouring for C/Rez. The lang packs (cpp(), rez())
+      // tokenize the buffer but don't style the tokens; we need a
+      // HighlightStyle on top. m68k() already ships its own
+      // HighlightStyle (see lang-m68k.ts) so this rule only fires
+      // for cpp/rez. Palette mirrors the m68k earth tones so the
+      // C view and the Show-Assembly view feel like the same app.
+      syntaxHighlighting(playgroundHighlight),
+      keymap.of([
+        indentWithTab,
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap,
+        ...closeBracketsKeymap,
+        ...foldKeymap,
+      ]),
       langCompartment.of(extensionsForFile(filename)),
       ...lintExtensions(),
       EditorView.theme(
