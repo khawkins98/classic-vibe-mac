@@ -166,10 +166,10 @@ variations on a theme.
 | `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
 | `wasm-patterns/` | `patterns.c` + `.r` | `Pattern` (8x8 bitmap), `FillRect` with custom + system patterns (white/ltGray/gray/dkGray) | 165 |
 | `wasm-bounce/` | `bounce.c` + `.r` | Hand-built offscreen `BitMap` (NewPtr buffer + SetPortBits), `CopyBits` double-buffer, `TickCount`-paced animation | 180 |
+| `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetIText` / `SelIText` | 180 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
-- **Modal dialogs with editable fields** (`ModalDialog` + DITL items past a single OK)
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **Sound Manager** (`SndPlay`) — period-correct audio feedback
 - **Color QuickDraw `NewGWorld`** — same surface as Bounce but using the modern (System 7+) double-buffer API
