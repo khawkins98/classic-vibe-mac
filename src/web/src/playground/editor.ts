@@ -798,9 +798,13 @@ export async function mountPlayground(
       // Hand to emulator reboot — main.ts wired this up.
       await hotLoad({ bytes: patched, volumeName: "Apps" });
       const totalMs = performance.now() - tStart;
+      // Surface the binary size alongside the wall time. The Build-only
+      // path already does this via formatBytes(); Build & Run was
+      // silent on size. Useful for "is my last edit smaller / bigger
+      // than before?" diagnostic glances.
       setStatus(
         statusEl,
-        `Done in ${totalMs.toFixed(0)}ms — double-click "Apps" on the desktop.`,
+        `Done in ${totalMs.toFixed(0)}ms (${formatBytes(result.bytes!.length)}) — double-click "Apps" on the desktop.`,
         "ok",
       );
 
