@@ -1411,7 +1411,7 @@ body.cvm-paused .emulator-canvas {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
+  padding: 3px 8px;
   cursor: default;
 }
 .cvm-files__item:hover {
@@ -1438,12 +1438,14 @@ body.cvm-paused .emulator-canvas {
   background: var(--selection);
 }
 
-/* Project dropdown at the top of the files panel. */
+/* Project dropdown at the top of the files panel. Padding tightened
+   for #229 item 5 — a real Mac OS 8 control panel was significantly
+   denser than the previous 10/12/8 (which read as web-app comfort). */
 .cvm-files__project {
-  padding: 10px 12px 8px;
+  padding: 6px 8px 4px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   background: var(--platinum);
   border-bottom: 1px solid var(--shadow);
 }
@@ -1475,7 +1477,7 @@ body.cvm-paused .emulator-canvas {
   background-repeat: no-repeat;
 }
 .cvm-files__section {
-  padding: 10px 12px 4px;
+  padding: 6px 8px 2px;
   font-family: var(--font-chrome);
   font-size: 11px;
   font-weight: bold;
@@ -1484,10 +1486,10 @@ body.cvm-paused .emulator-canvas {
 
 .cvm-files__footer {
   border-top: 1px solid var(--shadow);
-  padding: 10px 12px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   background: var(--platinum);
   margin-top: auto;
   flex-shrink: 0;
@@ -1495,14 +1497,17 @@ body.cvm-paused .emulator-canvas {
 .cvm-files__btn {
   font-family: var(--font-chrome);
   font-size: 11px;
-  background: var(--platinum-light);
+  /* Match .cvm-pg-iconbtn's Platinum fill (#cccccc) — `--platinum-light`
+     reads as Aqua-pale (#229 item 1 lesson). */
+  background: #cccccc;
   border: 1px solid var(--ink);
   box-shadow:
     inset 1px 1px 0 0 var(--highlight),
     inset -1px -1px 0 0 var(--shadow);
-  padding: 4px 10px;
+  padding: 3px 9px;
   cursor: pointer;
-  border-radius: 3px;
+  /* 2 px radius — Platinum was almost-square; 3 px reads modern. */
+  border-radius: 2px;
   text-align: center;
 }
 .cvm-files__btn:active {
@@ -1510,8 +1515,12 @@ body.cvm-paused .emulator-canvas {
     inset -1px -1px 0 0 var(--highlight),
     inset 1px 1px 0 0 var(--shadow);
 }
+/* Default-button affordance: thick black outline (Platinum), NOT a
+   vertical linear-gradient (Aqua). Same fix as #235 applied to the
+   playground toolbar's primary buttons. */
 .cvm-files__btn--primary {
-  background: linear-gradient(to bottom, #e0e0e0, #b8b8b8);
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
   font-weight: bold;
 }
 .cvm-files__hint {
