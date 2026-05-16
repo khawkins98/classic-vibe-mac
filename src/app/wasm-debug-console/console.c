@@ -29,7 +29,12 @@
 #include <Events.h>
 #include <Memory.h>
 
-#include "cvm_log.h"
+/* cvm_log.h is bundled with cv-mac's playground sysroot — available
+ * as a system header from any project, no per-project copy needed.
+ * The source-of-truth lives at src/app/wasm-debug-console/cvm_log.h
+ * in the repo and is inlined into the playground at build time by
+ * cc1.ts (Vite `?raw` import). */
+#include <cvm_log.h>
 
 #define kWindowID 128
 #define kMaxClicks 6
