@@ -42,7 +42,7 @@ src/app/
 │   └── CMakeLists.txt
 ├── hello-mac/              ├── hello-mac.c + .r + CMakeLists.txt
 ├── pixelpad/               ├── pixelpad.c + .r + CMakeLists.txt
-├── markdownviewer/         ├── markdownviewer.c + .r + md_parse.{c,h} + CMakeLists.txt
+├── markdownviewer/         ├── markdownviewer.c + .r + markdown_parse.{c,h} + CMakeLists.txt
 │
 ├── wasm-hello/             (Wasm-shelf — in-browser compile only)
 │   └── hello.c
@@ -146,7 +146,7 @@ to MacWeather (which is JS → Mac).
 ### Markdown Viewer (`markdownviewer/`)
 
 Reads `.md` files from the `:Shared:` folder on the boot disk and
-renders them using a hand-rolled C Markdown parser (`md_parse.{c,h}`).
+renders them using a hand-rolled C Markdown parser (`markdown_parse.{c,h}`).
 Supports headings (`#`–`###`), paragraphs, bold, italic, inline code,
 fenced code blocks, unordered lists, and horizontal rules. Links between
 `.md` files in `:Shared:` work; external URLs are not fetched.
