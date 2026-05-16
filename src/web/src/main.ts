@@ -52,6 +52,7 @@ import { openToolboxReference } from "./playground/toolbox-reference-window";
 import { openAbout } from "./aboutPalette";
 import { openPreferences } from "./preferencesPalette";
 import { mountMenubar } from "./menubarMenus";
+import { installBuildProgressWindow } from "./playground/buildProgressWindow";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -134,6 +135,10 @@ root.innerHTML = /* html */ `
 // #cvm-playground, #emulator-canvas-mount, #cvm-output-buildlog, etc.)
 // exist by the time the subsequent document.getElementById queries run.
 const idePanes = mountIdePanes();
+
+// Wire the Mac OS 8-style build progress window. editor.ts dispatches
+// `cvm:build-phase` events; this listener owns the WinBox lifecycle.
+installBuildProgressWindow();
 
 // "Pause when tab is hidden" lives in the Preferences palette now
 // (Edit menu). The emulator-loader subscribes to onPauseWhenHiddenChange
