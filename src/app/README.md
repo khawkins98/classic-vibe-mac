@@ -52,7 +52,12 @@ src/app/
 ├── wasm-textedit/          ├── textedit.c + textedit.r
 ├── wasm-notepad/           ├── notepad.c + notepad.r
 ├── wasm-calculator/        ├── calc.c + calc.r
-└── wasm-scribble/          └── scribble.c + scribble.r
+├── wasm-scribble/          ├── scribble.c + scribble.r
+├── wasm-scrollwin/         ├── scrollwin.c + scrollwin.r
+├── wasm-patterns/          ├── patterns.c + patterns.r
+├── wasm-bounce/            ├── bounce.c + bounce.r
+├── wasm-dialog/            ├── dialog.c + dialog.r
+└── wasm-sound/             └── sound.c + sound.r
 ```
 
 CMake apps have their own creator code (Reader=`CVMR`, MacWeather=`CVMW`,
