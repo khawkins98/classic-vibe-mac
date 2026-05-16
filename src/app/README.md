@@ -56,6 +56,8 @@ src/app/
 ├── wasm-clock/             ├── clock.c + clock.r
 ├── wasm-multiwin/          ├── multiwin.c + multiwin.r
 ├── wasm-cursor/            ├── cursor.c + cursor.r
+├── wasm-files/             ├── files.c + files.r
+├── wasm-gworld/            ├── gworld.c + gworld.r
 ├── wasm-calculator/        ├── calc.c + calc.r
 ├── wasm-scribble/          ├── scribble.c + scribble.r
 ├── wasm-scrollwin/         ├── scrollwin.c + scrollwin.r
@@ -177,6 +179,8 @@ variations on a theme.
 | `wasm-clock/` | `clock.c` + `.r` | `GetDateTime` + `SecondsToDate`, 60-tick idle redraw, `FrameOval`/`MoveTo`/`LineTo`/`FillOval` analog face, hand-rolled 60-entry sin/cos table (no libm) | 190 |
 | `wasm-multiwin/` | `multiwin.c` + `.r` | Three windows, one event loop — `SelectWindow` on back-window clicks, refCon-stashed per-window state (`SetWRefCon`/`GetWRefCon`), `FillRect` with QDGlobals patterns. Last close exits | 140 |
 | `wasm-cursor/` | `cursor.c` + `.r` | Region-driven Cursor Manager — four labelled quadrants, `GetCursor` + `SetCursor` to swap among arrow / I-beam / watch / cross-hair on `nullEvent` ticks. The Mac has no enter/leave events — poll the mouse, debounce on change | 150 |
+| `wasm-files/` | `files.c` + `.r` | File I/O round-trip — `StandardGetFile` / `StandardPutFile` for the dialogs, `FSpCreate` + `FSpOpenDF` + `FSRead`/`FSWrite` + `SetEOF` for the bytes. Three-button bar (Open / Save / Quit) above a 32 KB-capped TextEdit | 280 |
+| `wasm-gworld/` | `gworld.c` + `.r` | Modern `NewGWorld` + `GetGWorldPixMap` + `LockPixels` + `CopyBits` double-buffer. Four shapes bounce around a 320×200 scene — the clean System 7+ upgrade path from `wasm-bounce`'s hand-rolled `NewPtr`+`SetPortBits` BitMap | 200 |
 | `wasm-calculator/` | `calc.c` + `.r` | Hand-drawn `FrameRoundRect` buttons, `PtInRect` hit-test, `NumToString` display, `InvertRoundRect` press feedback | 170 |
 | `wasm-scribble/` | `scribble.c` + `.r` | `StillDown`/`GetMouse`/`LineTo` mouse-tracking — the IM ch. 1 drag-to-draw loop | 150 |
 | `wasm-scrollwin/` | `scrollwin.c` + `.r` | `NewControl(scrollBarProc)`, `TrackControl` with live actionProc, `Get`/`SetControlValue` | 200 |
@@ -188,10 +192,8 @@ variations on a theme.
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
-- **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **`SndPlay` on an `'snd '` resource** — the richer Sound Manager path past SysBeep
-- **`NewGWorld`** — the modern (System 7+) double-buffer API that wraps the offscreen-BitMap pattern Bounce shows by hand
-- **Multi-style TextEdit** (`TEStyleNew` + per-run formatting) — the missing rung between Notepad and a real word processor
+- **Multi-style TextEdit** (`TEStyleNew` + per-run formatting) — the missing rung between WordPad's monostyle and a real word processor
 
 ### Adding a wasm-shelf sample
 
