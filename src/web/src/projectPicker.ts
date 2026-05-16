@@ -95,7 +95,7 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
   "wasm-sound": {
     emoji: "🔔",
     description:
-      "Sound Manager SysBeep demo — two buttons play the system alert tone at varying durations (5/10/15/… ticks vs a solid 1-second beep). The oldest, simplest entry-point in the Sound Manager.",
+      "Sound Manager SysBeep demo — \"Beep\" plays one alert tone, \"Triple Beep\" plays three back-to-back. BasiliskII collapses SysBeep's duration parameter to a fixed-length alert, so making the difference audible means firing multiple beeps rather than asking for a longer one.",
   },
   "wasm-color": {
     emoji: "🌈",
