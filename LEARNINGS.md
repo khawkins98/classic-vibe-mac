@@ -1686,6 +1686,24 @@ Rule of thumb crystallised from this: when the verification environment doesn't 
 
 **Pattern to remember:** When a binary format has both a "structured live data" surface (catalog) and a "denormalized derived cache" surface (Desktop DB), patch the structured one first — it's documented, the change is local, and the cache typically rebuilds correctly from it. Reverse-engineering the cache format only earns its keep if the structured-data patch *doesn't* work, which is an empirical question worth answering cheaply first. Two hours of catalog patching closed 3/4 of #245 without ever touching Desktop DB; the remaining 1/4 might force Desktop DB work, or might fall to a different mechanism entirely (extfs-side rather than disk-side).
 
+### 2026-05-16 — Strings crossing the browser → Mac Toolbox boundary need MacRoman-safe bytes
+**Context:** The wasm-icon-gallery demo header read *"Icons loaded from icons.rsrc (☐ö☐\`è☐\`è☐\`ö…)"* in the actual Mac OS window — where I'd intended *"(★★★★★★)"*. The user spotted it in the post-Build-&-Run screenshot.
+
+**Cause:** I wrote ★ characters as literal UTF-8 (3 bytes each: `E2 98 85`) inside C/Rez source. When the build pipeline turns that into a Pascal-string literal and the Mac's Text Manager renders it via `DrawString`, the Toolbox interprets the bytes as **MacRoman**, not UTF-8. MacRoman doesn't include U+2605 — so each star's 3 UTF-8 bytes get rendered as 3 unrelated MacRoman glyphs.
+
+The same code lived in two DITL StaticText blocks (about-box blurbs in arkanoid + icon-gallery) — same garbled rendering when the user opens About.
+
+**Action:** Swapped to ASCII-safe labels ("6-star tier" / "5-star tier"). The browser-side rendering (project-dropdown stars via `complexityStars()`) is unaffected — that runs in the browser where UTF-8 ★ works correctly.
+
+**Pattern to remember:** **Any string that crosses the browser-to-Mac-Toolbox boundary needs to be MacRoman-safe.** Browser UI can use full Unicode (the project dropdown uses ★/☆ all over the place). But Pascal-string literals inside `.c`/`.r` source ship raw bytes to `DrawString` and have to stay in MacRoman's printable subset:
+
+  - 7-bit ASCII (0x20-0x7E) is always safe — same in both encodings
+  - Anything above 0x7F has different glyph mappings between MacRoman and Latin-1/UTF-8 (e.g. UTF-8 ™ = `E2 84 A2`, MacRoman ™ = single byte `0xAA`)
+
+If you need non-ASCII characters in a Mac-side string, encode them as MacRoman bytes directly (`\xAA` for ™, `\xC4` for ƒ, etc.) and don't rely on the file's source encoding. The compiler doesn't transcode.
+
+**Cross-link:** Aladdin's `Icon\r` file (#243) and Disinfectant INIT's SOH-prefixed name (#240) are the same family — sometimes you *want* to author non-ASCII bytes deliberately; using bash ANSI-C quoting (`$'\x01...'`) or `\x` C escapes is the explicit, correct way. Implicit UTF-8 source encoding is the trap.
+
 ### 2026-05-16 — When to abstract, and when not to (the Toolchain interface)
 **Context:** cv-mac #100 Phase C asked for a Toolchain backend abstraction so future PowerPC support (per #98) could slot in. The issue's sketch proposed a deep interface — separate `compileSources()` / `linkObjects()` / `packageExecutable()` phases plus capability flags.
 
