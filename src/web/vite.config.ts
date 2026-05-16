@@ -153,6 +153,12 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-sound", f),
   })),
+  // wasm-color — Color QuickDraw RGBForeColor demo (#125).
+  ...["color.c", "color.r"].map((f) => ({
+    project: "wasm-color",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-color", f),
+  })),
 ];
 
 

@@ -57,7 +57,8 @@ src/app/
 ├── wasm-patterns/          ├── patterns.c + patterns.r
 ├── wasm-bounce/            ├── bounce.c + bounce.r
 ├── wasm-dialog/            ├── dialog.c + dialog.r
-└── wasm-sound/             └── sound.c + sound.r
+├── wasm-sound/             ├── sound.c + sound.r
+└── wasm-color/             └── color.c + color.r
 ```
 
 CMake apps have their own creator code (Reader=`CVMR`, MacWeather=`CVMW`,
@@ -173,12 +174,13 @@ variations on a theme.
 | `wasm-bounce/` | `bounce.c` + `.r` | Hand-built offscreen `BitMap` (NewPtr buffer + SetPortBits), `CopyBits` double-buffer, `TickCount`-paced animation | 180 |
 | `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetIText` / `SelIText` | 180 |
 | `wasm-sound/` | `sound.c` + `.r` | `SysBeep(duration)` — the simplest, oldest Sound Manager entry-point | 140 |
+| `wasm-color/` | `color.c` + `.r` | Color QuickDraw `RGBColor`, `RGBForeColor`, `PaintRect` — the 1990 Macintosh II 6-colour palette | 140 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
 - **File I/O** via `StandardGetFile` + `FSRead`/`FSWrite` — the missing rung between Notepad and the full Reader app
 - **`SndPlay` on an `'snd '` resource** — the richer Sound Manager path past SysBeep
-- **Color QuickDraw `NewGWorld`** — same surface as Bounce but using the modern (System 7+) double-buffer API
+- **`NewGWorld`** — the modern (System 7+) double-buffer API that wraps the offscreen-BitMap pattern Bounce shows by hand
 
 ### Adding a wasm-shelf sample
 
