@@ -23,7 +23,7 @@
 // projectPicker / helpPalette / build-explainer.
 import "winbox/dist/winbox.bundle.min.js";
 import { enableShade } from "./winboxChrome";
-import { SAMPLE_PROJECTS } from "./playground/types";
+import { SAMPLE_PROJECTS, complexityStars } from "./playground/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -77,9 +77,14 @@ function filesHtml(): string {
         </label>
         <select id="cvm-files-project"
                 class="cvm-files__select"
-                aria-label="Switch project">
+                aria-label="Switch project (complexity 1–5 shown as ★/☆)">
           ${SAMPLE_PROJECTS.map(
-            (p) => `<option value="${p.id}">${p.label}</option>`,
+            // Star-prefix the option text so visitors can read the
+            // project's complexity level at a glance — #233 stepped-
+            // complexity demo curation. `★★★☆☆ Wasm Snake (game)` etc.
+            // <option> text can't be styled, so plain Unicode it is.
+            (p) =>
+              `<option value="${p.id}">${complexityStars(p.complexity)}  ${p.label}</option>`,
           ).join("")}
         </select>
       </div>
