@@ -747,6 +747,28 @@ export interface ExtraFile {
   finderFlags?: number;
   /** File data fork bytes. */
   dataFork: Uint8Array;
+  /**
+   * Optional resource fork. Use for pre-built binary resource files
+   * — e.g. a `.rsrc.bin` shipped alongside an app, opened at runtime
+   * via `OpenResFile("Sprites")` then `GetResource('CICN', N)` etc.
+   * (cv-mac #233 binary-asset infra: lands the splice path before
+   * the next ★★★★★ demo or external onboard needs it.) Leave
+   * undefined for plain-document extras (e.g. info.txt).
+   *
+   * Format: raw HFS resource-fork bytes — same shape `buildIconResourceFork`
+   * in floppy-icon.ts produces, or what `DeRez`/`Rez` round-trips
+   * for a real Mac file's rsrc fork. The patcher writes these into
+   * the volume's resource-fork allocation blocks alongside the data
+   * fork; the Resource Manager treats them as a normal resource file
+   * once opened by name.
+   *
+   * Type/creator conventionally: `type: 0x72737263` ('rsrc') +
+   * `creator: 0x52534544` ('RSED' = ResEdit) for a generic resource
+   * file the user could open with ResEdit on a real Mac. Apps that
+   * own the file might use their own creator code instead, so the
+   * Finder binds the file to the app's icon.
+   */
+  resourceFork?: Uint8Array;
 }
 
 /** Inject one file at the volume root. Mutates `disk` in place: allocates
@@ -902,7 +924,7 @@ export function patchEmptyVolumeWithBinary(opts: PatchOptions): Uint8Array {
         creator: extra.creator,
         finderFlags: extra.finderFlags ?? 0,
         dataFork: extra.dataFork,
-        resourceFork: new Uint8Array(),
+        resourceFork: extra.resourceFork ?? new Uint8Array(),
       });
     }
   }
