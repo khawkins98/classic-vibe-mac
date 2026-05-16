@@ -363,6 +363,123 @@ if (hfsutilsAvailable) {
   });
 }
 
+// ── Volume rename tests (cv-mac #220) ───────────────────────────────────
+
+test("renameVolume: too-long name throws", () => {
+  const disk = new Uint8Array(template);
+  assert.throws(
+    () => __test.renameVolume(disk, "A".repeat(__test.MAX_VOLUME_NAME_BYTES + 1)),
+    /too long/,
+    "should reject names > 27 bytes",
+  );
+});
+
+test("renameVolume: empty name throws", () => {
+  const disk = new Uint8Array(template);
+  assert.throws(
+    () => __test.renameVolume(disk, ""),
+    /cannot be empty/,
+    "should reject empty name",
+  );
+});
+
+test("renameVolume: MDB drVN updated in place", () => {
+  const disk = new Uint8Array(template);
+  __test.renameVolume(disk, "Hello");
+  const m = __test.TEMPLATE_LAYOUT.mdbOffset;
+  assert.equal(disk[m + 36], 5, "drVN length byte should be 5");
+  assert.equal(
+    new TextDecoder().decode(disk.subarray(m + 37, m + 42)),
+    "Hello",
+  );
+});
+
+test("renameVolume: same-length name keeps disk size unchanged", () => {
+  const disk = new Uint8Array(template);
+  __test.renameVolume(disk, "Game"); // 4 bytes, same length as "Apps"
+  assert.equal(disk.length, template.length);
+});
+
+test("renameVolume: longer name shifts rec1 offsets correctly", () => {
+  const disk = new Uint8Array(template);
+  __test.renameVolume(disk, "Wasm Hello"); // 10 bytes, was "Apps" (4)
+  // Read trailer to verify offsets shifted by the expected delta.
+  // Old: oldKeyLen=11, newKeyLen=17 (1+4+1+10=16 odd→pad→17), delta=+6.
+  const catOff = __test.allocBlockToDiskOffset(
+    __test.TEMPLATE_LAYOUT.catalogFirstAllocBlock,
+  );
+  const leafOff = catOff + 1 * __test.TEMPLATE_LAYOUT.allocBlockSize; // node 1
+  // Catalog node size is 512 but leaf nodes within the B-tree are also
+  // 512 bytes (set via TEMPLATE_LAYOUT in the patcher). Trailer is at
+  // leafOff + 512.
+  const dv = new DataView(disk.buffer, disk.byteOffset, disk.byteLength);
+  const numRecs = dv.getUint16(leafOff + 10, false);
+  const trailerEnd = leafOff + 512;
+  const rec0Off = dv.getUint16(trailerEnd - 2, false);
+  const rec1Off = dv.getUint16(trailerEnd - 4, false);
+  // rec0 stays at 14. rec1 was at 96, should now be at 96 + 6 = 102.
+  assert.equal(rec0Off, 14, "rec0 should stay at offset 14");
+  assert.equal(rec1Off, 102, "rec1 should shift to offset 102 (was 96, +6)");
+  // numRecs unchanged (still 2: rec0=dir, rec1=thread)
+  assert.equal(numRecs, 2);
+});
+
+test("renameVolume: rec1 thdCName updated to new name", () => {
+  const disk = new Uint8Array(template);
+  __test.renameVolume(disk, "MyDisk"); // 6 bytes
+  const catOff = __test.allocBlockToDiskOffset(
+    __test.TEMPLATE_LAYOUT.catalogFirstAllocBlock,
+  );
+  const leafOff = catOff + 1 * __test.TEMPLATE_LAYOUT.allocBlockSize;
+  const dv = new DataView(disk.buffer, disk.byteOffset, disk.byteLength);
+  const rec1Off = dv.getUint16(leafOff + 512 - 4, false);
+  // rec1: keyLength=7 + 7 key bytes + cdrThdRec; thdCName at rec1+22
+  // (per rec1 layout in renameVolume's doc comment).
+  const thdNameLen = disk[leafOff + rec1Off + 22];
+  const thdNameBytes = disk.subarray(
+    leafOff + rec1Off + 23,
+    leafOff + rec1Off + 23 + thdNameLen,
+  );
+  assert.equal(thdNameLen, 6);
+  assert.equal(new TextDecoder().decode(thdNameBytes), "MyDisk");
+});
+
+// hfsutils round-trip — only runs if hmount is available + we got here.
+if (hfsutilsAvailable) {
+  test("renameVolume: hmount reports the new volume name", () => {
+    const patched = patchEmptyVolumeWithBinary({
+      templateBytes: template,
+      macBinary: syntheticAppl,
+      filename: "hello_toolbox",
+      volumeName: "Wasm Hello",
+    });
+    const tmpPath = join(mkdtempSync(join(tmpdir(), "cvm-hfs-rn-")), "p.dsk");
+    writeFileSync(tmpPath, Buffer.from(patched));
+    const mount = spawnSync("hmount", [tmpPath]);
+    assert.equal(mount.status, 0, `hmount failed: ${mount.stderr.toString()}`);
+    try {
+      const out = mount.stdout.toString();
+      assert.match(
+        out,
+        /Volume name is "Wasm Hello"/,
+        `hmount didn't see the new volume name: ${out}`,
+      );
+      // hls should also succeed against the renamed volume (it
+      // wouldn't have if rec0's key wasn't updated to match drVN —
+      // hfsutils throws "Expected volume X not found").
+      const ls = spawnSync("hls", ["-la"]);
+      assert.equal(ls.status, 0, `hls failed against renamed volume: ${ls.stderr.toString()}`);
+      assert.match(
+        ls.stdout.toString(),
+        /hello_toolbox/,
+        "hls should still list the app file inside the renamed volume",
+      );
+    } finally {
+      spawnSync("humount", [tmpPath]);
+    }
+  });
+}
+
 // ── Summary ─────────────────────────────────────────────────────────────
 
 console.log(`\n  ${pass} passed, ${fail} failed, ${skip} skipped.`);
