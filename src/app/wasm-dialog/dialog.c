@@ -102,8 +102,12 @@ static void DrawAnswer(const unsigned char *answerPstr, Boolean cancelled) {
 static void ShowGreetDialog(void) {
     DialogPtr dlg = GetNewDialog(kDialogID, NULL, (WindowPtr)(-1));
     if (!dlg) { SysBeep(10); return; }
-    /* Make the EditText field own initial focus + select all. */
-    SelIText(dlg, kField, 0, 32767);
+    /* Make the EditText field own initial focus + select all.
+     * The in-browser libInterface.a exposes only the modern Universal
+     * Headers name (SelectDialogItemText); the legacy SelIText was
+     * dropped. Native Retro68 has both via #defines, but our wasm
+     * sysroot has only the modern symbols compiled in. */
+    SelectDialogItemText(dlg, kField, 0, 32767);
 
     short itemHit = 0;
     while (itemHit != kOK && itemHit != kCancel) {
@@ -116,7 +120,8 @@ static void ShowGreetDialog(void) {
         Rect box;
         GetDialogItem(dlg, kField, &kind, &hItem, &box);
         Str255 answer;
-        GetIText(hItem, answer);
+        /* Modern Universal Headers name — see SelectDialogItemText note above. */
+        GetDialogItemText(hItem, answer);
         DisposeDialog(dlg);
         DrawAnswer(answer, false);
     } else {
@@ -147,7 +152,11 @@ int main(void) {
 
     ShowWindow(gWin);
     DrawIntro();
-    unsigned char btnLabel[] = { 9, 'G','r','e','e','t',' ','m','e','…' };
+    /* MacRoman 0xC9 is the horizontal-ellipsis glyph (…). Embedding the
+     * UTF-8 multi-byte '…' directly is a multi-char constant warning +
+     * gets truncated to one byte at runtime; spell the codepoint
+     * explicitly so the button reads "Greet me…" on the classic Mac. */
+    unsigned char btnLabel[] = { 9, 'G','r','e','e','t',' ','m','e', 0xC9 };
     DrawButton(&gButtonRect, btnLabel);
 
     Boolean done = false;

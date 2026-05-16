@@ -60,7 +60,7 @@ static const char BTN_LABELS[16] = {
 
 static long gAcc = 0;       /* accumulator */
 static long gCur = 0;       /* current entered value */
-static char gOp  = 0;       /* pending operator: 0/+/-/*/ */
+static char gOp  = 0;       /* pending operator: 0 or + - * / */
 static Boolean gEntering = false;
 static Boolean gJustEvaluated = false;
 static WindowPtr gWin = NULL;

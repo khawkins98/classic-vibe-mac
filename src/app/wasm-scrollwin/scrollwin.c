@@ -19,12 +19,18 @@
  * room since we own the right edge, SIZE -1, signature 'CVSW').
  */
 
+/* Controls.h isn't shipped in the in-browser sysroot we vendor under
+ * public/wasm-cc1/sysroot.bin. The Control Manager prototypes
+ * (NewControl, TrackControl, GetControlValue, etc.) come transitively
+ * via Multiverse.h which Windows.h pulls in — so we just omit the
+ * explicit include and let cascading inclusion handle it. The native
+ * Retro68 CMake build has the full header tree so the explicit
+ * #include works there; the in-browser path stays clean either way. */
 #include <Types.h>
 #include <Quickdraw.h>
 #include <Fonts.h>
 #include <Windows.h>
 #include <Menus.h>
-#include <Controls.h>
 #include <TextEdit.h>
 #include <Dialogs.h>
 #include <Events.h>
