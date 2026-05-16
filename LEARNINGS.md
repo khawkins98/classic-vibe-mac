@@ -1713,6 +1713,43 @@ If you need non-ASCII characters in a Mac-side string, encode them as MacRoman b
 
 **Pattern to remember:** YAGNI applies even to ostensibly-future-proofing abstractions. The right level of abstraction is the level your *current* consumers actually use; abstracting further bakes in assumptions about the second backend that may not match what it actually needs. The deeper compile/link/package split can be added if and when a backend wants it; the thin interface doesn't preclude it.
 
+### 2026-05-16 — Vendored MacRoman source files: BSD grep silently treats them as binary
+**Context:** Debugging why Glypha III (#255) launches and silently exits. I grepped for `HandleEvent`, `quitting=`, `DoMenuChoice` etc. across the 9 upstream `.c` files and got zero matches outside `Main.c`. Spent ~15 minutes convinced the upstream was missing a tenth source file with all the event-handler globals — even cross-checked the GitHub API listing of `softdorothy/Glypha3/Source/` against what I'd vendored. The two lists matched.
+
+**Cause:** BSD grep on macOS auto-detects files with high bytes (>0x7F) and silently classifies them as binary, suppressing matches unless you pass `-a`. John Calhoun's Glypha source is **MacRoman-encoded** — typographic dashes, smart quotes, and ellipses in the comments are all single high-byte characters. `file *.c` correctly reports them as "ISO-8859 text"; cc1 reads them as MacRoman and compiles fine; grep silently lies.
+
+**Action:** Re-grepped with `LC_ALL=C grep -a` and the missing functions appeared exactly where the header comments said they would (`ToolBoxInit` in SetUpTakeDown.c:76, `HandleEvent` in Interface.c, etc.).
+
+**Pattern to remember:** Vendored period Mac source is almost always MacRoman-encoded — the `file` command will report "ISO-8859 text" or "non-ISO extended-ASCII text" rather than plain "ASCII text". For any vendored upstream:
+  - Default to `LC_ALL=C grep -aE …` when searching.
+  - Pre-flight: `file *.c` — anything non-ASCII needs `-a`.
+  - The same trap exists for `xargs grep` pipelines that filter "Binary file X matches" output silently — they'll drop real matches without complaint.
+
+`cc1.wasm` itself handles MacRoman input correctly (the bytes survive into the string-table verbatim, which is exactly what `DrawString` wants — see the 2026-05-16 entry on the MacRoman browser → Toolbox boundary). The encoding *only* trips up host-side text tools that didn't expect non-UTF-8.
+
+### 2026-05-16 — Vendoring CodeWarrior-era Mac source through Universal Headers: one Externs.h shim block
+**Context:** Onboarded John Calhoun's Glypha III (#255) — 6600 LOC across 9 `.c` files, originally targeting CodeWarrior 1992-era toolchain. CodeWarrior shipped an implicit "MacHeaders" precompiled prefix that contained every Toolbox umbrella header and every legacy Toolbox name. Retro68's Universal Headers consolidated some of that into different umbrellas (`Multiverse.h`) and renamed many API entry points across the System 6 → 7 → 7.5 evolution.
+
+**Finding:** All the compatibility gaps fit in **one consolidated shim block at the top of `Externs.h`**, organised into three categories:
+
+  1. **Explicit Toolbox `#include`s** — replaces the missing PCH. ~17 headers covering QuickDraw / Windows / Menus / TextEdit / Dialogs / Events / Sound / Resources / ToolUtils / Files / Devices / Memory / OSUtils / Errors / Gestalt / Palettes / QDOffscreen. Without these, the first `Boolean` or `Rect` typedef in the upstream source triggers an "unknown type" error.
+
+  2. **Legacy-name `#define` aliases** — Toolbox renamed many functions between System 6 and Universal Headers; the old names are gone entirely from modern headers. One-line `#define` aliases keep the upstream source byte-identical:
+     ```c
+     #define SetItem       SetMenuItemText
+     #define SelIText      SelectDialogItemText
+     #define DisposDialog  DisposeDialog
+     #define SetSoundVol(v) ((void)0)    // legacy, no UH equivalent
+     ```
+
+  3. **Universal Headers constants spelled or numbered differently** — `initMono`, `initNoInterp` (lowercase b in `SndCallbackUPP` vs CodeWarrior's capital B), `uppSndCallbackProcInfo = 0x000003C0` (no longer publicly exposed), `ToolTrap = 0xA800`, `geneva = 3`. The numeric values come from *Inside Macintosh* references — modern headers either renamed or hid them.
+
+**Subtle rule:** If your shim's typedef collides with a sysroot definition (a header you didn't realise was including the type indirectly), **drop the typedef but keep the missing `#define`s**. Don't try to `#ifndef`-guard around the typedef — easier and safer to rely on the sysroot. I hit this with `RoutineDescriptor` (already in `MixedMode.h`) — removing my typedef and keeping just the `BUILD_ROUTINE_DESCRIPTOR` macro override fixed the link cleanly.
+
+**Folder-Manager / Standard-File-heavy files** (Glypha's `Prefs.c` was 523 lines of Gestalt + FindFolder + FSpCreate) aren't worth shimming. Replace them wholesale with no-persistence stubs and preserve the original as `Filename.upstream` for archeology (see `src/app/wasm-glypha3/Prefs.c.upstream`). The playground-demo use case never needs real preferences.
+
+**Pattern to remember:** The one-shim-block-in-`Externs.h` approach beats per-file patching because (a) future upstream updates rebase cleanly — your changes are scoped to one file, (b) the audit reviewer reads one diff hunk and understands the entire compatibility story, (c) trivial renames like `SndCallBackUPP` → `SndCallbackUPP` can be done in-place with `perl -i` because the upstream source is otherwise untouched. This generalises: when porting a large vendored codebase across a header generation gap, prefer a thin compatibility layer at the boundary over scattered per-file edits.
+
 ### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
 **Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
 **Finding:** Two distinct header files coexist in the Retro68 SDK:
