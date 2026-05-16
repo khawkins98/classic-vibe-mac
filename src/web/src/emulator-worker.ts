@@ -484,6 +484,34 @@ self.addEventListener("message", (ev: MessageEvent) => {
     } else {
       self.postMessage({ type: "drawing_data", bytes: null });
     }
+  } else if (data?.type === "poll_console") {
+    // Read /Shared/__cvm_console.log incrementally — return only bytes
+    // appended since the watcher's last-known offset. Lets the Debug
+    // Console pane update in near-real-time as the Mac app emits log
+    // lines via cvm_log(), without re-shipping the whole file.
+    const consolePath = "/Shared/__cvm_console.log";
+    const fromOffset = Math.max(0, data.fromOffset | 0);
+    if (sharedReady && activeFs && activeFs.analyzePath(consolePath).exists) {
+      try {
+        const all: Uint8Array = activeFs.readFile(consolePath, { encoding: "binary" });
+        // If the file shrank, the user likely called cvm_log_reset() — the
+        // watcher detects totalSize < its lastOffset and resets its UI.
+        if (fromOffset >= all.length) {
+          self.postMessage({ type: "console_data", bytes: null, totalSize: all.length });
+        } else {
+          const slice = all.slice(fromOffset);
+          const copy = new Uint8Array(slice);
+          self.postMessage(
+            { type: "console_data", bytes: copy, totalSize: all.length },
+            [copy.buffer],
+          );
+        }
+      } catch {
+        self.postMessage({ type: "console_data", bytes: null, totalSize: 0 });
+      }
+    } else {
+      self.postMessage({ type: "console_data", bytes: null, totalSize: 0 });
+    }
   }
 });
 
