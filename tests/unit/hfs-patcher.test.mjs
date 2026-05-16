@@ -28,8 +28,11 @@ const REPO = join(HERE, "..", "..");
 function transpile() {
   const out = mkdtempSync(join(tmpdir(), "cvm-hfs-test-"));
   const tscPath = join(REPO, "node_modules", ".bin", "tsc");
+  // hfs-patcher.ts imports floppy-icon.ts (#244); transpile both so
+  // the runtime ESM resolver finds the sibling `.js` at import time.
   execSync(
     `${tscPath} src/web/src/playground/hfs-patcher.ts ` +
+      `src/web/src/playground/floppy-icon.ts ` +
       `--target ES2020 --module ES2020 --moduleResolution node ` +
       `--esModuleInterop --skipLibCheck --strict ` +
       `--outDir ${out}`,
