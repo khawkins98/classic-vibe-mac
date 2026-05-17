@@ -448,7 +448,11 @@ Built on the work of others who did the heavy lifting:
 
 - **[Retro68](https://github.com/autc04/Retro68)** by Wolfgang
   Thaller and contributors — the cross-compiler that makes 68k
-  Mac binaries from modern source. MIT-style license.
+  Mac binaries from modern source. Mixed licensing reflecting its
+  GCC / binutils heritage (GPL-2.0+ and GPL-3.0+); the
+  cc1 / as / ld / Elf2Mac binaries cv-mac vendors via
+  [wasm-retro-cc](https://github.com/khawkins98/wasm-retro-cc)
+  redistribute GPL-licensed code. See NOTICE for the chain.
 - **[Infinite Mac](https://github.com/mihaip/infinite-mac)** by
   Mihai Parparita — Basilisk II and SheepShaver compiled to
   WebAssembly, plus the chunked disk-fetch infrastructure we lean
@@ -466,8 +470,20 @@ Built on the work of others who did the heavy lifting:
 
 ## License
 
-MIT for our code. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE)
-for the attribution stack: BasiliskII (GPL-2.0), Infinite Mac
-(Apache-2.0), Retro68 (MIT-style), System 7.5.5 (Apple's 1998
-free-redistribution release). When the emulator core ships next
-to a deploy, its own LICENSE and NOTICE files travel with it.
+**GPL-3.0-or-later** for our code. See [LICENSE](./LICENSE) and
+[NOTICE](./NOTICE) for the full attribution stack, including:
+BasiliskII (GPL-2.0+), Infinite Mac (Apache-2.0), Retro68
+(GPL-2.0+ / GPL-3.0+ for its GCC / binutils-derived parts),
+System 7.5.5 (Apple's 1998 free-redistribution release). When
+the emulator core ships next to a deploy, its own LICENSE and
+NOTICE files travel with it.
+
+> **A note on what GPLv3 does and doesn't cover.** This project —
+> the emulator wrapper, the IDE, the build infrastructure — is
+> GPL-3.0-or-later. If you fork or modify *this project*, your
+> fork is GPLv3-bound. **However**, classic Mac apps you write
+> *using* the playground and compile with the bundled toolchain
+> are entirely your own work. The compiler's license governs the
+> compiler, not its output — the same way a code editor's license
+> doesn't apply to what you type into it. License your own apps
+> however you want.
