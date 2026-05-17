@@ -19,12 +19,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
+
+function runStress(inputPath) {
+  return spawnSync(
+    "node",
+    [join(REPO, "scripts/stress-wasm-rez.mjs"), inputPath],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+}
 
 function genBigResource(lineCount) {
   let s = `data 'PICT' (128, "synthetic-stress") {\n`;
@@ -40,11 +48,7 @@ test("wasm-rez handles 2000 hex literals in a single resource (#286 regression)"
   try {
     const inputPath = join(tmp, "stress.r");
     writeFileSync(inputPath, genBigResource(2000));
-    const result = spawnSync(
-      "node",
-      [join(REPO, "scripts/stress-wasm-rez.mjs"), inputPath],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
+    const result = runStress(inputPath);
     const combined = (result.stdout || "") + (result.stderr || "");
     assert.equal(
       result.status,
@@ -56,4 +60,30 @@ test("wasm-rez handles 2000 hex literals in a single resource (#286 regression)"
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+/**
+ * Real-world coverage: Glypha III's vendored 2.7 MB .r is the largest
+ * input wasm-rez sees in this repo. Compiling it end-to-end here means
+ * CI catches any future stack-bump regression *or* any change to the
+ * vendored Glypha .r that introduces a resource too big to parse.
+ *
+ * The synthetic test above proves the stack ceiling. This one proves
+ * the actual file we ship still fits under it.
+ */
+test("wasm-rez compiles the vendored Glypha .r (#256)", () => {
+  const glyphaR = join(REPO, "src/app/wasm-glypha3/glypha3.r");
+  if (!existsSync(glyphaR)) {
+    // If the file is ever moved/renamed this test should fail loudly,
+    // not silently skip — the assertion below makes that explicit.
+    assert.fail(`expected vendored .r at ${glyphaR}`);
+  }
+  const result = runStress(glyphaR);
+  const combined = (result.stdout || "") + (result.stderr || "");
+  assert.equal(
+    result.status,
+    0,
+    `wasm-rez failed on vendored Glypha .r.\nstdout/stderr:\n${combined}`,
+  );
+  assert.match(combined, /outcome: SUCCESS/);
 });
