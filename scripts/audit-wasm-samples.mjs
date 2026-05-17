@@ -37,6 +37,12 @@ import {
 } from "node:fs";
 import { dirname, resolve, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  cc1Args,
+  asArgs,
+  ldArgs,
+  elf2macArgs,
+} from "../src/web/src/playground/compileArgs.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, "..");
@@ -156,15 +162,11 @@ async function compileProject(projectDir) {
     for (const [f, content] of Object.entries(sourceContents)) {
       cc1.Module.FS.writeFile(`/tmp/${f}`, content);
     }
-    const cc1Rc = callMain(cc1, [
-      "-quiet",
-      "-isystem", "/sysroot/gcc-include",
-      "-isystem", "/sysroot/include",
-      "-mcpu=68020",
-      "-O0",
-      `/tmp/${cFile}`,
-      "-o", `/tmp/${baseNoExt}.s`,
-    ]);
+    const cc1Rc = callMain(cc1, cc1Args({
+      source: `/tmp/${cFile}`,
+      output: `/tmp/${baseNoExt}.s`,
+      optLevel: "O0",
+    }));
     if (cc1Rc !== 0) {
       const errLine =
         cc1.stderr.find((l) => /error/i.test(l)) ??
@@ -177,11 +179,10 @@ async function compileProject(projectDir) {
     // as
     const as = await loadTool("as.mjs", null);
     as.Module.FS.writeFile(`/tmp/${baseNoExt}.s`, asmBytes);
-    const asRc = callMain(as, [
-      "-march=68020",
-      `/tmp/${baseNoExt}.s`,
-      "-o", `/tmp/${baseNoExt}.o`,
-    ]);
+    const asRc = callMain(as, asArgs({
+      source: `/tmp/${baseNoExt}.s`,
+      output: `/tmp/${baseNoExt}.o`,
+    }));
     if (asRc !== 0) {
       return {
         ok: false,
@@ -196,23 +197,10 @@ async function compileProject(projectDir) {
   // Stage 3: ld
   const ld = await loadTool("ld.mjs", "libs");
   for (const o of objects) ld.Module.FS.writeFile(`/tmp/${o.name}`, o.bytes);
-  const objPaths = objects.map((o) => `/tmp/${o.name}`);
-  const ldRc = callMain(ld, [
-    "-T", "/sysroot/ld/retro68-multiseg.ld",
-    "-L", "/sysroot/lib",
-    "--no-warn-rwx-segments",
-    "--emit-relocs",
-    "-o", "/tmp/out.gdb",
-    "/sysroot/lib/start.c.obj",
-    ...objPaths,
-    "--start-group",
-    "/sysroot/lib/libretrocrt.a",
-    "/sysroot/lib/libInterface.a",
-    "/sysroot/lib/libc.a",
-    "/sysroot/lib/libm.a",
-    "/sysroot/lib/libgcc.a",
-    "--end-group",
-  ]);
+  const ldRc = callMain(ld, ldArgs({
+    objects: objects.map((o) => `/tmp/${o.name}`),
+    output: "/tmp/out.gdb",
+  }));
   if (ldRc !== 0) {
     return { ok: false, stage: "ld", reason: ld.stderr[0] ?? "" };
   }
@@ -221,7 +209,7 @@ async function compileProject(projectDir) {
   // Stage 4: Elf2Mac
   const e2m = await loadTool("Elf2Mac.mjs", null);
   e2m.Module.FS.writeFile("/tmp/out.bin.gdb", elfBytes);
-  const e2mRc = callMain(e2m, ["--elf2mac", "-o", "/tmp/out.bin"]);
+  const e2mRc = callMain(e2m, elf2macArgs({ output: "/tmp/out.bin" }));
   if (e2mRc !== 0) {
     return { ok: false, stage: "Elf2Mac", reason: e2m.stderr[0] ?? "" };
   }
