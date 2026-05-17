@@ -24,6 +24,10 @@
  */
 import type { Diagnostic } from "./preprocessor";
 import { timeFetch } from "./fetchStats";
+// Shared cc1/as/ld/Elf2Mac argv builders — also imported by the
+// Node-side audit (scripts/audit-wasm-samples.mjs), so a flag bump
+// in either path can't drift away from the other (#267 family).
+import { cc1Args, asArgs, ldArgs, elf2macArgs } from "./compileArgs.mjs";
 // cv-mac system headers — inlined at build time via Vite's `?raw`
 // import. Each entry gets dropped into `/sysroot/include/<name>` by
 // `mountSysroot()` so any playground project can `#include <name>`
@@ -322,15 +326,11 @@ export async function compileToAsm(
   const t0 = performance.now();
   let rc: number;
   try {
-    rc = Module.callMain([
-      "-quiet",
-      "-isystem", "/sysroot/gcc-include",
-      "-isystem", "/sysroot/include",
-      "-mcpu=68020",
-      `-${options?.optLevel ?? "O0"}`,
-      inPath,
-      "-o", outPath,
-    ]);
+    rc = Module.callMain(cc1Args({
+      source: inPath,
+      output: outPath,
+      optLevel: options?.optLevel ?? "O0",
+    }));
   } catch (e) {
     const err = e as { name?: string; status?: number; message?: string };
     if (err.name === "ExitStatus") {
@@ -738,15 +738,11 @@ export async function compileToBin(
     const cc1In = `/tmp/${safe}`;
     const cc1Out = `/tmp/${baseNoExt}.s`;
     const cc1Start = performance.now();
-    const cc1Rc = callMainSafe(cc1, [
-      "-quiet",
-      "-isystem", "/sysroot/gcc-include",
-      "-isystem", "/sysroot/include",
-      "-mcpu=68020",
-      `-${options.optLevel ?? "O0"}`,
-      cc1In,
-      "-o", cc1Out,
-    ]);
+    const cc1Rc = callMainSafe(cc1, cc1Args({
+      source: cc1In,
+      output: cc1Out,
+      optLevel: options.optLevel ?? "O0",
+    }));
     stages.cc1Ms += performance.now() - cc1Start;
     const cc1Stderr = cc1.stderr.join("\n");
     if (cc1Stderr) stderrParts.push(`[cc1 ${c.filename}]\n${cc1Stderr}`);
@@ -788,9 +784,7 @@ export async function compileToBin(
     const asOut = `/tmp/${baseNoExt}.o`;
     as.Module.FS.writeFile(asIn, sBytes);
     const asStart = performance.now();
-    const asRc = callMainSafe(as, [
-      "-march=68020", asIn, "-o", asOut,
-    ]);
+    const asRc = callMainSafe(as, asArgs({ source: asIn, output: asOut }));
     stages.asMs += performance.now() - asStart;
     const asStderr = as.stderr.join("\n");
     if (asStderr) stderrParts.push(`[as ${c.filename}]\n${asStderr}`);
@@ -853,48 +847,31 @@ export async function compileToBin(
   try { ld.Module.FS.unlink("/tmp/out.gdb"); } catch {}
   const objPaths = objects.map((o) => `/tmp/${o.name}`);
   const ldStart = performance.now();
-  const ldRc = callMainSafe(ld, [
-    // `retro68-multiseg.ld` is the multi-segment ld script that
-    // Elf2Mac dynamically generates from its default SegmentMap in
-    // `--elf2mac` mode (captured into a static asset in
-    // wasm-retro-cc#24). libretrocrt's `_start` was written for the
-    // multi-segment layout — using the flat script crashes at app
-    // launch with type-3 because the runtime relocator can't find the
-    // named `.code00001`/`.code00002`/... sections.
-    //
-    // See LEARNINGS "2026-05-15 — Missing SIZE resource crashes
-    // libretrocrt startup with type-3" (the immediate-prior fix that
-    // got us this far) and the wasm-retro-cc LEARNINGS section
-    // "Follow-up: the flat ld script is fundamentally wrong for
-    // libretrocrt".
-    "-T", "/sysroot/ld/retro68-multiseg.ld",
-    "-L", "/sysroot/lib",
-    "--no-warn-rwx-segments",
-    // `--emit-relocs` (`-q`) keeps the relocation records in the output
-    // ELF so Elf2Mac can convert them into 'RELA' resources. Without it,
-    // ld applies the relocations and DISCARDS them — leaving an ELF with
-    // no .rela sections, which Elf2Mac turns into empty 2-byte 'RELA'
-    // resources. At runtime libretrocrt's `Retro68Relocate` has nothing
-    // to apply, so unrelocated pointers still reference ELF virtual
-    // addresses (0x0000xxxx) instead of the loaded segment addresses,
-    // and `main()`'s first cross-segment call lands in low memory →
-    // type-3 address error at app launch. Discovered 2026-05-15 PM via
-    // diff against the canonical Retro68 docker build (cv-mac #96).
-    "--emit-relocs",
-    "-o", "/tmp/out.gdb",
-    "/sysroot/lib/start.c.obj",
-    // All user .o files (one per .c source); cv-mac #100 Phase A.
-    // For single-file projects this is one entry; multi-file projects
-    // (e.g. wasm-hello-multi) link multiple objects together.
-    ...objPaths,
-    "--start-group",
-    "/sysroot/lib/libretrocrt.a",
-    "/sysroot/lib/libInterface.a",
-    "/sysroot/lib/libc.a",
-    "/sysroot/lib/libm.a",
-    "/sysroot/lib/libgcc.a",
-    "--end-group",
-  ]);
+  // Linker invocation argv lives in `compileArgs.mjs` so the Node-side
+  // audit and the in-browser pipeline can't drift. Notes preserved here
+  // because they're cv-mac-specific debugging:
+  //
+  // `retro68-multiseg.ld` is the multi-segment ld script that Elf2Mac
+  // dynamically generates from its default SegmentMap in `--elf2mac`
+  // mode (captured into a static asset in wasm-retro-cc#24).
+  // libretrocrt's `_start` was written for the multi-segment layout —
+  // the flat script crashes at app launch with type-3 because the
+  // runtime relocator can't find the named `.code00001`/... sections.
+  //
+  // `--emit-relocs` (`-q`) keeps the relocation records in the output
+  // ELF so Elf2Mac can convert them into 'RELA' resources. Without it,
+  // ld applies the relocations and DISCARDS them — leaving an ELF with
+  // no .rela sections; libretrocrt's Retro68Relocate then has nothing
+  // to apply and `main()`'s first cross-segment call lands in low
+  // memory → type-3 address error. Discovered 2026-05-15 PM via diff
+  // against the canonical Retro68 docker build (cv-mac #96).
+  //
+  // See LEARNINGS "Follow-up: the flat ld script is fundamentally
+  // wrong for libretrocrt" and the 2026-05-15 PM SIZE-resource entry.
+  const ldRc = callMainSafe(ld, ldArgs({
+    objects: objPaths,
+    output: "/tmp/out.gdb",
+  }));
   stages.ldMs = performance.now() - ldStart;
   const ldStderr = ld.stderr.join("\n");
   if (ldStderr) stderrParts.push(`[ld]\n${ldStderr}`);
@@ -926,7 +903,7 @@ export async function compileToBin(
   }
   e2m.Module.FS.writeFile("/tmp/out.bin.gdb", elfBytes);
   const e2mStart = performance.now();
-  const e2mRc = callMainSafe(e2m, ["--elf2mac", "-o", "/tmp/out.bin"]);
+  const e2mRc = callMainSafe(e2m, elf2macArgs({ output: "/tmp/out.bin" }));
   stages.elf2macMs = performance.now() - e2mStart;
   const e2mStderr = e2m.stderr.join("\n");
   if (e2mStderr) stderrParts.push(`[Elf2Mac]\n${e2mStderr}`);
