@@ -191,12 +191,12 @@ jobs:
           name: classic-vibe-mac-${{ github.sha }}
           path: artifact
 
-      - name: Verify downloaded app.dsk
+      - name: Verify downloaded artifacts
         run: |
           ls -la artifact/dist/
-          test -s artifact/dist/app.dsk
-          # system755-vibe.dsk is best-effort right now (see build-app job
-          # for why) — log its presence/absence but don't fail.
+          # app.dsk retired with the Reader app (#276); the only disk
+          # the web build needs is system755-vibe.dsk (best-effort —
+          # see build-app job for why we don't hard-fail on it).
           if [ -s artifact/dist/system755-vibe.dsk ]; then
             echo "system755-vibe.dsk present ($(stat -c%s artifact/dist/system755-vibe.dsk) bytes)."
           else
@@ -263,14 +263,14 @@ jobs:
           gz_size=$(gzip -9c src/web/public/wasm-rez/wasm-rez.wasm | wc -c)
           echo "wasm-rez.wasm.gz = $gz_size B"
 
-      # Co-locate the disk images next to index.html so they're reachable at
-      # https://<user>.github.io/<repo>/app.dsk and /system755-vibe.dsk —
-      # which is where emulator-config.ts expects to find them. Done outside
-      # Vite (rather than via publicDir) because the .dsk files are CI
-      # artifacts, not source assets, and we don't want them tracked in git.
+      # Co-locate the boot disk next to index.html so it's reachable at
+      # https://<user>.github.io/<repo>/system755-vibe.dsk — where
+      # emulator-config.ts expects to find it. Done outside Vite
+      # (rather than via publicDir) because .dsk files are CI artifacts,
+      # not source assets, and we don't want them tracked in git.
+      # (Reader's app.dsk was retired with the Reader app in #276.)
       - name: Co-locate disk images into web dist
         run: |
-          cp artifact/dist/app.dsk src/web/dist/app.dsk
           if [ -s artifact/dist/system755-vibe.dsk ]; then
             cp artifact/dist/system755-vibe.dsk src/web/dist/system755-vibe.dsk
           fi
@@ -285,7 +285,6 @@ jobs:
             cp -R artifact/dist/system755-vibe-chunks src/web/dist/system755-vibe-chunks
           fi
           ls -la src/web/dist/
-          test -s src/web/dist/app.dsk
 
       # Hand off to the Pages deploy job via the official Pages artifact
       # contract. upload-pages-artifact tars the directory with the right
