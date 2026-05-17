@@ -198,9 +198,15 @@ export async function mountPlayground(
   let lastBuildCtx: BuildExplainContext | null = null;
 
   // Restore last-open project + file, falling back to the first sample.
-  const savedProject = (await readUiState<string>(UI_PROJECT)) ?? "reader";
-  const project =
-    SAMPLE_PROJECTS.find((p) => p.id === savedProject) ?? SAMPLE_PROJECTS[0]!;
+  // (No string default — the .find ?? SAMPLE_PROJECTS[0] cascade picks
+  // the first sample either way if the saved id is stale, e.g. when
+  // we retired a project. Previously this defaulted to "reader" which
+  // pointlessly survived Reader's retirement.)
+  const savedProject = await readUiState<string>(UI_PROJECT);
+  const project: SampleProject =
+    (savedProject
+      ? SAMPLE_PROJECTS.find((p) => p.id === savedProject)
+      : undefined) ?? SAMPLE_PROJECTS[0]!;
   const savedFile = (await readUiState<string>(UI_FILE)) ?? project.files[0]!;
   const filename = project.files.includes(savedFile)
     ? savedFile
