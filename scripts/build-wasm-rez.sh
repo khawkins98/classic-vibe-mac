@@ -64,11 +64,14 @@ run_native_build() {
 
 run_docker_build() {
   echo "[build-wasm-rez] using docker: emscripten/emsdk:3.1.51"
+  # The upstream emsdk image doesn't bundle bison; CMakeLists.txt needs
+  # bison >= 3.0.2 to regenerate the Rez parser. apt-install inside the
+  # ephemeral container before invoking cmake.
   docker run --rm \
     -v "$REPO_ROOT:/repo" \
     -w /repo/tools/wasm-rez \
     emscripten/emsdk:3.1.51 \
-    bash -c "emcmake cmake -S . -B build/wasm-docker -DSPIKE_WASM=ON -DSPIKE_MINI=ON && cmake --build build/wasm-docker -j"
+    bash -c "apt-get update >/dev/null && apt-get install -y bison >/dev/null && emcmake cmake -S . -B build/wasm-docker -DSPIKE_WASM=ON -DSPIKE_MINI=ON && cmake --build build/wasm-docker -j"
   STAGE_DIR="${TOOLS_DIR}/build/wasm-docker"
 }
 
