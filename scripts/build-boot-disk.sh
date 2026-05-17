@@ -68,7 +68,14 @@ OUTPUT="$2"
 shift 2
 
 # Split comma-separated app list. Each entry must point to a real .bin.
-IFS=',' read -ra BINARIES <<< "${BINARY_ARG}"
+# Empty BINARY_ARG (e.g. an empty string after #276 Phase 1B retired the
+# preinstall list) produces an empty BINARIES array — boot disk ships
+# vanilla System 7.5.5 with no preinstalled apps.
+if [[ -z "${BINARY_ARG}" ]]; then
+  BINARIES=()
+else
+  IFS=',' read -ra BINARIES <<< "${BINARY_ARG}"
+fi
 
 CHUNKS_DIR=""
 SHARED_DIR=""

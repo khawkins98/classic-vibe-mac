@@ -192,12 +192,6 @@ export type EmulatorWorkerMessage =
    */
   | { type: "url_request_data"; bytes: Uint8Array | null }
   /**
-   * Response to a `poll_drawing` message. Contains the raw 512 bytes of
-   * /Shared/__drawing.bin (64×64 1-bit bitmap, MSB-first, 0=white 1=black),
-   * or null if the file is absent or not exactly 512 bytes.
-   */
-  | { type: "drawing_data"; bytes: Uint8Array | null }
-  /**
    * Response to a `poll_console` message. Incremental — `bytes` contains
    * only the data appended to /Shared/__cvm_console.log since the previous
    * poll's `totalSize`. The main-thread watcher keeps a running offset so
@@ -236,11 +230,6 @@ export type EmulatorWorkerRuntimeMessage =
    * `bytes` is the MacRoman-encoded HTML body to write.
    */
   | { type: "url_result_write"; path: string; bytes: Uint8Array }
-  /**
-   * Ask the worker to read /Shared/__drawing.bin and reply with
-   * `drawing_data`. Sent every 2 s by DrawingWatcher on the main thread.
-   */
-  | { type: "poll_drawing" }
   /**
    * Ask the worker to read /Shared/__cvm_console.log starting at byte
    * `fromOffset` and reply with `console_data`. Sent every 1 s by

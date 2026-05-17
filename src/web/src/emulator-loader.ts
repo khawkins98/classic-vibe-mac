@@ -34,7 +34,6 @@ import {
 } from "./emulator-worker-types";
 import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator-input";
 import { startSharedPoller } from "./shared-poller";
-import { startDrawingWatcher } from "./drawing-watcher";
 import { startConsoleWatcher } from "./console-watcher";
 import {
   isPauseWhenHiddenEnabled,
@@ -87,7 +86,6 @@ interface ActiveSession {
   unwireInput: (() => void) | undefined;
   teardownVisibility: (() => void) | undefined;
   stopSharedPoller: (() => void) | undefined;
-  stopDrawingWatcher: (() => void) | undefined;
   /** AudioContext created when BasiliskII opens its audio subsystem. */
   audioContext: AudioContext | undefined;
   /** AudioWorkletNode that receives PCM chunks forwarded from the worker. */
@@ -115,7 +113,6 @@ function makeSession(): ActiveSession {
     unwireInput: undefined,
     teardownVisibility: undefined,
     stopSharedPoller: undefined,
-    stopDrawingWatcher: undefined,
     audioContext: undefined,
     audioWorkletNode: undefined,
     readyPromise,
@@ -131,7 +128,6 @@ function disposeSession(s: ActiveSession): void {
   s.unwireInput?.();
   s.teardownVisibility?.();
   s.stopSharedPoller?.();
-  s.stopDrawingWatcher?.();
   s.worker?.terminate();
   // Tear down the Ethernet zone WebSocket connection.
   s.ethernetProvider?.dispose();
@@ -295,7 +291,6 @@ async function boot(
     session.teardownVisibility = td;
   };
   const setStopSharedPoller = (s: () => void) => { session.stopSharedPoller = s; };
-  const setStopDrawingWatcher = (s: () => void) => { session.stopDrawingWatcher = s; };
   // ── Phase 0: cross-origin isolation gate. ──
   // SharedArrayBuffer is gated on `crossOriginIsolated` in modern browsers.
   // Vite dev sets COOP/COEP, and on GH Pages we install coi-serviceworker
@@ -655,13 +650,6 @@ async function boot(
     setStopSharedPoller(stopSharedPoller);
   } catch (err) {
     console.warn("[emulator] shared-poller failed to start:", err);
-  }
-
-  try {
-    const stopDrawingWatcher = startDrawingWatcher({ worker });
-    setStopDrawingWatcher(stopDrawingWatcher);
-  } catch (err) {
-    console.warn("[emulator] drawing-watcher failed to start:", err);
   }
 
   try {

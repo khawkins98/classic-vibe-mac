@@ -17,21 +17,17 @@
 #       -DCMAKE_TOOLCHAIN_FILE=/Retro68-build/toolchain/m68k-apple-macos/cmake/retro68.toolchain.cmake \
 #       && cmake --build build --parallel"
 #
-# Outputs:
-#   build/pixelpad/PixelPad.{bin,dsk,APPL}
-#   build/markdownviewer/MarkdownViewer.{bin,dsk,APPL}
+# Outputs: none. The precompiled-app path retired 2026-05-17 (#276):
+#   - Reader / MacWeather / HelloMac retired in Phase 1A (#277)
+#   - PixelPad / MarkdownViewer retired in Phase 1B (this commit)
 #
-# The .bin files are MacBinary (both forks) and feed scripts/build-boot-disk.sh.
-#
-# Reader / MacWeather / HelloMac were removed 2026-05-17 (#276) — they
-# were the original "auto-launches on Mac boot" demo apps from before
-# in-browser compilation existed. With the in-browser playground now
-# the canonical path for getting apps onto the Mac, the legacy CMake
-# build serves only the boot-disk preinstall (PixelPad, MarkdownViewer)
-# — and even that is on borrowed time once the deferred-boot UX lands.
+# Every app the playground ships now compiles in-browser via wasm-cc1
+# (src/app/wasm-*/). The CMake aggregator is kept as scaffolding for
+# any future host-native build, but the add_subdirectory() list is
+# empty; CI still configures+builds this tree so it doesn't rot.
 
 cmake_minimum_required(VERSION 3.15)
 project(classic_vibe_mac C)
 
-add_subdirectory(pixelpad)
-add_subdirectory(markdownviewer)
+# No subdirectories — see comment above. New Mac apps go under
+# src/app/wasm-<name>/ (sample-shelf entry in playground/types.ts).
