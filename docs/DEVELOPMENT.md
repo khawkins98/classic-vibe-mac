@@ -487,3 +487,7 @@ for the root, `hls ":System Folder:"` for a subdirectory. See
   register.
 - [`docs/NETWORKING.md`](./NETWORKING.md) — deploying the optional
   Cloudflare DO Ethernet relay for `?zone=` networking.
+- [`docs/DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md) —
+  recipes for when a vendored Mac app fails silently in the playground
+  (`cvm_log` instrumentation, `ResError` + `FreeMem` capture, offline
+  splice repro via `scripts/splice-bin.mjs`).
