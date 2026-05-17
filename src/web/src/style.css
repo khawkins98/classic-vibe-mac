@@ -1966,6 +1966,29 @@ body.cvm-paused .emulator-canvas {
   background: var(--platinum-light);
   border: 1px solid var(--ink);
 }
+/* Slow-compile reassurance hint — appears under the phase list when
+   Compiling has been active >15s. Lighter than the error message
+   box (different background, no hard ink border) so the user reads
+   it as "informational, not an error". */
+.cvm-buildprogress__slow-hint {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--ink);
+  padding: 6px 8px;
+  background: #f5f0d8;
+  border: 1px dotted var(--ink);
+  border-radius: 2px;
+  opacity: 0.95;
+}
+.cvm-buildprogress__slow-hint strong {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: bold;
+}
+.cvm-buildprogress__slow-hint code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
 /* The Show Assembly palette body is mostly the read-only CM mount,
    which has its own background; tighten the surrounding padding so
    the asm viewer fills the chrome rather than floating in it. */
@@ -2261,6 +2284,25 @@ body.cvm-paused .emulator-canvas {
 .cvm-output__tab--active {
   background: var(--paper);
   border-bottom: 1px solid var(--paper);
+}
+/* Unread indicator on the Console tab — set by console-watcher when
+   a Mac app writes cvm_log() output while the user is on the Build
+   log tab. Cleared by main.ts when the tab becomes active. The orange
+   dot is a System 7-era convention for "this needs your attention". */
+.cvm-output__tab--unread::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: #d75a00;
+  border-radius: 50%;
+  margin-left: 6px;
+  vertical-align: middle;
+  animation: cvm-output-tab-pulse 1.4s ease-in-out infinite;
+}
+@keyframes cvm-output-tab-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
 }
 .cvm-output__tabbar-spacer {
   flex: 1 1 auto;
