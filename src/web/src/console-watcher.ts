@@ -75,6 +75,23 @@ function appendLine(line: string): void {
     pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
   pre.append(document.createTextNode(`${timestamp()} ${line}\n`));
   if (atBottom) pre.scrollTop = pre.scrollHeight;
+  markConsoleTabUnread();
+}
+
+/** Tag the Output panel's Console tab as having unread content if
+ *  the user isn't currently viewing it. main.ts's tab click handler
+ *  clears the `--unread` class when the tab becomes active. Lets
+ *  users notice that a Mac app has emitted cvm_log output without
+ *  having to remember to check the tab manually. */
+function markConsoleTabUnread(): void {
+  const tab = document.querySelector<HTMLButtonElement>(
+    '.cvm-output__tab[data-pane="console"]',
+  );
+  if (!tab) return;
+  // Don't mark unread if the Console tab is already the active one —
+  // the user is already looking at the new line.
+  if (tab.classList.contains("cvm-output__tab--active")) return;
+  tab.classList.add("cvm-output__tab--unread");
 }
 
 function ingest(bytes: Uint8Array, totalSize: number): void {
