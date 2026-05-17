@@ -51,20 +51,6 @@ export interface EmulatorConfig {
     files: Array<{ name: string; url: string }>;
   };
   /**
-   * Live weather poll: the worker fetches from api.open-meteo.com on
-   * interval and writes `/Shared/weather.json` (which BasiliskII's extfs
-   * surfaces as `:Unix:weather.json` for MacWeather to pick up).
-   *
-   * Coordinates are fallbacks — actual geolocation prompting (if any)
-   * happens on the main thread, which can override these per-request.
-   */
-  weather: {
-    /** Default latitude (Cupertino, CA). */
-    fallbackLat: number;
-    /** Default longitude (Cupertino, CA). */
-    fallbackLon: number;
-  };
-  /**
    * Default for the "pause emulator when tab is hidden" setting. Users can
    * override via the checkbox in the page chrome (persists to
    * localStorage `cvm.pauseWhenHidden`). The actual runtime read goes
@@ -86,25 +72,14 @@ export const emulatorConfig: EmulatorConfig = {
   bootDiskUrl: `${BASE}system755-vibe.dsk`,
   appDiskUrl: `${BASE}app.dsk`,
   screen: { width: 640, height: 480 },
-  // Sample HTML content. These files live under src/web/public/shared/.
-  // They are baked directly into the boot disk's :Shared: folder by
-  // scripts/build-boot-disk.sh (see "extfs volume name" learning),
-  // which is what Reader opens. The worker also still seeds them into
-  // the Emscripten /Shared/ tree (mounted as the Mac `Unix:` volume),
-  // so future Uploads/Downloads tooling can use them.
+  // Sample shared content. README.md is consumed by MarkdownViewer on
+  // the boot disk; the Shared volume is also the back-channel for
+  // cvm_log (Debug Console pane) and PixelPad drawings. Reader's HTML
+  // files were removed with Reader itself (#276).
   sharedFolder: {
     files: [
-      { name: "index.html", url: `${BASE}shared/index.html` },
-      { name: "about.html", url: `${BASE}shared/about.html` },
-      { name: "credits.html", url: `${BASE}shared/credits.html` },
-      { name: "inside-macintosh.html", url: `${BASE}shared/inside-macintosh.html` },
-      { name: "lorem.html", url: `${BASE}shared/lorem.html` },
+      { name: "README.md", url: `${BASE}shared/README.md` },
     ],
-  },
-  // Cupertino, CA. Where else.
-  weather: {
-    fallbackLat: 37.32,
-    fallbackLon: -122.03,
   },
   // Sleep the worker (Atomics.wait on a SAB pause flag) when the tab is
   // hidden. The user can flip this via the checkbox under the Mac window;

@@ -33,7 +33,6 @@ import {
   type EmulatorWorkerVideoBlitRect,
 } from "./emulator-worker-types";
 import { wireInput, setInputBuffer, signalAudioContextRunning } from "./emulator-input";
-import { startWeatherPoller } from "./weather-poller";
 import { startSharedPoller } from "./shared-poller";
 import { startDrawingWatcher } from "./drawing-watcher";
 import { startConsoleWatcher } from "./console-watcher";
@@ -87,7 +86,6 @@ interface ActiveSession {
   rafId: number;
   unwireInput: (() => void) | undefined;
   teardownVisibility: (() => void) | undefined;
-  stopWeather: (() => void) | undefined;
   stopSharedPoller: (() => void) | undefined;
   stopDrawingWatcher: (() => void) | undefined;
   /** AudioContext created when BasiliskII opens its audio subsystem. */
@@ -116,7 +114,6 @@ function makeSession(): ActiveSession {
     rafId: 0,
     unwireInput: undefined,
     teardownVisibility: undefined,
-    stopWeather: undefined,
     stopSharedPoller: undefined,
     stopDrawingWatcher: undefined,
     audioContext: undefined,
@@ -133,10 +130,6 @@ function disposeSession(s: ActiveSession): void {
   if (s.rafId) cancelAnimationFrame(s.rafId);
   s.unwireInput?.();
   s.teardownVisibility?.();
-  // Issue #29: stop the weather poller so it doesn't postMessage() into a
-  // terminated worker on the next interval/visibilitychange. Previously
-  // this leak was silent — the message hit a dead port.
-  s.stopWeather?.();
   s.stopSharedPoller?.();
   s.stopDrawingWatcher?.();
   s.worker?.terminate();
@@ -301,7 +294,6 @@ async function boot(
   const setTeardownVisibility = (td: () => void) => {
     session.teardownVisibility = td;
   };
-  const setStopWeather = (s: () => void) => { session.stopWeather = s; };
   const setStopSharedPoller = (s: () => void) => { session.stopSharedPoller = s; };
   const setStopDrawingWatcher = (s: () => void) => { session.stopDrawingWatcher = s; };
   // ── Phase 0: cross-origin isolation gate. ──
@@ -657,25 +649,6 @@ async function boot(
     ethernetRxBuffer,
   };
   worker.postMessage(startMsg);
-
-  // Start the live weather poll on the main thread. We can't run it inside
-  // the worker because BasiliskII's WASM event loop blocks the worker's
-  // microtask queue (its idleWait sits in `Atomics.wait` between blits) —
-  // a fetch's then() callback never gets scheduled. The poller posts the
-  // JSON bytes back to the worker via `{ type: "weather_data", bytes }`,
-  // which writes them into the Emscripten FS at /Shared/weather.json.
-  // BasiliskII's extfs surfaces /Shared/ as the Mac volume "Unix:" — so
-  // MacWeather sees the JSON at :Unix:weather.json.
-  try {
-    const stopWeather = startWeatherPoller({
-      worker,
-      fallbackLat: config.weather.fallbackLat,
-      fallbackLon: config.weather.fallbackLon,
-    });
-    setStopWeather(stopWeather);
-  } catch (err) {
-    console.warn("[emulator] weather poller failed to start:", err);
-  }
 
   try {
     const stopSharedPoller = startSharedPoller({ worker });
