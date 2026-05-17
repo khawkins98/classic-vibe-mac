@@ -78,6 +78,16 @@ function mkdirPInMem(Module, fullPath, made) {
   }
 }
 
+// cv-mac system headers — mirrors src/web/src/playground/cc1.ts
+// CVM_SYSTEM_HEADERS. Keep in sync. To add a header: append here
+// AND in the runtime list at the top of cc1.ts.
+const CVM_SYSTEM_HEADERS = [
+  {
+    path: "/sysroot/include/cvm_log.h",
+    sourcePath: join(APP_DIR, "wasm-debug-console", "cvm_log.h"),
+  },
+];
+
 async function mountSysroot(Module, which) {
   const { blob, index } =
     which === "headers"
@@ -90,19 +100,10 @@ async function mountSysroot(Module, which) {
     mkdirPInMem(Module, full, made);
     Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
   }
-  // cv-mac-only system headers — drop into /sysroot/include/ after the
-  // Retro68 blob unpacks. Mirrors the runtime path in
-  // src/web/src/playground/cc1.ts. Keeps the audit faithful to what
-  // the in-browser pipeline does (so #include <cvm_log.h> works here
-  // too).
   if (which === "headers") {
-    const cvmHeaders = ["cvm_log.h"];
-    const cvmDir = join(APP_DIR, "wasm-debug-console");
-    for (const name of cvmHeaders) {
-      const full = `/sysroot/include/${name}`;
-      mkdirPInMem(Module, full, made);
-      const body = readFileSync(join(cvmDir, name));
-      Module.FS.writeFile(full, body);
+    for (const { path, sourcePath } of CVM_SYSTEM_HEADERS) {
+      mkdirPInMem(Module, path, made);
+      Module.FS.writeFile(path, readFileSync(sourcePath));
     }
   }
 }
