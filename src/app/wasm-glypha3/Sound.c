@@ -5,17 +5,19 @@
 //----------------------------------------------------------------------------
 //============================================================================
 
-// This file handles all sound routines.  It handles 2 concurrent soundÉ
-// channels allowing 2 sounds to be played simultaneously.  It also handlesÉ
-// a system of priorites whereby you can ensure that "important" sounds don'tÉ
-// get cut off by "lesser" sounds.  In that there are 2 channels however,É
-// "lesser" sounds are not discounted outright - both channels are consideredÉ
-// to determine if one of the channels is not playing at all (priority = 0) orÉ
+// This file handles all sound routines.  It handles 2 concurrent soundï¿½
+// channels allowing 2 sounds to be played simultaneously.  It also handlesï¿½
+// a system of priorites whereby you can ensure that "important" sounds don'tï¿½
+// get cut off by "lesser" sounds.  In that there are 2 channels however,ï¿½
+// "lesser" sounds are not discounted outright - both channels are consideredï¿½
+// to determine if one of the channels is not playing at all (priority = 0) orï¿½
 // playing a sound of an even lesser priority.  Make sense?
 
 
 #include <Sound.h>
+#include <stdio.h>			/* sprintf for diagnostic strings â€” see LoadBufferSounds */
 #include "Externs.h"
+#include <cvm_log.h>		/* cv-mac diagnostic logging â€” see LoadBufferSounds */
 
 
 #define kMaxSounds				17			// Number of sounds to load.
@@ -70,14 +72,14 @@ void PlaySound1 (short soundID, short priority)
 	theCommand.param2 = (long)(theSoundData[soundID]);
 	theErr = SndDoImmediate(externalChannel, &theCommand);
 	
-	theCommand.cmd = callBackCmd;		// Lastly, queue up a callBackCmd to notify usÉ
+	theCommand.cmd = callBackCmd;		// Lastly, queue up a callBackCmd to notify usï¿½
 	theCommand.param1 = kSoundDone;		// when the sound has finished playing.
 	theCommand.param2 = SetCurrentA5();
 	theErr = SndDoCommand(externalChannel, &theCommand, TRUE);
 }
 
 //--------------------------------------------------------------  PlaySound2
-// This function is identical to the above function except that it handlesÉ
+// This function is identical to the above function except that it handlesï¿½
 // playing sounds through channel 2.
 
 void PlaySound2 (short soundID, short priority)
@@ -102,28 +104,28 @@ void PlaySound2 (short soundID, short priority)
 	theCommand.param2 = (long)(theSoundData[soundID]);
 	theErr = SndDoImmediate(externalChannel2, &theCommand);
 	
-	theCommand.cmd = callBackCmd;		// Lastly, queue up a callBackCmd to notify usÉ
+	theCommand.cmd = callBackCmd;		// Lastly, queue up a callBackCmd to notify usï¿½
 	theCommand.param1 = kSoundDone2;	// when the sound has finished playing.
 	theCommand.param2 = SetCurrentA5();
 	theErr = SndDoCommand(externalChannel2, &theCommand, TRUE);
 }
 
 //--------------------------------------------------------  PlayExternalSound
-// This function is probably poorly named for this application.  I lifted thisÉ
+// This function is probably poorly named for this application.  I lifted thisï¿½
 // whole library from one of my games and chopped it down for purposes of Glypha.
-// The original game treated "external" and "cockpit" sounds as seperate channelsÉ
-// (such that cockpit sounds could only "override" other cockpit sounds andÉ
+// The original game treated "external" and "cockpit" sounds as seperate channelsï¿½
+// (such that cockpit sounds could only "override" other cockpit sounds andï¿½
 // external sounds could only override other external sounds.
 // In any event, this is the primary function called from throughout Glypha.
-// This function is called with a sound ID and a priority (just some number) andÉ
-// the function then determines if one of the two sound channels is free to playÉ
-// the sound.  It determines this by way of priorities.  If a sound channel isÉ
-// idle and playing no sound, its channel priority is 0.  Since the priority ofÉ
-// the sound you want to play is assumed to be greater than 0, it will, withoutÉ
-// a doubt, be allowed to play on an idle channel.  If however there is alreadyÉ
-// a sound playing (the channel's priority is not equal to 0), the sound with theÉ
-// largest priority wins.  Mind you though that there are two channels to chooseÉ
-// between.  Therefore, the function compares the priority passed in with theÉ
+// This function is called with a sound ID and a priority (just some number) andï¿½
+// the function then determines if one of the two sound channels is free to playï¿½
+// the sound.  It determines this by way of priorities.  If a sound channel isï¿½
+// idle and playing no sound, its channel priority is 0.  Since the priority ofï¿½
+// the sound you want to play is assumed to be greater than 0, it will, withoutï¿½
+// a doubt, be allowed to play on an idle channel.  If however there is alreadyï¿½
+// a sound playing (the channel's priority is not equal to 0), the sound with theï¿½
+// largest priority wins.  Mind you though that there are two channels to chooseï¿½
+// between.  Therefore, the function compares the priority passed in with theï¿½
 // sound channel with the lowest priority.
 
 void PlayExternalSound (short soundID, short priority)
@@ -148,12 +150,12 @@ void PlayExternalSound (short soundID, short priority)
 
 //--------------------------------------------------------  ExternalCallBack
 // Callback routine.  If this looks ugly, blame Apple's Universal Headers.
-// The callback routine is called after a sound finishes playing.  TheÉ
-// callback routine is extremely useful in that it enables us to know whenÉ
+// The callback routine is called after a sound finishes playing.  Theï¿½
+// callback routine is extremely useful in that it enables us to know whenï¿½
 // to set the sound channels priority back to 0 (meaning no sound playing).
-// Keep in mind (by the way) that this funciton is called at interrupt timeÉ
-// and thus may not cause memory to be moved.  Also, note that also becauseÉ
-// of the interupt situation, we need to handle setting A5 to point to ourÉ
+// Keep in mind (by the way) that this funciton is called at interrupt timeï¿½
+// and thus may not cause memory to be moved.  Also, note that also becauseï¿½
+// of the interupt situation, we need to handle setting A5 to point to ourï¿½
 // app's A5 and then set it back again.
 
 RoutineDescriptor ExternalCallBackRD = 
@@ -196,9 +198,9 @@ pascal void ExternalCallBack2 (SndChannelPtr theChannel, SndCommand *theCommand)
 }
 
 //--------------------------------------------------------  LoadBufferSounds
-// This function loads up all the sounds we'll need in the game and thenÉ
+// This function loads up all the sounds we'll need in the game and thenï¿½
 // strips off their header so that we can pass them as buffer commands.
-// Sounds are stored in our resource fork as 'snd ' resources.  There is aÉ
+// Sounds are stored in our resource fork as 'snd ' resources.  There is aï¿½
 // 20 byte header that we need to remove in order to use bufferCmd's.
 // This function is called only once, when the game loads up.
 
@@ -208,14 +210,36 @@ OSErr LoadBufferSounds (void)
 	long		soundDataSize;
 	OSErr		theErr;
 	short		i;
-	
+
 	theErr = noErr;						// Assume no errors.
-	
+
+	/* cv-mac diagnostic (#256): the upstream resource fork ships 17
+	 * snd resources at IDs 1000..1016 (verified via extract-resource-fork.mjs
+	 * on the compiled .rsrc.bin). If "Failed Loading Sounds" still fires
+	 * after that fork lands, the console logs below pinpoint exactly
+	 * which ID the Resource Manager can't find and what error it returns.
+	 * Common ResError codes: -192 resNotFound, -39 eofErr, -108 memFullErr. */
+	{
+		char buf[128];
+		sprintf(buf, "LoadBufferSounds: entering loop, kMaxSounds=%d kBase=%d",
+			(int)kMaxSounds, (int)kBaseBufferSoundID);
+		cvm_log(buf);
+	}
+
 	for (i = 0; i < kMaxSounds; i++)	// Walk through all sounds.
 	{									// Load 'snd ' from resource.
 		theSound = GetResource('snd ', i + kBaseBufferSoundID);
 		if (theSound == 0L)				// Make sure it loaded okay.
-			return (ResError());		// Return reason it failed (if it did).
+		{
+			OSErr e = ResError();
+			char buf[160];
+			sprintf(buf,
+				"LoadBufferSounds: GetResource('snd ', %d) failed, ResError=%d (loaded %d of %d so far)",
+				(int)(i + kBaseBufferSoundID), (int)e,
+				(int)i, (int)kMaxSounds);
+			cvm_log(buf);
+			return (e);					// Return reason it failed (if it did).
+		}
 		
 		HLock(theSound);				// If we got this far, lock sound down.
 										// Calculate size of sound minus header.
@@ -236,7 +260,7 @@ OSErr LoadBufferSounds (void)
 }
 
 //--------------------------------------------------------  DumpBufferSounds
-// This function is called when Glypha exits (quits).  All those nasty pointersÉ
+// This function is called when Glypha exits (quits).  All those nasty pointersï¿½
 // we created in the above function are reclaimed.
 
 OSErr DumpBufferSounds (void)
@@ -258,10 +282,10 @@ OSErr DumpBufferSounds (void)
 
 //--------------------------------------------------------  OpenSoundChannel
 // This should perhaps be called OpenSoundChannels() since it opens two.
-// It is called once (at initialization) to set up the two sound channelsÉ
-// we will use throughout Glypha.  For purposes of speed, 8-bit sound channelsÉ
-// with no interpolation and monophonic are opened.  They'll use the sampledÉ
-// synthesizer (digitized sound) and be assigned their respective callbackÉ
+// It is called once (at initialization) to set up the two sound channelsï¿½
+// we will use throughout Glypha.  For purposes of speed, 8-bit sound channelsï¿½
+// with no interpolation and monophonic are opened.  They'll use the sampledï¿½
+// synthesizer (digitized sound) and be assigned their respective callbackï¿½
 // routines.
 
 OSErr OpenSoundChannel (void)
@@ -299,7 +323,7 @@ OSErr OpenSoundChannel (void)
 }
 
 //--------------------------------------------------------  CloseSoundChannel
-// This function is called only upon quitting Glypha.  Both sound channelsÉ
+// This function is called only upon quitting Glypha.  Both sound channelsï¿½
 // we created above are closed down.
 
 OSErr CloseSoundChannel (void)
@@ -327,16 +351,16 @@ OSErr CloseSoundChannel (void)
 
 //--------------------------------------------------------  InitSound
 // All the above initialization routines are handled by this one function.
-// This single function is the only one that needs to be called - it handlesÉ
+// This single function is the only one that needs to be called - it handlesï¿½
 // calling the functions that load the sounds and create the sound channels.
-// It is called from main() when Glypha is loading up and going through itsÉ
+// It is called from main() when Glypha is loading up and going through itsï¿½
 // initialization phase.
 
 void InitSound (void)
 {
 	OSErr		theErr;
 	
-	soundOn = TRUE;			// Note that initialization of sounds has occurredÉ
+	soundOn = TRUE;			// Note that initialization of sounds has occurredï¿½
 							// (or rather is just about to this instant!).
 	externalChannel = 0L;	// Flag channels as nonexistant.
 	externalChannel2 = 0L;
@@ -353,8 +377,8 @@ void InitSound (void)
 }
 
 //--------------------------------------------------------  KillSound
-// Complementary to the above function, this one is called only when GlyphaÉ
-// quits and it handles all the "shut-down" routines.  It also is called fromÉ
+// Complementary to the above function, this one is called only when Glyphaï¿½
+// quits and it handles all the "shut-down" routines.  It also is called fromï¿½
 // main(), but it is called last - just as Glypha is quitting.
 
 void KillSound (void)
