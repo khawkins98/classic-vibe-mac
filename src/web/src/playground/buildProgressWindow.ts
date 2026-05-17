@@ -99,7 +99,10 @@ function ensureWindow(title: string): Active {
   const wb: any = new WinBox({
     title,
     width: "360px",
-    height: "240px",
+    // 300px gives the slow-compile hint room to reveal below the
+    // phase list (it appears once Compiling has been active >15s).
+    // Empty space when the hint isn't shown is acceptable cost.
+    height: "300px",
     x: "center",
     y: 60,
     html: shellHtml(),
@@ -147,10 +150,29 @@ function shellHtml(): string {
         <div class="cvm-buildprogress__elapsed" id="cvm-bp-elapsed">0.0s elapsed</div>
       </div>
       <ul class="cvm-buildprogress__list" id="cvm-bp-list"></ul>
+      <!-- Slow-compile reassurance — revealed by renderElapsed() once
+           the Compiling phase has been active for >15s. Explains why
+           the wait is normal for cold-cache or large projects, and
+           gives a "what would actually be wrong" threshold so the
+           user knows when to abandon. -->
+      <div class="cvm-buildprogress__slow-hint" id="cvm-bp-slow-hint" hidden>
+        <strong>Why so slow?</strong>
+        <code>cc1.wasm</code> is a 12 MB compiler running in your tab, and
+        each .c source needs a fresh Module (it isn't re-entrant). Toolchain
+        blobs are cached after first fetch — the next Build of this same
+        project finishes in ~1s. Past 3 minutes? Check Build log for errors.
+      </div>
       <div class="cvm-buildprogress__message" id="cvm-bp-message" hidden></div>
     </div>
   `;
 }
+
+/** Number of seconds the "Compiling" phase must run before we reveal
+ *  the slow-compile reassurance hint. 15s is long enough that simple
+ *  warm-cache builds (~1-2s) never trigger; short enough that Glypha
+ *  (~60-90s cold) shows the hint while the user is still glancing at
+ *  the window wondering if it hung. */
+const SLOW_COMPILE_HINT_THRESHOLD_S = 15;
 
 function renderElapsed(): void {
   if (!active) return;
@@ -158,6 +180,23 @@ function renderElapsed(): void {
   if (!el) return;
   const elapsed = ((performance.now() - active.startMs) / 1000).toFixed(1);
   el.textContent = `${elapsed}s elapsed`;
+
+  // Reveal the slow-compile hint once the Compiling phase has been
+  // active for >15s. Hide it if we've moved past Compiling (so it
+  // doesn't linger through Packaging/Mounting/Booting on the rare
+  // cold-cache Build & Run that takes a minute end-to-end).
+  const hint = document.getElementById("cvm-bp-slow-hint");
+  if (hint) {
+    const compiling = active.phases.get("compiling");
+    const inCompiling =
+      compiling?.status === "active" && compiling.startMs !== undefined;
+    if (inCompiling) {
+      const compilingSec = (performance.now() - compiling.startMs!) / 1000;
+      hint.hidden = compilingSec < SLOW_COMPILE_HINT_THRESHOLD_S;
+    } else {
+      hint.hidden = true;
+    }
+  }
 }
 
 function render(): void {
