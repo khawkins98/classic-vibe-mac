@@ -18,19 +18,20 @@
 #       && cmake --build build --parallel"
 #
 # Outputs:
-#   build/reader/Reader.{bin,dsk,APPL}
-#   build/macweather/MacWeather.{bin,dsk,APPL}
-#   build/hello-mac/HelloMac.{bin,dsk,APPL}
 #   build/pixelpad/PixelPad.{bin,dsk,APPL}
 #   build/markdownviewer/MarkdownViewer.{bin,dsk,APPL}
 #
 # The .bin files are MacBinary (both forks) and feed scripts/build-boot-disk.sh.
+#
+# Reader / MacWeather / HelloMac were removed 2026-05-17 (#276) — they
+# were the original "auto-launches on Mac boot" demo apps from before
+# in-browser compilation existed. With the in-browser playground now
+# the canonical path for getting apps onto the Mac, the legacy CMake
+# build serves only the boot-disk preinstall (PixelPad, MarkdownViewer)
+# — and even that is on borrowed time once the deferred-boot UX lands.
 
 cmake_minimum_required(VERSION 3.15)
 project(classic_vibe_mac C)
 
-add_subdirectory(reader)
-add_subdirectory(macweather)
-add_subdirectory(hello-mac)
 add_subdirectory(pixelpad)
 add_subdirectory(markdownviewer)
