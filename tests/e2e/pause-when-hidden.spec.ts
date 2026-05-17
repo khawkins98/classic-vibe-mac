@@ -89,14 +89,19 @@ test.describe("sleep-when-hidden", () => {
     // but the body class will never flip. We detect which branch we're in.
     const phase = await page.evaluate(async () => {
       // Give the loader a beat to reach a terminal state. We don't have a
-      // hook for "done", so just poll for either the canvas or the stub.
+      // hook for "done", so just poll for any terminal-or-paused state.
+      // `.loader--waiting` is the post-#276 deferred-boot resting state
+      // (Mac canvas shows "Pick a project and Build & Run" placeholder);
+      // we treat it the same as "stub" — emulator never armed so the
+      // pause behaviour can't be verified, skip the assertion.
       const start = Date.now();
       while (Date.now() - start < 30_000) {
         const canvas = document.querySelector("#emulator-canvas");
         const stub = document.querySelector(".loader--stub");
+        const waiting = document.querySelector(".loader--waiting");
         const error = document.querySelector(".loader--error");
-        if (canvas || stub || error) {
-          return canvas ? "canvas" : stub ? "stub" : "error";
+        if (canvas || stub || waiting || error) {
+          return canvas ? "canvas" : stub ? "stub" : waiting ? "waiting" : "error";
         }
         await new Promise((r) => setTimeout(r, 250));
       }
@@ -129,12 +134,13 @@ test.describe("sleep-when-hidden", () => {
     });
     await page.reload();
 
-    // Same phase-gate as above.
+    // Same phase-gate as above (incl. post-#276 deferred-boot waiting).
     const phase = await page.evaluate(async () => {
       const start = Date.now();
       while (Date.now() - start < 30_000) {
         if (document.querySelector("#emulator-canvas")) return "canvas";
         if (document.querySelector(".loader--stub")) return "stub";
+        if (document.querySelector(".loader--waiting")) return "waiting";
         if (document.querySelector(".loader--error")) return "error";
         await new Promise((r) => setTimeout(r, 250));
       }
