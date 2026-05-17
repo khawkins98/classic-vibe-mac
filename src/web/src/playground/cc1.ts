@@ -24,12 +24,19 @@
  */
 import type { Diagnostic } from "./preprocessor";
 import { timeFetch } from "./fetchStats";
-// cvm_log.h is sourced from the wasm-debug-console demo project; we
-// inline it at build time so the playground's cc1 can offer it as a
-// system header (#include <cvm_log.h>) from ANY project without
-// per-project bundling. The demo still bundles a sibling copy so the
-// API surface is visible in the editor.
+// cv-mac system headers — inlined at build time via Vite's `?raw`
+// import. Each entry gets dropped into `/sysroot/include/<name>` by
+// `mountSysroot()` so any playground project can `#include <name>`
+// without per-project bundling. To add a new system header:
+//   1. import it here with `?raw`
+//   2. add an entry to CVM_SYSTEM_HEADERS below
+// The same list is mirrored in scripts/audit-wasm-samples.mjs so
+// the Node-side CI audit sees identical behaviour.
 import CVM_LOG_H from "../../../app/wasm-debug-console/cvm_log.h?raw";
+
+const CVM_SYSTEM_HEADERS: ReadonlyArray<{ path: string; content: string }> = [
+  { path: "/sysroot/include/cvm_log.h", content: CVM_LOG_H },
+];
 
 interface Cc1Module {
   FS: {
@@ -175,28 +182,52 @@ async function loadModule(baseUrl: string): Promise<Cc1Module> {
     },
   });
 
-  const { blob, index } = await loadHeadersBlob(baseUrl);
-  Module.FS.mkdir("/sysroot");
+  await mountSysroot(Module, await loadHeadersBlob(baseUrl), "headers");
+  return Module;
+}
+
+/**
+ * Mount the Retro68 sysroot blob into a fresh Emscripten Module's
+ * MEMFS at `/sysroot/`, then add cv-mac-only system headers like
+ * cvm_log.h to `/sysroot/include/`.
+ *
+ * Single source of truth for sysroot mounting — both `loadModule()`
+ * (the Show-ASM path) and `loadToolModule()` (the Build path) route
+ * here. PR #267 was a hot-fix for what happens when the two paths
+ * diverge (cvm_log.h was mounted in one but not the other; Glypha's
+ * Build hit "cvm_log.h: No such file or directory" while audit + ASM
+ * passed).
+ *
+ * @param Module       Fresh Emscripten Module with FS available
+ * @param blobAndIndex `{ blob, index }` from `loadHeadersBlob` or
+ *                     `loadLibsBlob`
+ * @param mode         "headers" mounts cvm_log.h alongside; "libs"
+ *                     skips it (ld/Elf2Mac don't need C headers)
+ */
+async function mountSysroot(
+  Module: Cc1Module,
+  blobAndIndex: { blob: Uint8Array; index: SysrootIndexEntry[] },
+  mode: "headers" | "libs",
+): Promise<void> {
+  const { blob, index } = blobAndIndex;
+  try { Module.FS.mkdir("/sysroot"); } catch { /* exists */ }
   // Track directories we've already mkdir'd to avoid throwing/catching
   // hundreds of times — significant on Safari where the throw path is slow.
   const madeDirs = new Set<string>(["/sysroot"]);
   for (const entry of index) {
     const full = "/sysroot/" + entry.p;
     mkdirP(Module, full, madeDirs);
-    Module.FS.writeFile(
-      full,
-      blob.subarray(entry.o, entry.o + entry.l),
-    );
+    Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
   }
-  // cv-mac-only system headers — dropped into /sysroot/include/ after the
-  // Retro68 blob unpacks so they're discoverable via #include <name.h>
-  // from any playground project, with no per-project bundling required.
-  // Currently just cvm_log.h (the Debug Console output channel). New
-  // additions get an entry below + an import at the top of this file.
-  const cvmIncludePath = "/sysroot/include/cvm_log.h";
-  mkdirP(Module, cvmIncludePath, madeDirs);
-  Module.FS.writeFile(cvmIncludePath, CVM_LOG_H);
-  return Module;
+  // cv-mac-only system headers — dropped into /sysroot/include/ for
+  // the "headers" mount only. New additions: add an entry to
+  // CVM_SYSTEM_HEADERS at the top of this file + an `?raw` import.
+  if (mode === "headers") {
+    for (const { path, content } of CVM_SYSTEM_HEADERS) {
+      mkdirP(Module, path, madeDirs);
+      Module.FS.writeFile(path, content);
+    }
+  }
 }
 
 /** Optional per-call inputs. `siblings` is the playground project's other
@@ -523,28 +554,11 @@ async function loadToolModule(
   });
 
   if (mount !== "none") {
-    const { blob, index } =
+    const blobAndIndex =
       mount === "headers"
         ? await loadHeadersBlob(baseUrl)
         : await loadLibsBlob(baseUrl);
-    try { Module.FS.mkdir("/sysroot"); } catch {}
-    const made = new Set<string>(["/sysroot"]);
-    for (const entry of index) {
-      const full = "/sysroot/" + entry.p;
-      mkdirP(Module, full, made);
-      Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
-    }
-    // cv-mac-only system headers — dropped into /sysroot/include/ for
-    // the cc1 path (headers mount only — ld doesn't need C headers).
-    // Mirrors the loadModule() path used by compileToAsm. Without this,
-    // #include <cvm_log.h> resolves in the show-asm view but fails in
-    // a real Build. See cv-mac PR #263 + the regression in #265's
-    // user-side build.
-    if (mount === "headers") {
-      const cvmIncludePath = "/sysroot/include/cvm_log.h";
-      mkdirP(Module, cvmIncludePath, made);
-      Module.FS.writeFile(cvmIncludePath, CVM_LOG_H);
-    }
+    await mountSysroot(Module, blobAndIndex, mount);
   }
   return { Module, stderr };
 }
