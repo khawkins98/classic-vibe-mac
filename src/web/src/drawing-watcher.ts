@@ -22,6 +22,8 @@
  *   (types declared in emulator-worker-types.ts)
  */
 
+import { createPollingWatcher } from "./pollingWatcher";
+
 export interface DrawingWatcherConfig {
   /** The BasiliskII worker (already running). */
   worker: Worker;
@@ -151,44 +153,27 @@ function render(bytes: Uint8Array, canvas: HTMLCanvasElement): void {
 /**
  * Start the drawing watcher. Returns a stop() function.
  *
- * The watcher posts `poll_drawing` to the worker on an interval. It
- * listens for `drawing_data` replies on `worker.onmessage`; the worker
- * dispatches to the existing onmessage handler first — we add an
- * extra listener so they coexist without interfering.
+ * Polls `poll_drawing` on a 2 s interval (fires immediately on start
+ * so we pick up any drawing saved before the page loaded). The first
+ * non-empty reply lazily builds the preview section; subsequent
+ * replies repaint in place.
  */
 export function startDrawingWatcher(cfg: DrawingWatcherConfig): () => void {
-  const { worker } = cfg;
-  const intervalMs = cfg.intervalMs ?? 2000;
-
   let section: HTMLElement | null = null;
   let previewCanvas: HTMLCanvasElement | null = null;
 
-  function onMessage(evt: MessageEvent): void {
-    const data = evt.data;
-    if (!data || data.type !== "drawing_data") return;
-    const bytes: Uint8Array | null = data.bytes;
-    if (!bytes || bytes.length !== 512) return;
-
-    // First drawing: build the preview section.
-    if (!section) {
-      ({ section, canvas: previewCanvas } = buildPreviewSection());
-    }
-
-    render(bytes, previewCanvas!);
-    section.style.display = ""; // show (was hidden)
-  }
-
-  worker.addEventListener("message", onMessage);
-
-  const handle = setInterval(() => {
-    worker.postMessage({ type: "poll_drawing" });
-  }, intervalMs);
-
-  // Fire immediately so we pick up any drawing saved before the page loaded.
-  worker.postMessage({ type: "poll_drawing" });
-
-  return () => {
-    clearInterval(handle);
-    worker.removeEventListener("message", onMessage);
-  };
+  return createPollingWatcher<{ type: "drawing_data"; bytes: Uint8Array | null }>({
+    worker: cfg.worker,
+    buildPollMessage: () => ({ type: "poll_drawing" }),
+    replyType: "drawing_data",
+    intervalMs: cfg.intervalMs ?? 2000,
+    onReply: ({ bytes }) => {
+      if (!bytes || bytes.length !== 512) return;
+      if (!section) {
+        ({ section, canvas: previewCanvas } = buildPreviewSection());
+      }
+      render(bytes, previewCanvas!);
+      section.style.display = ""; // show (was hidden)
+    },
+  });
 }

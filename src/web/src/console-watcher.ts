@@ -23,6 +23,8 @@
  *   (types declared in emulator-worker-types.ts)
  */
 
+import { createPollingWatcher } from "./pollingWatcher";
+
 // MacRoman → Unicode for high-byte chars users are most likely to hit
 // in log lines (typographic dashes, smart quotes, ellipsis, ™/®/©).
 // Coverage isn't exhaustive; missing bytes fall back to U+FFFD via the
@@ -100,7 +102,6 @@ function ingest(bytes: Uint8Array, totalSize: number): void {
 export function startConsoleWatcher(cfg: ConsoleWatcherConfig): void {
   if (started) return;
   started = true;
-  const interval = cfg.intervalMs ?? 1000;
 
   // Announce in the pane that the watcher is live — replaces the
   // "Coming soon" placeholder text on first paint. idePanes.ts
@@ -110,20 +111,19 @@ export function startConsoleWatcher(cfg: ConsoleWatcherConfig): void {
     appendLine("Listening for cvm_log() output on :Unix:__cvm_console.log…");
   }
 
-  cfg.worker.addEventListener("message", (ev: MessageEvent) => {
-    const m = ev.data;
-    if (!m || m.type !== "console_data") return;
-    const bytes: Uint8Array | null = m.bytes;
-    const totalSize: number = m.totalSize ?? 0;
-    if (bytes) ingest(bytes, totalSize);
-    else if (totalSize < lastOffset) {
-      // Empty bytes + smaller size = truncation only (no new bytes yet).
-      ingest(new Uint8Array(), totalSize);
-    }
+  createPollingWatcher<{ type: "console_data"; bytes: Uint8Array | null; totalSize: number }>({
+    worker: cfg.worker,
+    intervalMs: cfg.intervalMs ?? 1000,
+    // Carries the running offset so the worker ships only new bytes.
+    buildPollMessage: () => ({ type: "poll_console", fromOffset: lastOffset }),
+    replyType: "console_data",
+    onReply: ({ bytes, totalSize }) => {
+      const size = totalSize ?? 0;
+      if (bytes) ingest(bytes, size);
+      else if (size < lastOffset) {
+        // Empty bytes + smaller size = truncation only (no new bytes yet).
+        ingest(new Uint8Array(), size);
+      }
+    },
   });
-
-  // Drive the polling loop.
-  setInterval(() => {
-    cfg.worker.postMessage({ type: "poll_console", fromOffset: lastOffset });
-  }, interval);
 }
