@@ -35,14 +35,9 @@ import {
   statSync,
   existsSync,
 } from "node:fs";
-import { dirname, resolve, join, basename } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  cc1Args,
-  asArgs,
-  ldArgs,
-  elf2macArgs,
-} from "../src/web/src/playground/compileArgs.mjs";
+import { runCompilePipeline } from "../src/web/src/playground/compilePipeline.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, "..");
@@ -128,93 +123,57 @@ async function loadTool(mjsName, mount) {
   return { Module, stderr };
 }
 
-function callMain(tool, argv) {
-  tool.stderr.length = 0;
-  try {
-    return tool.Module.callMain(argv);
-  } catch (e) {
-    if (e?.name === "ExitStatus") return e.status ?? 1;
-    tool.stderr.push(`wasm trap: ${e?.message ?? e}`);
-    return 2;
-  }
-}
-
-// ── compile a single project (multi-file aware) ─────────────────────
+// ── compile a single project ────────────────────────────────────────
+//
+// Delegates the cc1 → as → ld → Elf2Mac sequence to the shared
+// `runCompilePipeline` so the audit and the in-browser Build path
+// stay structurally identical (cv-mac #271). We only own:
+//   - reading the project's source files off disk
+//   - the audit-flavoured `{ ok, binLen, stage, file, reason }` shape
+//     (the pipeline returns `{ ok, bin, failedStage, failedFile,
+//     stderrPerStage, ...}` — we project that into our shape so
+//     existing audit output stays unchanged).
 async function compileProject(projectDir) {
   const files = readdirSync(projectDir).filter((f) => statSync(join(projectDir, f)).isFile());
   const cSources = files.filter((f) => /\.c$/i.test(f));
   if (cSources.length === 0) {
     return { ok: false, reason: "no .c file in directory" };
   }
-  const allSources = files.filter((f) => /\.(c|h)$/i.test(f));
-  const sourceContents = Object.fromEntries(
-    allSources.map((f) => [f, readFileSync(join(projectDir, f), "utf8")]),
+  const allSourceFiles = files.filter((f) => /\.(c|h)$/i.test(f));
+  const sources = allSourceFiles.map((filename) => ({
+    filename,
+    content: readFileSync(join(projectDir, filename), "utf8"),
+  }));
+
+  const result = await runCompilePipeline(
+    { sources, optLevel: "O0" },
+    {
+      loadCc1:     () => loadTool("cc1.mjs", "headers"),
+      loadAs:      () => loadTool("as.mjs", null),
+      loadLd:      () => loadTool("ld.mjs", "libs"),
+      loadElf2Mac: () => loadTool("Elf2Mac.mjs", null),
+    },
   );
 
-  const objects = [];
-
-  // Stage 1+2 per .c source
-  for (const cFile of cSources) {
-    const baseNoExt = basename(cFile, ".c");
-
-    // cc1
-    const cc1 = await loadTool("cc1.mjs", "headers");
-    for (const [f, content] of Object.entries(sourceContents)) {
-      cc1.Module.FS.writeFile(`/tmp/${f}`, content);
-    }
-    const cc1Rc = callMain(cc1, cc1Args({
-      source: `/tmp/${cFile}`,
-      output: `/tmp/${baseNoExt}.s`,
-      optLevel: "O0",
-    }));
-    if (cc1Rc !== 0) {
-      const errLine =
-        cc1.stderr.find((l) => /error/i.test(l)) ??
-        cc1.stderr[0] ??
-        "compilation failed (no error message)";
-      return { ok: false, stage: "cc1", file: cFile, reason: errLine };
-    }
-    const asmBytes = cc1.Module.FS.readFile(`/tmp/${baseNoExt}.s`);
-
-    // as
-    const as = await loadTool("as.mjs", null);
-    as.Module.FS.writeFile(`/tmp/${baseNoExt}.s`, asmBytes);
-    const asRc = callMain(as, asArgs({
-      source: `/tmp/${baseNoExt}.s`,
-      output: `/tmp/${baseNoExt}.o`,
-    }));
-    if (asRc !== 0) {
-      return {
-        ok: false,
-        stage: "as",
-        file: cFile,
-        reason: as.stderr[0] ?? "assembly failed (no error message)",
-      };
-    }
-    objects.push({ name: `${baseNoExt}.o`, bytes: as.Module.FS.readFile(`/tmp/${baseNoExt}.o`) });
+  if (!result.ok) {
+    // Map the pipeline's `stderrPerStage` back to the first error
+    // line (audit's existing one-liner format). The last entry in
+    // stderrPerStage corresponds to the failing stage; older entries
+    // are stages that succeeded but emitted warnings.
+    const failedStderr = result.stderrPerStage[result.stderrPerStage.length - 1] ?? "";
+    const lines = failedStderr.split("\n");
+    const errLine =
+      lines.find((l) => /error/i.test(l)) ??
+      lines[1] ??  // [0] is the "[stage filename]" prefix
+      `compilation failed at ${result.failedStage}`;
+    return {
+      ok: false,
+      stage: result.failedStage === "elf2mac" ? "Elf2Mac" : result.failedStage,
+      file: result.failedFile,
+      reason: errLine,
+    };
   }
-
-  // Stage 3: ld
-  const ld = await loadTool("ld.mjs", "libs");
-  for (const o of objects) ld.Module.FS.writeFile(`/tmp/${o.name}`, o.bytes);
-  const ldRc = callMain(ld, ldArgs({
-    objects: objects.map((o) => `/tmp/${o.name}`),
-    output: "/tmp/out.gdb",
-  }));
-  if (ldRc !== 0) {
-    return { ok: false, stage: "ld", reason: ld.stderr[0] ?? "" };
-  }
-  const elfBytes = ld.Module.FS.readFile("/tmp/out.gdb");
-
-  // Stage 4: Elf2Mac
-  const e2m = await loadTool("Elf2Mac.mjs", null);
-  e2m.Module.FS.writeFile("/tmp/out.bin.gdb", elfBytes);
-  const e2mRc = callMain(e2m, elf2macArgs({ output: "/tmp/out.bin" }));
-  if (e2mRc !== 0) {
-    return { ok: false, stage: "Elf2Mac", reason: e2m.stderr[0] ?? "" };
-  }
-  const bin = e2m.Module.FS.readFile("/tmp/out.bin");
-  return { ok: true, binLen: bin.length };
+  return { ok: true, binLen: result.bin.length };
 }
 
 // ── main: walk every wasm-* directory ───────────────────────────────

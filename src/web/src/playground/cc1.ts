@@ -27,7 +27,13 @@ import { timeFetch } from "./fetchStats";
 // Shared cc1/as/ld/Elf2Mac argv builders — also imported by the
 // Node-side audit (scripts/audit-wasm-samples.mjs), so a flag bump
 // in either path can't drift away from the other (#267 family).
-import { cc1Args, asArgs, ldArgs, elf2macArgs } from "./compileArgs.mjs";
+import { cc1Args } from "./compileArgs.mjs";
+// Shared cc1 → as → ld → Elf2Mac pipeline runner (cv-mac #271).
+// compileToBin below delegates the per-stage sequencing to this and
+// adds the browser-only wrapping (diagnostic parsing, wasm-trap
+// promotion, rich result shape). The audit script uses the same
+// runner with a Node-flavoured deps bag.
+import { runCompilePipeline } from "./compilePipeline.mjs";
 // cv-mac system headers — inlined at build time via Vite's `?raw`
 // import. Each entry gets dropped into `/sysroot/include/<name>` by
 // `mountSysroot()` so any playground project can `#include <name>`
@@ -582,34 +588,6 @@ function loadElf2MacTool(baseUrl: string) {
   return loadToolModule(baseUrl, "Elf2Mac.mjs", "none");
 }
 
-function callMainSafe(tool: ToolHandle, argv: string[]): number {
-  tool.stderr.length = 0;
-  try {
-    return tool.Module.callMain(argv);
-  } catch (e) {
-    const err = e as { name?: string; status?: number; message?: string };
-    if (err?.name === "ExitStatus") return err.status ?? 1;
-    // Wasm runtime trap (out-of-bounds memory access, unreachable, etc.)
-    // surfaces as a RuntimeError. Surface it via the stderr buffer so
-    // the caller's diagnostic-extraction path gets a clean message
-    // instead of an uncaught exception in the UI. Most common cause
-    // observed in practice: cc1 hitting its memory ceiling under -Os
-    // or -O2 on non-trivial sources (Snake at -O2 → \"memory access
-    // out of bounds\"). Long-term fix is to rebuild wasm-retro-cc with
-    // MAXIMUM_MEMORY raised; until then we hand the user a clearer
-    // error and let the build pipeline return rc=2 cleanly.
-    if (err?.name === "RuntimeError" || /out of bounds|unreachable/.test(err?.message ?? "")) {
-      tool.stderr.push(
-        `wasm trap: ${err?.message ?? "memory access out of bounds"}. ` +
-          `Often caused by cc1 hitting its memory ceiling under -Os/-O2 on a large source. ` +
-          `Try -O0 in the Optimize dropdown.`,
-      );
-      return 2;
-    }
-    throw e;
-  }
-}
-
 /** Per-stage telemetry, useful for the Build UI's status line. */
 export interface CompileToBinStages {
   cc1Ms: number;
@@ -682,13 +660,7 @@ export async function compileToBin(
   options: CompileToBinOptions,
 ): Promise<CompileToBinResult> {
   const t0 = performance.now();
-  const stages: CompileToBinStages = { cc1Ms: 0, asMs: 0, ldMs: 0, elf2macMs: 0 };
-  const allDiags: Diagnostic[] = [];
-  const stderrParts: string[] = [];
-
-  // Partition sources by extension. .c → compile target; .h → header.
   const cSources = options.sources.filter((s) => /\.c$/i.test(s.filename));
-  const hSources = options.sources.filter((s) => /\.h$/i.test(s.filename));
   if (cSources.length === 0) {
     return {
       ok: false,
@@ -700,250 +672,105 @@ export async function compileToBin(
       rawStderr: "",
       failedStage: 1,
       totalMs: performance.now() - t0,
-      stages,
+      stages: { cc1Ms: 0, asMs: 0, ldMs: 0, elf2macMs: 0 },
     };
   }
   const primaryName =
     options.primaryName ??
     (safeRelativePath(cSources[0]!.filename) ?? "in.c");
 
-  // Collected .o bytes by basename, to feed into ld in stage 3.
-  const objects: Array<{ name: string; bytes: Uint8Array }> = [];
-  /** Concatenated assembly from the first compiled source (handy for the
-   *  Show Assembly preview when multi-file compiling). */
-  let asmText: string | undefined;
-
-  // ── Stage 1 + 2: compile + assemble each .c source ───────────────────
-  //
-  // cc1 / as both carry static state across callMain — see LEARNINGS Key
-  // Story #3. We use a fresh Module per source so multi-file compiles
-  // don't crash on the second cc1 invocation. The wasm bytes come from
-  // the browser's HTTP cache so the extra fetch is essentially free.
-  for (const c of cSources) {
-    const safe = safeRelativePath(c.filename) ?? "in.c";
-    const baseNoExt = safe.replace(/\.c$/i, "");
-
-    // ── cc1 → .s
-    const cc1 = await loadCc1Tool(baseUrl);
-    const tmpDirs = new Set<string>(["/tmp"]);
-    // Co-mount every source (headers AND the other .c files, so siblings
-    // can #include things across the project).
-    for (const s of options.sources) {
-      const sSafe = safeRelativePath(s.filename);
-      if (!sSafe) continue;
-      const path = `/tmp/${sSafe}`;
-      mkdirP(cc1.Module, path, tmpDirs);
-      cc1.Module.FS.writeFile(path, s.content);
-    }
-    const cc1In = `/tmp/${safe}`;
-    const cc1Out = `/tmp/${baseNoExt}.s`;
-    const cc1Start = performance.now();
-    const cc1Rc = callMainSafe(cc1, cc1Args({
-      source: cc1In,
-      output: cc1Out,
+  // Delegate the cc1 → as → ld → Elf2Mac sequence to the shared
+  // pipeline (cv-mac #271). We supply the browser-flavoured tool
+  // loaders; the pipeline drives them and returns raw stages +
+  // stderr that we project into the rich CompileToBinResult shape.
+  const pipeline = await runCompilePipeline(
+    {
+      sources: options.sources,
+      primaryName,
       optLevel: options.optLevel ?? "O0",
-    }));
-    stages.cc1Ms += performance.now() - cc1Start;
-    const cc1Stderr = cc1.stderr.join("\n");
-    if (cc1Stderr) stderrParts.push(`[cc1 ${c.filename}]\n${cc1Stderr}`);
-    allDiags.push(...parseCc1Stderr(cc1Stderr, c.filename));
-    if (cc1Rc !== 0) {
-      // Detect the wasm-trap path (callMainSafe returns rc=2 and pushes
-      // a trap message onto stderr starting with \"wasm trap:\"). Promote
-      // it to a top-level diagnostic so the status bar surfaces the
-      // \"try -O0\" hint instead of a bare exit code.
-      const trapLine = cc1.stderr.find((l) => l.startsWith("wasm trap:"));
-      const trapDiag = trapLine
-        ? [{
-            file: c.filename, line: 1, column: 1, severity: "error" as const,
-            message: trapLine,
-          }]
-        : [];
-      return {
-        ok: false,
-        diagnostics: trapDiag.length
-          ? [...allDiags, ...trapDiag]
-          : allDiags.length
-            ? allDiags
-            : [{
-                file: c.filename, line: 1, column: 1, severity: "error",
-                message: `cc1 exited rc=${cc1Rc} on ${c.filename}`,
-              }],
-        rawStderr: stderrParts.join("\n\n"),
-        failedStage: 1,
-        totalMs: performance.now() - t0,
-        stages,
-      };
+    },
+    {
+      loadCc1:     () => loadCc1Tool(baseUrl),
+      loadAs:      () => loadAsTool(baseUrl),
+      loadLd:      () => loadLdTool(baseUrl),
+      loadElf2Mac: () => loadElf2MacTool(baseUrl),
+    },
+  );
+
+  // Parse cc1 stderr blobs into structured diagnostics. Each entry
+  // in `stderrPerStage` is prefixed with `[stage filename?]`; the
+  // first line is the prefix and the rest is raw stderr we feed
+  // through the existing parser so warnings show up in the Output
+  // panel as clickable rows. Non-cc1 stages (as/ld/elf2mac) don't
+  // emit GCC-format diagnostics — leave them as raw lines.
+  const allDiags: Diagnostic[] = [];
+  for (const blob of pipeline.stderrPerStage) {
+    const firstNl = blob.indexOf("\n");
+    if (firstNl < 0) continue;
+    const tag = blob.slice(0, firstNl); // e.g. "[cc1 main.c]"
+    const body = blob.slice(firstNl + 1);
+    if (!body) continue;
+    const cc1Match = tag.match(/^\[cc1 (.+)\]$/);
+    if (cc1Match) {
+      allDiags.push(...parseCc1Stderr(body, cc1Match[1]!));
     }
-    const sBytes = cc1.Module.FS.readFile(cc1Out);
-    if (asmText === undefined) asmText = new TextDecoder().decode(sBytes);
+  }
+  const rawStderr = pipeline.stderrPerStage.join("\n\n");
 
-    // ── as → .o
-    const as = await loadAsTool(baseUrl);
-    const asIn = `/tmp/${baseNoExt}.s`;
-    const asOut = `/tmp/${baseNoExt}.o`;
-    as.Module.FS.writeFile(asIn, sBytes);
-    const asStart = performance.now();
-    const asRc = callMainSafe(as, asArgs({ source: asIn, output: asOut }));
-    stages.asMs += performance.now() - asStart;
-    const asStderr = as.stderr.join("\n");
-    if (asStderr) stderrParts.push(`[as ${c.filename}]\n${asStderr}`);
-    if (asRc !== 0) {
-      return {
-        ok: false, asm: asmText,
-        diagnostics: [...allDiags, {
-          file: c.filename, line: 1, column: 1, severity: "error",
-          message: `as exited rc=${asRc}: ${asStderr.split("\n")[0] ?? "(no message)"}`,
-        }],
-        rawStderr: stderrParts.join("\n\n"),
-        failedStage: 2,
-        totalMs: performance.now() - t0,
-        stages,
-      };
-    }
-    const oBytes = as.Module.FS.readFile(asOut);
-    objects.push({ name: `${baseNoExt}.o`, bytes: oBytes });
-  }
-  // Mark hSources as intentionally walked-but-not-compiled (silence the
-  // unused-binding linter without complicating the loop).
-  void hSources.length;
-
-  // ── Stage 3: ld ─────────────────────────────────────────────────────
-  //
-  // Link recipe (eyes-on-debugged 2026-05-15 on the deployed playground;
-  // see wasm-retro-cc#22 and LEARNINGS "2026-05-15 — cc1.wasm is not
-  // re-entrant" for the full trail):
-  //
-  //   1. `start.c.obj` *first*, before any .a — defines `_start` so the
-  //      ld script's `PROVIDE(_start = .)` fallback (a bare RTS) doesn't
-  //      win. Without this, the entry trampoline jumps to the RTS, main
-  //      never runs, and the app exits immediately after launch.
-  //   2. `--start-group … --end-group` around all archives so
-  //      cross-archive references (libretrocrt → libc → libretrocrt;
-  //      libretrocrt → libgcc; …) resolve through iterative scanning.
-  //   3. `libgcc.a` included — `__udivsi3` / `__mulsi3` (soft-fp/-divide
-  //      helpers for m68k 32-bit math) live only here; libretrocrt's
-  //      syscalls.c transitively needs them.
-  //
-  // DO NOT "simplify" this by removing the standalone `start.c.obj`,
-  // restoring `PROVIDE(_start)`, or dropping the `*(.text._start)`
-  // selector from the ld script. Verified 2026-05-15 (after #97
-  // shipped): switching to a canonical-style link command
-  // (`--start-group -lretrocrt -lInterface -lc -lgcc --end-group`
-  // with the original Retro68 script + PROVIDE intact) produces a
-  // degenerate 1920-byte binary with `_start` undefined and
-  // `.code00001` size 0x14 (just the trampoline). Our wasm-built ld
-  // has slightly different archive-scan behavior than the canonical
-  // native ld — likely around how `ENTRY(_start)` triggers archive
-  // pulls. Until that's understood or fixed upstream, these three
-  // workarounds compose to keep the binary correct. See LEARNINGS
-  // "2026-05-15 PM — canonical-style cleanup attempt failed".
-  const ld = await loadLdTool(baseUrl);
-  for (const o of objects) {
-    const p = `/tmp/${o.name}`;
-    try { ld.Module.FS.unlink(p); } catch {}
-    ld.Module.FS.writeFile(p, o.bytes);
-  }
-  try { ld.Module.FS.unlink("/tmp/out.gdb"); } catch {}
-  const objPaths = objects.map((o) => `/tmp/${o.name}`);
-  const ldStart = performance.now();
-  // Linker invocation argv lives in `compileArgs.mjs` so the Node-side
-  // audit and the in-browser pipeline can't drift. Notes preserved here
-  // because they're cv-mac-specific debugging:
-  //
-  // `retro68-multiseg.ld` is the multi-segment ld script that Elf2Mac
-  // dynamically generates from its default SegmentMap in `--elf2mac`
-  // mode (captured into a static asset in wasm-retro-cc#24).
-  // libretrocrt's `_start` was written for the multi-segment layout —
-  // the flat script crashes at app launch with type-3 because the
-  // runtime relocator can't find the named `.code00001`/... sections.
-  //
-  // `--emit-relocs` (`-q`) keeps the relocation records in the output
-  // ELF so Elf2Mac can convert them into 'RELA' resources. Without it,
-  // ld applies the relocations and DISCARDS them — leaving an ELF with
-  // no .rela sections; libretrocrt's Retro68Relocate then has nothing
-  // to apply and `main()`'s first cross-segment call lands in low
-  // memory → type-3 address error. Discovered 2026-05-15 PM via diff
-  // against the canonical Retro68 docker build (cv-mac #96).
-  //
-  // See LEARNINGS "Follow-up: the flat ld script is fundamentally
-  // wrong for libretrocrt" and the 2026-05-15 PM SIZE-resource entry.
-  const ldRc = callMainSafe(ld, ldArgs({
-    objects: objPaths,
-    output: "/tmp/out.gdb",
-  }));
-  stages.ldMs = performance.now() - ldStart;
-  const ldStderr = ld.stderr.join("\n");
-  if (ldStderr) stderrParts.push(`[ld]\n${ldStderr}`);
-  if (ldRc !== 0) {
+  if (!pipeline.ok) {
+    // Map pipeline failure into the rich diagnostic shape callers
+    // expect. cc1 failures may include a wasm-trap line we promote
+    // to a top-level diagnostic so the status bar surfaces the
+    // "try -O0" hint instead of a bare exit code.
+    const failedFile = pipeline.failedFile ?? primaryName;
+    const stageBlob =
+      pipeline.stderrPerStage[pipeline.stderrPerStage.length - 1] ?? "";
+    const stageBody = stageBlob.split("\n").slice(1).join("\n");
+    const trapLine = stageBody.split("\n").find((l) => l.startsWith("wasm trap:"));
+    const failDiag: Diagnostic[] =
+      trapLine
+        ? [{ file: failedFile, line: 1, column: 1, severity: "error", message: trapLine }]
+        : allDiags.length === 0
+          ? [{
+              file: failedFile,
+              line: 1,
+              column: 1,
+              severity: "error",
+              message: `${pipeline.failedStage} failed: ${stageBody.split("\n")[0] ?? "(no message)"}`,
+            }]
+          : [];
     return {
-      ok: false, asm: asmText,
-      diagnostics: [...allDiags, {
-        file: primaryName, line: 1, column: 1, severity: "error",
-        message: `ld exited rc=${ldRc}: ${ldStderr.split("\n")[0] ?? "(no message)"}`,
-      }],
-      rawStderr: stderrParts.join("\n\n"),
-      failedStage: 3,
+      ok: false,
+      asm: pipeline.asm,
+      diagnostics: [...allDiags, ...failDiag],
+      rawStderr,
+      failedStage: stageToNumber(pipeline.failedStage),
       totalMs: performance.now() - t0,
-      stages,
-    };
-  }
-  const elfBytes = ld.Module.FS.readFile("/tmp/out.gdb");
-
-  // ── Stage 4: Elf2Mac ────────────────────────────────────────────────
-  // Output filename MUST end in `.bin` — Elf2Mac's autodetect maps
-  // extension → format, and any non-`.bin` falls through to Linux
-  // split-fork mode (3 files, not MacBinary). See wasm-retro-cc
-  // LEARNINGS.md "Phase 2.3d".
-  // Elf2Mac reads the ELF from `<outputFile>.gdb`, legacy hangover from
-  // when it spawned real ld. Convert-only mode preserves that path.
-  const e2m = await loadElf2MacTool(baseUrl);
-  for (const p of ["/tmp/out.bin", "/tmp/out.bin.gdb"]) {
-    try { e2m.Module.FS.unlink(p); } catch {}
-  }
-  e2m.Module.FS.writeFile("/tmp/out.bin.gdb", elfBytes);
-  const e2mStart = performance.now();
-  const e2mRc = callMainSafe(e2m, elf2macArgs({ output: "/tmp/out.bin" }));
-  stages.elf2macMs = performance.now() - e2mStart;
-  const e2mStderr = e2m.stderr.join("\n");
-  if (e2mStderr) stderrParts.push(`[Elf2Mac]\n${e2mStderr}`);
-  if (e2mRc !== 0) {
-    return {
-      ok: false, asm: asmText,
-      diagnostics: [...allDiags, {
-        file: primaryName, line: 1, column: 1, severity: "error",
-        message: `Elf2Mac exited rc=${e2mRc}: ${e2mStderr.split("\n")[0] ?? "(no message)"}`,
-      }],
-      rawStderr: stderrParts.join("\n\n"),
-      failedStage: 4,
-      totalMs: performance.now() - t0,
-      stages,
-    };
-  }
-  let binBytes: Uint8Array;
-  try {
-    binBytes = e2m.Module.FS.readFile("/tmp/out.bin");
-  } catch (e) {
-    return {
-      ok: false, asm: asmText,
-      diagnostics: [...allDiags, {
-        file: primaryName, line: 1, column: 1, severity: "error",
-        message: `Elf2Mac returned 0 but no /tmp/out.bin: ${(e as Error).message}`,
-      }],
-      rawStderr: stderrParts.join("\n\n"),
-      failedStage: 4,
-      totalMs: performance.now() - t0,
-      stages,
+      stages: pipeline.stages,
     };
   }
 
   return {
     ok: true,
-    bin: binBytes,
-    asm: asmText,
+    bin: pipeline.bin,
+    asm: pipeline.asm,
     diagnostics: allDiags,
-    rawStderr: stderrParts.join("\n\n"),
+    rawStderr,
     totalMs: performance.now() - t0,
-    stages,
+    stages: pipeline.stages,
   };
+}
+
+/** Map the shared pipeline's stage-name back to the legacy 1-4
+ *  failedStage number used in CompileToBinResult. */
+function stageToNumber(
+  stage: "cc1" | "as" | "ld" | "elf2mac" | undefined,
+): 1 | 2 | 3 | 4 | undefined {
+  switch (stage) {
+    case "cc1": return 1;
+    case "as": return 2;
+    case "ld": return 3;
+    case "elf2mac": return 4;
+    default: return undefined;
+  }
 }
