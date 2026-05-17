@@ -154,12 +154,15 @@ jobs:
 
       - name: Verify downloaded artifacts
         run: |
-          ls -la artifact/dist/
+          ls -la artifact/
           # app.dsk retired with the Reader app (#276); the only disk
           # the web build needs is system755-vibe.dsk (best-effort —
           # see build-app job for why we don't hard-fail on it).
-          if [ -s artifact/dist/system755-vibe.dsk ]; then
-            echo "system755-vibe.dsk present ($(stat -c%s artifact/dist/system755-vibe.dsk) bytes)."
+          # NOTE: after #276 Phase 1B, the upload's only contents live
+          # under dist/, so GH Actions makes dist/ the artifact root —
+          # files arrive at artifact/<name>, not artifact/dist/<name>.
+          if [ -s artifact/system755-vibe.dsk ]; then
+            echo "system755-vibe.dsk present ($(stat -c%s artifact/system755-vibe.dsk) bytes)."
           else
             echo "system755-vibe.dsk missing or empty — loader will stay in STUB mode."
           fi
@@ -232,18 +235,18 @@ jobs:
       # (Reader's app.dsk was retired with the Reader app in #276.)
       - name: Co-locate disk images into web dist
         run: |
-          if [ -s artifact/dist/system755-vibe.dsk ]; then
-            cp artifact/dist/system755-vibe.dsk src/web/dist/system755-vibe.dsk
+          if [ -s artifact/system755-vibe.dsk ]; then
+            cp artifact/system755-vibe.dsk src/web/dist/system755-vibe.dsk
           fi
           # The chunked manifest + chunks are what the loader actually
           # consumes (the single-file .dsk is kept for HEAD-checking and
           # for forks that may want to re-chunk locally). See
           # src/web/src/emulator-worker.ts ChunkedDisk for the read path.
-          if [ -s artifact/dist/system755-vibe.dsk.json ]; then
-            cp artifact/dist/system755-vibe.dsk.json src/web/dist/system755-vibe.dsk.json
+          if [ -s artifact/system755-vibe.dsk.json ]; then
+            cp artifact/system755-vibe.dsk.json src/web/dist/system755-vibe.dsk.json
           fi
-          if [ -d artifact/dist/system755-vibe-chunks ]; then
-            cp -R artifact/dist/system755-vibe-chunks src/web/dist/system755-vibe-chunks
+          if [ -d artifact/system755-vibe-chunks ]; then
+            cp -R artifact/system755-vibe-chunks src/web/dist/system755-vibe-chunks
           fi
           ls -la src/web/dist/
 
