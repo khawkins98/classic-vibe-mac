@@ -1810,6 +1810,23 @@ Now every fatal exit emits the exact message string (e.g. "A Graphic Couldn't Be
 
 **Pattern to remember:** Any vendored app you onboard will have its own error funnel — `RedAlert`, `Fatal`, `AbortApp`, `Die`, whatever the original author named it. The first thing to do after the app compiles but before debugging *runtime* problems is **find that funnel and wire it into `cvm_log`** — one minimal touch that turns every future fatal into a visible, attributable line. Treats vendored source like a black box but with one diagnostic poke at the boundary. Generalises to any port: Mac, microcontroller, embedded, whatever — the choke point for fatals is almost always one or two functions that you can instrument once and reap for the rest of the port's life.
 
+### 2026-05-17 — "N independent copies of one thing" is the bug — the audit lied while production failed
+**Context:** I added `cvm_log.h` as a system header (#263) by patching `cc1.ts:loadModule` — the sysroot-mount function used by the Show-ASM path. The Node-side CI audit had its *own* mount function (`scripts/audit-wasm-samples.mjs:mountSysroot`), so I patched that too. Audit went green; every sample compiled.
+
+Hours later the user clicked Build on Glypha and hit `Utilities.c:20:10: error: cvm_log.h: No such file or directory`. The Build path uses a **third** mount function (`cc1.ts:loadToolModule`) — added later when as/ld/Elf2Mac got generalised into a single loader — that I'd never noticed. The audit script's mount function and the browser's *Show-ASM* mount function were in sync; the browser's *Build* mount function was the silent outlier.
+
+**Cause:** Not "I forgot one of three." The actual cause is that **three independent copies of the same logical operation existed at all**. Any incremental change to one carries proportional risk of the others drifting. The audit went green because two of three were correct — exactly the same green you get when all three are correct.
+
+**Action:** Hot-fix (#267) brought the Build path's mount up to date. Then a three-PR refactor chain (#268-270) closed the underlying duplication: one `mountSysroot` helper, one `CVM_SYSTEM_HEADERS` table, one `createPollingWatcher` helper for the worker-poll pattern, one `compileArgs.mjs` for the cc1/as/ld/Elf2Mac argv arrays. The full isomorphic compile harness (#271) — sharing the entire pipeline runner, not just the argv — is the larger conversation tracked separately.
+
+**Pattern to remember:**
+  - **"I copy-pasted X into a second place and modified it" is debt at write time, not at edit time.** The second occurrence is the bug. Add a `TODO(dedupe)` or extract immediately; otherwise the third copy WILL appear, and you'll only notice when one drifts.
+  - **CI green means each green check is currently green** — it does *not* mean "your edit reached every place it needed to reach." If audit-script and browser-pipeline are independent reimplementations of the same logic, the audit's pass tells you about the audit, not about the browser.
+  - **The fix for "I missed one place" is rarely "be more careful next time."** It's "remove the structural possibility of missing a place." Drift-proofing is cheaper than vigilance.
+  - The refactor cost was small (3 PRs, ~150 LOC net) and reviewable; the long-tail cost of the next #267-style bug (a 30-minute hot fix during the user's session, plus the trust hit) was almost certainly larger. Pay it down when surfaced.
+
+**Cross-link:** Issue #271 tracks the still-deferred full pipeline-runner extraction. The three refactors here addressed the most-likely-to-drift duplications (sysroot mount, watcher scaffold, argv arrays). The pipeline runner itself is the fourth and biggest.
+
 ### 2026-05-15 — Case-fold collisions in macOS-extracted sysroot (Strings.h vs strings.h)
 **Context:** First `compileToBin` run against `hello_toolbox.c` failed at cc1 with `fatal error: strings.h: No such file or directory` — even though `sysroot.bin` was mounted in MEMFS at `/sysroot/`.
 **Finding:** Two distinct header files coexist in the Retro68 SDK:
