@@ -12,14 +12,6 @@
 #include "Externs.h"
 #include <Sound.h>
 
-/* cv-mac diagnostic trace — log each init step so we can identify
- * where the app dies on the deployed playground (#256). When the
- * Console pane is silent it means the app crashes before the first
- * cvm_log fires — the trace points below narrow that down to the
- * specific Glypha init function. Remove this block once the
- * resource fork lands and gameplay actually starts. */
-#include <cvm_log.h>
-
 
 #define kPrefsVersion			0x0001
 
@@ -87,28 +79,14 @@ void main (void)
 {
 	long		tickWait;
 
-	/* cv-mac diagnostic trace (see top-of-file comment). The first
-	 * line is the canary: if you see "main: entered" in the Console
-	 * pane, _start ran and the binary loaded correctly. */
-	cvm_log_reset();
-	cvm_log("main: entered");
-
-	cvm_log("main: -> ToolBoxInit");
 	ToolBoxInit();			// Call function that initializes the ToolBox managers.
-	cvm_log("main: -> CheckEnvirons");
 	CheckEnvirons();		// Check the Mac we're on to see if we can run.
-	cvm_log("main: -> OpenMainWindow");
 	OpenMainWindow();		// Open up the main window - it will fill the monitor.
-	cvm_log("main: -> InitVariables");
 	InitVariables();		// Initialize Glypha's variables.
-	cvm_log("main: -> InitSound");
 	InitSound();			// Create sound channels and load up sounds.
-	cvm_log("main: -> InitMenubar");
 	InitMenubar();			// Set up the game's menubar.
-	cvm_log("main: -> ReadInPrefs");
 	ReadInPrefs();			// Load up the preferences.
-	cvm_log("main: entering event loop");
-	
+
 	do						// Here begins the main loop.
 	{
 		HandleEvent();		// Check for events.
