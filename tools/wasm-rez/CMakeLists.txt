@@ -121,6 +121,13 @@ if(SPIKE_MINI)
         set(EM_FLAGS
             "-O2"
             "-sALLOW_MEMORY_GROWTH=1"
+            # 8MB C stack. Emscripten's 64KB default overflows when the AST
+            # evaluator recurses through long left-leaning CONCAT chains —
+            # one frame per `$"…"` hex literal in a single resource. Cliff
+            # was at ~1340 literals; Glypha's PICTs and snds blow past that.
+            # 8MB ≈ 160K frames, headroom for any plausible Rez input. Cost
+            # is virtual address space, not physical pages.
+            "-sSTACK_SIZE=8388608"
             "-sMODULARIZE=1"
             "-sEXPORT_ES6=0"
             "-sEXPORT_NAME=createRezModule"
