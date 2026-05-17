@@ -552,16 +552,14 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     // proving the in-browser pipeline survives a 10× scale-up
     // from the wasm-* hand-rolled toys.
     //
-    // What works in this PR: the full compile + link path. cc1.wasm
+    // What works: the full compile + link path. cc1.wasm
     // doesn't OOM on the largest file (Enemy.c, 45 KB). The link
-    // produces a 149 KB ELF.
+    // produces a 149 KB ELF. The full 2.7 MB upstream resource
+    // fork (PICTs, snds, MENUs, WINDs, DLOGs, CICNs) compiles in
+    // browser via wasm-rez in ~230 ms → 543 KB .rsrc.bin, unblocked
+    // by the STACK_SIZE bump in #287.
     //
-    // What's stubbed for now: persistence (Prefs.c is a no-op),
-    // and the upstream 2.7 MB resource fork is replaced with a
-    // minimal Rez file (WIND + MBAR + signature). The game will
-    // boot far enough to show a window but won't be playable —
-    // wiring up the real resources is a follow-up project per
-    // the PR body's note.
+    // What's stubbed: persistence (Prefs.c is a no-op).
     //
     // Marked complexity 7 (off the previous scale) — bigger
     // codebase + first external onboard + stubbed-but-real assets.
