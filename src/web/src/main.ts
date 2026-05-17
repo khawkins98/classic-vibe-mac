@@ -522,7 +522,7 @@ if (playgroundEl) {
               bytes,
             };
             lastBootSpec = spec;
-            await emulatorHandle!.reboot(spec);
+            await emulatorHandle!.boot(spec);
           }
         : undefined,
     );
@@ -821,7 +821,7 @@ mountMenubar({
       );
       return;
     }
-    void emulatorHandle.reboot(lastBootSpec);
+    void emulatorHandle.boot(lastBootSpec);
   },
   canRebootEmulator: () => emulatorHandle !== null && lastBootSpec !== null,
   listOpenWindows: () => {

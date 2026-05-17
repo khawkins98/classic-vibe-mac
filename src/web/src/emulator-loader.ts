@@ -52,6 +52,12 @@ const PAUSED_BODY_CLASS = "cvm-paused";
 
 type LoaderPhase =
   | { kind: "idle" }
+  // Deferred-boot UX (#276 Phase 2): the canvas pane shows a friendly
+  // "welcome — pick a project and Build & Run" prompt until the user
+  // triggers the first build. Replaces the previous "auto-boot on page
+  // load" behaviour, which prepaid 25 MB of System 7.5 boot disk fetch
+  // + ~15s of cold boot before the user had even interacted.
+  | { kind: "waiting"; message: string }
   | { kind: "fetching"; label: string; loadedBytes: number; totalBytes: number }
   | { kind: "starting"; detail: string }
   | { kind: "running" }
@@ -63,20 +69,30 @@ interface LoaderHandles {
   setPhase(phase: LoaderPhase): void;
 }
 
-/** Public surface returned by startEmulator(). Reboot() tears down the
- *  current worker + render loop, spawns a fresh worker, and re-runs boot
- *  with the user-supplied secondary disk inserted. The boot disk URL is
- *  reused unchanged (System 7.5.5 doesn't change between reboots).
+/** Public surface returned by startEmulator(). boot() tears down the
+ *  current worker + render loop (if any), spawns a fresh worker, and
+ *  runs boot with the user-supplied secondary disk inserted. Used for
+ *  BOTH the first-ever boot (no prior session) AND subsequent reboots
+ *  (Build & Run after first time, "Reboot Mac" menubar item).
  *
- *  reboot() returns a Promise that resolves when the new worker is
- *  fully booted (`emulator_ready` received). Callers can chain UI
- *  updates against that.
+ *  The boot disk URL is reused unchanged (System 7.5.5 doesn't change
+ *  between reboots).
+ *
+ *  boot() returns a Promise that resolves when the new worker is fully
+ *  booted (`emulator_ready` received). Callers can chain UI updates
+ *  against that.
+ *
+ *  Note (#276 Phase 2): the deferred-boot model means startEmulator()
+ *  itself paints a "waiting" placeholder and returns immediately
+ *  without booting — boot() must be called explicitly to start the
+ *  Mac. Previously startEmulator() auto-booted on page load.
  */
 export interface EmulatorHandle {
   dispose(): void;
-  /** Reboot with a new in-memory secondary disk. Used by the playground's
-   *  Build & Run button. Resolves after first frame paints. */
-  reboot(spec: EmulatorInMemoryDiskSpec): Promise<void>;
+  /** Boot (or reboot) with an optional in-memory secondary disk. Used
+   *  by the playground's Build & Run button and the menubar "Reboot Mac"
+   *  item. Resolves after first frame paints. */
+  boot(spec?: EmulatorInMemoryDiskSpec): Promise<void>;
 }
 
 interface ActiveSession {
@@ -165,28 +181,45 @@ export function startEmulator(
     });
   };
 
-  startSession(extraDisks);
+  // Deferred-boot UX (#276 Phase 2): paint a "Pick a project and Build &
+  // Run" placeholder in the canvas pane and wait. boot() called below
+  // from editor.ts's hotLoad callback (Build & Run) drives the actual
+  // boot. Previously this line called startSession() unconditionally.
+  // hasBooted tracks whether boot() has been invoked so the first call
+  // can skip disposeSession() (no session to dispose).
+  handles.setPhase({
+    kind: "waiting",
+    message:
+      "Pick a project from the file picker and click Build & Run to launch it on the Macintosh.",
+  });
+  let hasBooted = false;
 
   return {
     dispose: () => {
       disposeSession(session);
     },
-    async reboot(spec: EmulatorInMemoryDiskSpec): Promise<void> {
-      // Tear down the live session first. We DO NOT wait for the worker
-      // to gracefully exit — terminate() is immediate, the SAB views
-      // get released, and the next session allocates fresh ones. There
-      // is a subtle race where the rAF loop might fire one more time
-      // during teardown; the AbortController guards that path.
-      disposeSession(session);
-      // Reset the mount so renderShell can paint a fresh progress block.
-      // (The previous session's canvas is still in there.)
-      mount.innerHTML = "";
-      handles = renderShell(mount);
-      session = makeSession();
-      // Replace the extras list — v1 is one app per disk. If we want to
-      // support multiple coexisting hot-loaded disks later, change this
-      // to `extraDisks.push(spec)`.
-      extraDisks = [spec];
+    async boot(spec?: EmulatorInMemoryDiskSpec): Promise<void> {
+      if (hasBooted) {
+        // Subsequent boot — tear down the live session first. We DO NOT
+        // wait for the worker to gracefully exit — terminate() is
+        // immediate, the SAB views get released, and the next session
+        // allocates fresh ones. There is a subtle race where the rAF
+        // loop might fire one more time during teardown; the
+        // AbortController guards that path.
+        disposeSession(session);
+        // Reset the mount so renderShell can paint a fresh progress
+        // block. (The previous session's canvas is still in there.)
+        mount.innerHTML = "";
+        handles = renderShell(mount);
+        session = makeSession();
+      }
+      // Replace the extras list — v1 is one app per disk. If we want
+      // to support multiple coexisting hot-loaded disks later, change
+      // to `extraDisks.push(spec)`. First boot may have no spec at all
+      // (the "boot the Mac with no extra apps" case, e.g. a future
+      // menubar "Boot Mac without an app" item — not user-facing yet).
+      extraDisks = spec ? [spec] : [];
+      hasBooted = true;
       startSession(extraDisks);
       await session.readyPromise;
     },
@@ -784,6 +817,8 @@ function renderPhase(phase: LoaderPhase): string {
   switch (phase.kind) {
     case "idle":
       return progressBlock("Initializing…", 0, 0);
+    case "waiting":
+      return waitingBlock(phase.message);
     case "fetching":
       return progressBlock(phase.label, phase.loadedBytes, phase.totalBytes);
     case "starting":
@@ -795,6 +830,18 @@ function renderPhase(phase: LoaderPhase): string {
     case "error":
       return errorBlock(phase.message);
   }
+}
+
+function waitingBlock(message: string): string {
+  // Pre-first-boot welcome screen. Same chrome as the stub block so the
+  // canvas pane reads as "the Mac is intentionally waiting" rather than
+  // "loading is stuck". Discovered via the deferred-boot UX in #276.
+  return /* html */ `
+    <div class="loader loader--waiting" role="status" aria-live="polite">
+      <div class="loader__label">Welcome to Macintosh.</div>
+      <p class="loader__note">${escapeHtml(message)}</p>
+    </div>
+  `;
 }
 
 function progressBlock(label: string, loaded: number, total: number): string {
