@@ -26,8 +26,7 @@ A good candidate has all of these:
 [softdorothy](https://github.com/softdorothy)'s repos are well-suited —
 John Calhoun open-sourced several of his late-80s/early-90s Mac games
 under MIT. Glypha III (#256), Glider 4, Pararena 2, and Stunt Copter
-all fit the profile. The community archive at
-[macintoshgarden.org](https://macintoshgarden.org) is a broader hunting
+all fit the profile. The community archive at macintoshgarden.org is a broader hunting
 ground but check licenses carefully.
 
 ## The recipe
