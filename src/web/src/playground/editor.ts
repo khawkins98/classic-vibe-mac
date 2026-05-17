@@ -80,6 +80,7 @@ import {
   triggerDownload,
   makeRetro68DefaultSizeFork,
 } from "./build";
+import { mergeResourceForks } from "./resourceForkMerger.mjs";
 import { compileToAsm } from "./cc1";
 import { getToolchain, DEFAULT_TOOLCHAIN_ID } from "./toolchain";
 import { getOptLevel, onOptLevelChange } from "../settings";
@@ -1462,13 +1463,21 @@ async function runBuildMixedCAndR(
     return { ok: false, totalMs: performance.now() - t0, diagnostics: allDiags };
   }
 
-  // Step 3: splice the user's rez fork onto the C-built MacBinary.
+  // Step 3a: pre-merge the user's wasm-rez output with any
+  // precompiledForkAssets (#280 Path B Phase 2B). User's .r-compiled
+  // fork wins on (type, id) collision; prebuilt forks fill the rest.
+  // No-op when the project declares no precompiledForkAssets.
+  const userFork = await mergeUserForkWithPrecompiledAssets(
+    baseUrl, proj, rez.resourceFork,
+  );
+
+  // Step 3b: splice the merged user fork onto the C-built MacBinary.
   // spliceResourceFork merges (user-wins on collision), so RELA / SIZE /
   // CODE from libretrocrt survive unless the user explicitly overrode
   // them in their .r.
   const finalBin = spliceResourceFork({
     dataForkBin: cResult.bytes,
-    resourceFork: rez.resourceFork,
+    resourceFork: userFork,
   });
 
   // Identity stamp for the mixed build, mirroring runBuildInBrowserC.
@@ -1489,6 +1498,40 @@ async function runBuildMixedCAndR(
     totalMs: performance.now() - t0,
     diagnostics: allDiags,
   };
+}
+
+/**
+ * Pre-merge the user's compiled resource fork with any pre-built forks
+ * declared via `SampleProject.precompiledForkAssets` (#280 Path B).
+ * `userFork` is the user's wasm-rez output (or the default SIZE-only
+ * fork on Path A); `precompiledForkAssets` are fetched as bytes and
+ * merged in. First-fork-wins so the user's .r source overrides
+ * upstream prebuilt resources.
+ *
+ * Returns `userFork` unchanged if the project has no precompiledForkAssets,
+ * so this is a no-op for samples that don't opt in.
+ */
+async function mergeUserForkWithPrecompiledAssets(
+  baseUrl: string,
+  proj: SampleProject,
+  userFork: Uint8Array,
+): Promise<Uint8Array> {
+  const assets = proj.precompiledForkAssets ?? [];
+  if (assets.length === 0) return userFork;
+  const prebuilt: Uint8Array[] = [];
+  for (const path of assets) {
+    const url = `${baseUrl}sample-projects/${proj.id}/${path}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      throw new Error(
+        `precompiledForkAsset ${proj.id}/${path} fetch failed: HTTP ${r.status}`,
+      );
+    }
+    prebuilt.push(new Uint8Array(await r.arrayBuffer()));
+  }
+  // First-fork wins: userFork (.r-compiled) overrides; prebuilt forks
+  // fill in the rest.
+  return mergeResourceForks([userFork, ...prebuilt]);
 }
 
 /**
@@ -1622,9 +1665,16 @@ async function runBuildInBrowserC(
   // reference binary `hello-toolbox-retro68.bin`. See cv-mac LEARNINGS
   // "2026-05-15 — Missing SIZE resource crashes libretrocrt startup
   // with type-3".
+  //
+  // Then merge in any precompiledForkAssets (#280 Path B Phase 2B):
+  // pre-built resource forks shipped with this project for vendored
+  // apps that hardcode resource lookups against their own fork. Default
+  // SIZE wins on collision; prebuilt forks fill the rest.
+  const sizeFork = makeRetro68DefaultSizeFork();
+  const userFork = await mergeUserForkWithPrecompiledAssets(baseUrl, proj, sizeFork);
   const finalBin = spliceResourceFork({
     dataForkBin: r.bin,
-    resourceFork: makeRetro68DefaultSizeFork(),
+    resourceFork: userFork,
   });
 
   // Identity stamp for every in-browser build. Mirrors the

@@ -97,6 +97,27 @@ export interface SampleProject {
    * "WasmIconGallery") and asset filenames start lower-case.
    */
   binaryAssets?: string[];
+  /**
+   * Optional list of pre-built resource fork files (`.rsrc.bin`)
+   * MERGED INTO the app's own resource fork at build time, before
+   * `spliceResourceFork` runs (#280 Path B Phase 2B). Distinct from
+   * `binaryAssets`, which keeps the fork as a sibling file on the
+   * disk for the app to open at runtime — `precompiledForkAssets`
+   * is the path for vendored apps that hardcode lookups against
+   * their own fork (e.g. Glypha's `GetPicture(130)`).
+   *
+   * Conflict resolution: user wins. Resources defined in the user's
+   * .r source (compiled by wasm-rez) override same-`(type, id)`
+   * entries from precompiledForkAssets. Pre-built forks fill the
+   * rest. See `resourceForkMerger.mjs`.
+   *
+   * Workflow: produce a `.rsrc.bin` from an upstream MacBinary via
+   * `node scripts/extract-resource-fork.mjs <upstream.bin>
+   * <name>.upstream.rsrc.bin`, drop the output under
+   * `src/app/<project>/`, list the filename here. Vite seed treats
+   * these as binary assets (same as `binaryAssets`).
+   */
+  precompiledForkAssets?: string[];
 }
 
 /**
