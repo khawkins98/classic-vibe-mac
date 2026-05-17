@@ -29,12 +29,17 @@ data 'CVGl' (0, "Owner signature") {
 };
 
 /* SIZE -1 — Mac OS Finder reads this on launch to size the app heap.
- * 0x0080 = 32-bit clean. 1 MB pref/min covers Glypha's GWorlds + the
- * 17 sound buffers it ResLoad's at startup. */
+ * 0x0080 = 32-bit clean. 4 MB pref / 2 MB min covers Glypha's GWorlds,
+ * the 17 sound buffers (~290 KB) it ResLoad's at startup, the 21 PICTs
+ * (~250 KB) for sprite art, plus headroom for the Resource Manager's
+ * working set and double-buffer copies. The original 1 MB hint
+ * (cv-mac #256 first attempt) was tight enough that LoadBufferSounds
+ * fired "Failed Loading Sounds" — likely memFullErr after InitVariables
+ * had eaten most of the available heap. */
 data 'SIZE' (-1, "Glypha III") {
     $"0080"                /* flags: 32-bit clean */
-    $"00100000"            /* preferred: 1024 KB */
-    $"00100000"            /* minimum:   1024 KB */
+    $"00400000"            /* preferred: 4096 KB */
+    $"00200000"            /* minimum:   2048 KB */
 };
 
 /* ============================================================

@@ -215,14 +215,19 @@ OSErr LoadBufferSounds (void)
 
 	/* cv-mac diagnostic (#256): the upstream resource fork ships 17
 	 * snd resources at IDs 1000..1016 (verified via extract-resource-fork.mjs
-	 * on the compiled .rsrc.bin). If "Failed Loading Sounds" still fires
-	 * after that fork lands, the console logs below pinpoint exactly
-	 * which ID the Resource Manager can't find and what error it returns.
-	 * Common ResError codes: -192 resNotFound, -39 eofErr, -108 memFullErr. */
+	 * and via the in-Node splice repro in /tmp/splice-glypha.mjs). The
+	 * resources DO end up in the final .bin's resource fork. If
+	 * "Failed Loading Sounds" still fires, the heap-state logs below
+	 * pinpoint whether the cause is memFullErr (-108, heap too small)
+	 * vs resNotFound (-192, Resource Manager not seeing the fork) vs
+	 * other. Common ResError codes: -108 memFullErr, -192 resNotFound,
+	 * -39 eofErr. */
 	{
-		char buf[128];
-		sprintf(buf, "LoadBufferSounds: entering loop, kMaxSounds=%d kBase=%d",
-			(int)kMaxSounds, (int)kBaseBufferSoundID);
+		char buf[160];
+		sprintf(buf,
+			"LoadBufferSounds: entering loop kMax=%d kBase=%d FreeMem=%ld MaxMem=%ld",
+			(int)kMaxSounds, (int)kBaseBufferSoundID,
+			(long)FreeMem(), (long)MaxBlock());
 		cvm_log(buf);
 	}
 
@@ -232,11 +237,12 @@ OSErr LoadBufferSounds (void)
 		if (theSound == 0L)				// Make sure it loaded okay.
 		{
 			OSErr e = ResError();
-			char buf[160];
+			char buf[200];
 			sprintf(buf,
-				"LoadBufferSounds: GetResource('snd ', %d) failed, ResError=%d (loaded %d of %d so far)",
+				"LoadBufferSounds: GetResource('snd ', %d) failed ResError=%d loaded=%d/%d FreeMem=%ld MaxBlock=%ld",
 				(int)(i + kBaseBufferSoundID), (int)e,
-				(int)i, (int)kMaxSounds);
+				(int)i, (int)kMaxSounds,
+				(long)FreeMem(), (long)MaxBlock());
 			cvm_log(buf);
 			return (e);					// Return reason it failed (if it did).
 		}
