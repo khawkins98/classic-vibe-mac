@@ -435,25 +435,6 @@ self.addEventListener("message", (ev: MessageEvent) => {
         console.warn("[worker] url_result_write failed:", err);
       }
     }
-  } else if (data?.type === "poll_drawing") {
-    // Read /Shared/__drawing.bin written by PixelPad; post 512 raw bytes.
-    // Only accept exactly 512 bytes (64×64 1-bit canvas).
-    const drawingPath = "/Shared/__drawing.bin";
-    if (sharedReady && activeFs && activeFs.analyzePath(drawingPath).exists) {
-      try {
-        const bytes: Uint8Array = activeFs.readFile(drawingPath, { encoding: "binary" });
-        if (bytes.length === 512) {
-          const copy = new Uint8Array(bytes);
-          self.postMessage({ type: "drawing_data", bytes: copy }, [copy.buffer]);
-        } else {
-          self.postMessage({ type: "drawing_data", bytes: null });
-        }
-      } catch {
-        self.postMessage({ type: "drawing_data", bytes: null });
-      }
-    } else {
-      self.postMessage({ type: "drawing_data", bytes: null });
-    }
   } else if (data?.type === "poll_console") {
     // Read /Shared/__cvm_console.log incrementally — return only bytes
     // appended since the watcher's last-known offset. Lets the Debug

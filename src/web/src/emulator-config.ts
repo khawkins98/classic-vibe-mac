@@ -72,14 +72,15 @@ export const emulatorConfig: EmulatorConfig = {
   bootDiskUrl: `${BASE}system755-vibe.dsk`,
   appDiskUrl: `${BASE}app.dsk`,
   screen: { width: 640, height: 480 },
-  // Sample shared content. README.md is consumed by MarkdownViewer on
-  // the boot disk; the Shared volume is also the back-channel for
-  // cvm_log (Debug Console pane) and PixelPad drawings. Reader's HTML
-  // files were removed with Reader itself (#276).
+  // Shared volume seed list. The /Shared/ mount itself is still needed —
+  // it's the back-channel for cvm_log (Debug Console pane). But no app
+  // currently *reads* a seed file from there: Reader (HTML), MacWeather
+  // (weather.json), MarkdownViewer (.md) all retired in #276 Phase 1A/1B.
+  // Kept as an empty array (vs deleting the feature) so a future
+  // playground sample that wants to ship content alongside its app can
+  // re-use the same seed mechanism.
   sharedFolder: {
-    files: [
-      { name: "README.md", url: `${BASE}shared/README.md` },
-    ],
+    files: [],
   },
   // Sleep the worker (Atomics.wait on a SAB pause flag) when the tab is
   // hidden. The user can flip this via the checkbox under the Mac window;
