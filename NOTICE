@@ -10,10 +10,14 @@ Apple Macintosh System 7.5.5
 
 `scripts/build-boot-disk.sh` downloads a pre-installed, bootable
 System 7.5.5 hard-disk image from the Internet Archive
-(https://archive.org/details/macos755_202104) and modifies it in place
-by adding our Minesweeper application into the System Folder's
-Startup Items. The resulting image (`system755-vibe.dsk`) is published
-alongside the rest of the static site.
+(https://archive.org/details/macos755_202104) and modifies it in
+place: pruning some inherited cruft (third-party apps installed by
+the upstream image preparer) and optionally seeding a :Shared:
+folder for runtime back-channel files. As of #276 (2026-05-17),
+no classic-vibe-mac apps are pre-installed onto the boot disk —
+the playground hot-loads user-built apps onto a separate secondary
+disk at Build & Run time. The resulting image (`system755-vibe.dsk`)
+is published alongside the rest of the static site.
 
 System 7.5.3 was posted by Apple to its own support site in 2001 with a
 license permitting free redistribution; the System 7.5.5 updater
@@ -58,15 +62,54 @@ The BasiliskII WebAssembly binary downloaded by
 source is the upstream macemu submodule referenced from the pinned
 Infinite Mac commit.
 
-Retro68 (CC0 / various)
------------------------
+Retro68 (mixed: GPL-2.0+, GPL-3.0+, permissive)
+-----------------------------------------------
 
 The build pipeline cross-compiles our Mac app against the Retro68
 toolchain (https://github.com/autc04/Retro68) via the rolling Docker
 image `ghcr.io/autc04/retro68:latest`. Retro68 is composed of GCC
-(GPL-3.0+ with exception), binutils, and runtime headers/libraries
-under various permissive licenses. Retro68 itself is not redistributed
-by classic-vibe-mac; we only consume it from CI containers.
+(GPL-3.0+ with the GCC Runtime Library Exception), binutils
+(GPL-2.0+ / GPL-3.0+ depending on component), and Mac-specific
+runtime headers/libraries under various permissive licenses.
+
+In-browser compiler toolchain (src/web/public/wasm-cc1/*)
+---------------------------------------------------------
+
+Beyond the CI cross-compile, classic-vibe-mac **also redistributes**
+a wasm-compiled subset of Retro68 to the browser so users can
+compile Mac apps in their tab. The shipped artifacts:
+
+| Artifact (under src/web/public/wasm-cc1/) | Upstream | License |
+|-------------------------------------------|----------|---------|
+| `cc1.{mjs,wasm}`                          | GCC 4.x (Retro68 fork) | GPL-3.0+ with GCC Runtime Library Exception |
+| `as.{mjs,wasm}`                           | binutils (Retro68 fork) | GPL-2.0+ / GPL-3.0+ |
+| `ld.{mjs,wasm}`                           | binutils (Retro68 fork) | GPL-2.0+ / GPL-3.0+ |
+| `Elf2Mac.{mjs,wasm}`                      | Retro68 (autc04) | GPL-derived |
+| `sysroot.bin` (Toolbox + GCC headers)     | Universal Headers + GCC | various permissive |
+| `sysroot-libs.bin` (libc, libgcc, libretrocrt, etc.) | Newlib + Retro68 runtime | various permissive |
+
+These are produced and vendored by the sibling project
+[wasm-retro-cc](https://github.com/khawkins98/wasm-retro-cc), which
+runs Emscripten over Retro68's source to emit the .wasm + .mjs
+pairs. Redistributing GPL-derived binaries imposes the GPL's
+obligation to make corresponding source available on request.
+
+**Written offer of corresponding source:** the corresponding source
+for cc1, as, ld, Elf2Mac, and the sysroot artifacts is available
+at https://github.com/khawkins98/wasm-retro-cc, which both points
+at the exact upstream Retro68 SHA used to produce each shipped
+binary and contains the Emscripten build glue needed to reproduce
+them. Following the project links from there reaches the canonical
+GCC and binutils source trees.
+
+The shipped wasm binaries are not modified relative to their
+wasm-retro-cc upstream form. The Vite build computes a stable
+hash of the vendored wasm-cc1 artifacts (see
+`src/web/vite.config.ts:readToolchainHash`) and stamps it into
+every build's identity line as
+`toolchainVersion=<16-hex-digits>` — visible in the Output panel
+on first paint. The matching wasm-retro-cc commit can be
+reconstructed by re-hashing wasm-retro-cc's published binaries.
 
 hfsutils (GPL-2.0)
 ------------------
