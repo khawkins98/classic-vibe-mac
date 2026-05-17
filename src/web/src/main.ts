@@ -306,6 +306,10 @@ if (outputTabbarEl) {
       const active = t.dataset.pane === pane;
       t.classList.toggle("cvm-output__tab--active", active);
       t.setAttribute("aria-selected", active ? "true" : "false");
+      // Becoming-active clears the unread marker — user is now
+      // looking at it. console-watcher sets the marker when new
+      // cvm_log content arrives while this tab is hidden.
+      if (active) t.classList.remove("cvm-output__tab--unread");
     }
     for (const p of document.querySelectorAll<HTMLDivElement>(".cvm-output__pane")) {
       const active = p.dataset.pane === pane;
