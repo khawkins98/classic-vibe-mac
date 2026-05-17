@@ -58,19 +58,14 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      # Sanity check. The .APPL file is the data fork only and may be 0 bytes
-      # for resource-only apps — the canonical artifacts are .bin (MacBinary,
-      # both forks) and .dsk (mountable HFS image with the app inside).
-      # Multi-app: each subdirectory of build/ is its own app's output.
+      # Sanity check — CMake aggregator has no apps now (#276 Phase 1B
+      # retired the last of PixelPad + MarkdownViewer). The configure
+      # + build steps above succeed against an empty add_subdirectory()
+      # list and produce build/CMakeFiles/ plus nothing else. Kept as
+      # scaffolding for any future host-native app build.
       - name: Verify build artifacts
         run: |
-          ls -la build/
-          ls -la build/pixelpad/
-          ls -la build/markdownviewer/
-          test -s build/pixelpad/PixelPad.bin
-          test -s build/pixelpad/PixelPad.dsk
-          test -s build/markdownviewer/MarkdownViewer.bin
-          test -s build/markdownviewer/MarkdownViewer.dsk
+          ls -la build/ || true
 
       # Bake a bootable System 7.5.5 hard-disk image with our app pre-injected
       # into :System Folder:Startup Items: . This is the path forward for
@@ -98,30 +93,16 @@ jobs:
           path: .cache/boot-disk
           key: boot-disk-system755-v1
 
-      - name: Build bootable System 7.5.5 disk (apps pre-installed)
-        # `set +e` because the SHA-256 pin is currently a placeholder; the
-        # script prints the observed hash and continues unverified the
-        # first time. After the first successful CI run, paste the hash
-        # back into BOOT_DISK_SHA256 in the script and remove this `|| true`.
-        # Track in PRD risks table.
-        #
-        # The first arg is comma-separated; build-boot-disk.sh installs
-        # every binary into :Applications: (user-launchable from the
-        # desktop).  Normally the LAST one in the list also goes into
-        # Startup Items (auto-launch on boot).
-        #
-        # NO_STARTUP_ITEMS=1: skip the auto-launch step entirely.
-        # Set 2026-05-14 during the wasm-retro-cc boot-test bug hunt
-        # (tracker #64): MacWeather (or any auto-launching app) was a
-        # noisy variable in every demo test — closing it shifted crash
-        # classifications across apps, masking the actual bug signal.
-        # All apps still ship into :Applications: so a user can launch
-        # them manually from the desktop.  Once the boot test passes
-        # and we want a "demo on boot" experience back, drop this env
-        # var.
+      - name: Build bootable System 7.5.5 disk (vanilla — no preinstalled apps)
+        # With all CMake-built apps retired (#276 Phase 1B), the boot disk
+        # ships as vanilla System 7.5.5: the upstream archive.org image
+        # customised only by build-boot-disk.sh's --shared-dir seeding +
+        # any volume-level tweaks. First arg is empty (no apps to install).
+        # NO_STARTUP_ITEMS retained as a no-op — kept for future "auto-
+        # launch a curated app on boot" experiments after Phase 2 lands.
         run: |
           NO_STARTUP_ITEMS=1 ./scripts/build-boot-disk.sh \
-            build/pixelpad/PixelPad.bin,build/markdownviewer/MarkdownViewer.bin \
+            "" \
             dist/system755-vibe.dsk \
             --shared-dir src/web/public/shared || {
             status=$?
@@ -134,31 +115,11 @@ jobs:
             echo "::warning::system755-vibe.dsk was not produced. Web build will proceed without it (loader stays in STUB mode regardless)."
           fi
 
-      # MarkdownViewer's .code.bin still gets verified as it remains
-      # preinstalled on the boot disk (PixelPad too — but PixelPad
-      # has no Path-C consumer, so we don't assert its code.bin).
-      # The .code.bin files were originally splice inputs for the
-      # retired Path-C precompiled-app dispatch (#276); kept for the
-      # markdownviewer case where the boot-disk install still wants
-      # the data fork. Once Phase 2 deferred-boot lands and the boot
-      # disk goes app-free, this assertion can drop too.
-      - name: Verify .code.bin precompiles still emit
-        run: |
-          test -s build/markdownviewer/MarkdownViewer.code.bin
-          ls -la build/markdownviewer/MarkdownViewer.code.bin
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: classic-vibe-mac-${{ github.sha }}
           path: |
-            build/markdownviewer/MarkdownViewer.bin
-            build/markdownviewer/MarkdownViewer.code.bin
-            build/markdownviewer/MarkdownViewer.dsk
-            build/markdownviewer/MarkdownViewer.APPL
-            build/pixelpad/PixelPad.bin
-            build/pixelpad/PixelPad.dsk
-            build/pixelpad/PixelPad.APPL
             dist/system755-vibe.dsk
             dist/system755-vibe.dsk.json
             dist/system755-vibe-chunks/**
