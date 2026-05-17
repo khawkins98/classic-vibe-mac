@@ -534,6 +534,17 @@ async function loadToolModule(
       mkdirP(Module, full, made);
       Module.FS.writeFile(full, blob.subarray(entry.o, entry.o + entry.l));
     }
+    // cv-mac-only system headers — dropped into /sysroot/include/ for
+    // the cc1 path (headers mount only — ld doesn't need C headers).
+    // Mirrors the loadModule() path used by compileToAsm. Without this,
+    // #include <cvm_log.h> resolves in the show-asm view but fails in
+    // a real Build. See cv-mac PR #263 + the regression in #265's
+    // user-side build.
+    if (mount === "headers") {
+      const cvmIncludePath = "/sysroot/include/cvm_log.h";
+      mkdirP(Module, cvmIncludePath, made);
+      Module.FS.writeFile(cvmIncludePath, CVM_LOG_H);
+    }
   }
   return { Module, stderr };
 }
