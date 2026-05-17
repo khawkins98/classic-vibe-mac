@@ -426,10 +426,20 @@ body {
 }
 
 .loader--stub .loader__label,
-.loader--error .loader__label {
-  /* Slightly heavier treatment for the terminal states. */
+.loader--error .loader__label,
+.loader--waiting .loader__label {
+  /* Slightly heavier treatment for the terminal/waiting states. */
   border-bottom: 1px dotted var(--paper);
   padding-bottom: 4px;
+}
+
+/* Pre-first-boot welcome screen (#276 Phase 2 deferred-boot UX).
+   Same chrome as the stub block — the canvas pane reads as "the Mac
+   is intentionally waiting" rather than "loading is stuck". */
+.loader--waiting .loader__note {
+  max-width: 280px;
+  text-align: center;
+  line-height: 1.45;
 }
 
 .loader--error .loader__label {
