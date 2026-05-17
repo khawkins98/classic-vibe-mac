@@ -217,9 +217,14 @@ test("predefined macros honoured", () => {
   assert.match(r.output, /x = 1/);
 });
 
-test("real reader.r preprocesses against bundled RIncludes", () => {
-  const readerR = readFileSync(
-    join(REPO, "src", "app", "reader", "reader.r"),
+// Real-source preprocessor sanity check. Picks a current wasm-* sample's
+// .r file to verify the preprocessor handles a non-trivial real input
+// against the bundled RIncludes. Was reader.r + macweather.r before the
+// legacy demo apps retired (#276). wasm-bounce's .r is a representative
+// modern sample: minimal but uses #include + WIND/SIZE declarations.
+test("real wasm-bounce .r preprocesses against bundled RIncludes", () => {
+  const src = readFileSync(
+    join(REPO, "src", "app", "wasm-bounce", "bounce.r"),
     "utf8",
   );
   const RINC = join(REPO, "src", "web", "public", "wasm-rez", "RIncludes");
@@ -228,7 +233,7 @@ test("real reader.r preprocesses against bundled RIncludes", () => {
     headers.set(f, readFileSync(join(RINC, f), "utf8"));
   }
   const vfs = makeVfs(headers);
-  const r = preprocess(readerR, "reader.r", vfs, {
+  const r = preprocess(src, "bounce.r", vfs, {
     Rez: "1",
     DeRez: "0",
     true: "1",
@@ -244,39 +249,9 @@ test("real reader.r preprocesses against bundled RIncludes", () => {
     `unexpected errors: ${errs.map((e) => `${e.file}:${e.line}: ${e.message}`).join("; ")}`,
   );
   // The output should contain the type definitions from Multiverse.r —
-  // 'STR ', 'MENU', 'WIND', etc.
-  assert.match(r.output, /type 'STR#'/);
-  assert.match(r.output, /type 'MENU'/);
+  // 'WIND', etc. — and the user's resource definitions.
   assert.match(r.output, /type 'WIND'/);
-  // And the user's resource definitions.
   assert.match(r.output, /resource 'WIND' \(128\)/);
-});
-
-test("real macweather.r preprocesses", () => {
-  const src = readFileSync(
-    join(REPO, "src", "app", "macweather", "macweather.r"),
-    "utf8",
-  );
-  const RINC = join(REPO, "src", "web", "public", "wasm-rez", "RIncludes");
-  const headers = new Map();
-  for (const f of ["Multiverse.r", "Processes.r", "Menus.r", "Windows.r", "Dialogs.r", "MacTypes.r"]) {
-    headers.set(f, readFileSync(join(RINC, f), "utf8"));
-  }
-  const vfs = makeVfs(headers);
-  const r = preprocess(src, "macweather.r", vfs, {
-    Rez: "1",
-    DeRez: "0",
-    true: "1",
-    false: "0",
-    TRUE: "1",
-    FALSE: "0",
-  });
-  const errs = r.diagnostics.filter((d) => d.severity === "error");
-  assert.deepEqual(
-    errs,
-    [],
-    `unexpected errors: ${errs.map((e) => `${e.file}:${e.line}: ${e.message}`).join("; ")}`,
-  );
 });
 
 test("## in macro body emits warning diagnostic", () => {
