@@ -24,7 +24,12 @@
  * `isPersistent()` lets the chrome render a banner saying so.
  */
 
-import { fileKey, BUNDLE_VERSION, SAMPLE_PROJECTS } from "./types";
+import {
+  fileKey,
+  BUNDLE_VERSION,
+  SAMPLE_PROJECTS,
+  type SampleProject,
+} from "./types";
 
 const DB_NAME = "cvm-playground";
 const DB_VERSION = 1;
@@ -263,6 +268,29 @@ export async function removeUserFilename(
   if (idx < 0) return;
   list.splice(idx, 1);
   await writeUiState(USER_FILES_PREFIX + projectId, list);
+}
+
+// ── User-created projects ──────────────────────────────────────────
+//
+// The user can duplicate any SAMPLE_PROJECTS entry as a new project
+// (File → "Duplicate as new project…"). The new project lives in IDB
+// only — its metadata under `cvm:user-projects`, its file *contents*
+// under the normal `<projectId>/<filename>` keys via writeFile.
+//
+// The runtime cache + lookup helpers live in `types.ts`; this module
+// owns persistence only.
+
+const USER_PROJECTS_KEY = "cvm:user-projects";
+
+export async function getUserProjects(): Promise<SampleProject[]> {
+  const list = await readUiState<SampleProject[]>(USER_PROJECTS_KEY);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function saveUserProjects(
+  projects: readonly SampleProject[],
+): Promise<void> {
+  await writeUiState(USER_PROJECTS_KEY, [...projects]);
 }
 
 /**
