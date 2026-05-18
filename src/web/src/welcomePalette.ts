@@ -10,9 +10,9 @@
  *
  * Persistence: a localStorage flag (`cvm-welcome-seen`) gates the
  * first-run trigger. The modal's "Don't show this again" checkbox
- * defaults to checked — close-without-thinking == "I've seen it";
- * uncheck if you'd rather be re-greeted next session. The Apple-menu
- * entry opens it on demand regardless of the flag.
+ * defaults to UNchecked — close-without-thinking means "I'll see this
+ * next visit too." Tick the box to suppress it from then on. The
+ * Apple-menu entry opens it on demand regardless of the flag.
  */
 import "winbox/dist/winbox.bundle.min.js";
 import { enableShade } from "./winboxChrome";
@@ -167,7 +167,7 @@ function welcomeHtml(): string {
 
   <div class="cvm-welcome__actions">
     <label class="cvm-welcome__again">
-      <input type="checkbox" class="cvm-welcome__dont-again" checked />
+      <input type="checkbox" class="cvm-welcome__dont-again" />
       Don't show this again
     </label>
     <button type="button" class="cvm-welcome__cta">Get started</button>
