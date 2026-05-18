@@ -1732,6 +1732,142 @@ body.cvm-paused .emulator-canvas {
   margin-top: 4px;
 }
 
+/* --- Welcome palette (first-run onboarding) --------------------------
+   Singleton Mac OS 8-styled modal that surfaces the "vibe-code classic
+   Mac apps" pitch + a 4-card sample gallery the first time the page
+   loads. Re-openable from the Apple menu. localStorage flag gates the
+   first-run trigger; see src/web/src/welcomePalette.ts. */
+.cvm-welcome {
+  padding: 14px 18px 16px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.cvm-welcome__title {
+  margin: 0 0 6px;
+  font-family: var(--font-chrome);
+  font-size: 18px;
+}
+.cvm-welcome__lede {
+  margin: 0 0 14px;
+  color: var(--ink);
+}
+.cvm-welcome__lede code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--platinum-light);
+  padding: 0 3px;
+}
+.cvm-welcome__heading {
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  margin: 12px 0 8px;
+  padding: 2px 6px;
+  background: var(--platinum);
+  border-left: 3px solid var(--ink);
+}
+.cvm-welcome__gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cvm-welcome__card {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  /* Inset highlight so the cards read as Mac OS 8 paper insets, not
+     flat HTML divs. */
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+}
+.cvm-welcome__card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.cvm-welcome__card-name {
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  font-weight: bold;
+}
+.cvm-welcome__card-stars {
+  font-size: 10px;
+  color: var(--shadow);
+  letter-spacing: 1px;
+}
+.cvm-welcome__card-blurb {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink);
+  flex-grow: 1;
+}
+.cvm-welcome__try {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  padding: 2px 10px;
+  align-self: flex-end;
+  background: var(--platinum);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+}
+.cvm-welcome__try:active {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-welcome__footnote {
+  font-size: 11px;
+  color: var(--shadow);
+  margin: 0 0 12px;
+}
+.cvm-welcome__footnote a {
+  color: var(--accent, #336699);
+}
+.cvm-welcome__actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--shadow);
+}
+.cvm-welcome__again {
+  font-size: 11px;
+  color: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.cvm-welcome__cta {
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  padding: 4px 18px;
+  background: var(--platinum);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+  /* Default-button heavy border, classic Mac convention. */
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+.cvm-welcome__cta:active {
+  box-shadow:
+    inset -1px -1px 0 0 var(--highlight),
+    inset 1px 1px 0 0 var(--shadow);
+}
+
 /* Mac OS 8 chrome overrides applied to ALL WinBoxes (palettes + docked
    IDE panes). Shared border, striped titlebar, and paper title field
    live on .cvm-mac-winbox. Body background varies per-palette (paper
