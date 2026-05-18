@@ -1,57 +1,49 @@
 # tools/
 
-Local debug utilities. Not part of the production build; not run in CI.
+Local debug + toolchain utilities. Not part of the production build;
+not run in CI (except where noted).
 
-## `test-demo.sh` — automated prebuilt-demo boot tester
+## `tools/wasm-rez/`
 
-Drives one prebuilt demo button (`hello-toolbox`, `hello-bare`,
-`hello-initgraf`) through the playground UI and captures:
+Source for the in-browser Rez compiler — the wasm build of Retro68's
+Rez, vendored from upstream + slightly trimmed (mini-Rez). Built
+locally via `scripts/build-wasm-rez.sh`; the resulting
+`wasm-rez.{js,wasm}` is committed under `src/web/public/wasm-rez/`
+so production deploys don't need a wasm toolchain. See the README
+in that directory for the build recipe.
 
-- the `[prebuilt-demo]` console log (binary SHA + `Last-Modified` —
-  the canonical version check),
-- a viewport screenshot of the emulator after a configurable wait,
-- a JSON summary of all browser console messages during the run.
+The wasm-rez source is the canonical artefact — changes to
+`MiniLexer.cc` / `Rez_main.cc` / the bundled retro68 sources should
+round-trip through the build script and the resulting prebuilt blobs
+get re-committed. The corresponding GitHub Actions step is currently
+a no-op verification stub.
 
-Implements the spec in [issue #71](https://github.com/khawkins98/classic-vibe-mac/issues/71).
-The tooling exists because the [boot-test bug hunt in #64](https://github.com/khawkins98/classic-vibe-mac/issues/64)
-was bottlenecked on the manual click-and-screenshot step.
+## `tools/m68k-runner/`
 
-### Usage
+Native Musashi-based 68k boot tracer. The MVP that paid for itself
+within an hour and became the backbone of cv-mac's toolchain testing
+(see LEARNINGS.md Key Story #1). Loads a wasm-built MacBinary into a
+Musashi CPU emulator with minimal Mac OS stubs, walks the
+instruction trace + A-line trap dispatcher, and reports where the
+binary actually dies — without the 15-30 minute deploy-and-eyes-on
+cycle. See `tools/m68k-runner/README.md` for the build + usage
+recipe.
 
-```bash
-# Against deployed Pages (default — quickest)
-tools/test-demo.sh hello-bare
+## See also
 
-# Against local `vite preview` build
-tools/test-demo.sh hello-toolbox --site=preview
+The companion script suite under `scripts/` covers the local-dev
+loops on top of these toolchain pieces:
 
-# Longer wait if the cache is cold and BasiliskII boots slowly
-tools/test-demo.sh hello-initgraf --boot-wait=60
-```
+- `scripts/audit-wasm-samples.mjs` — `.c` half of the local audit
+- `scripts/audit-wasm-rez.mjs` — `.r` half
+- `scripts/audit-wasm-e2e.mjs` — both halves, combined report
+- `scripts/splice-bin.mjs` — offline reproducer of the browser's
+  `spliceResourceFork` for inspecting what's in the final `.bin`
+- `scripts/extract-resource-fork.mjs` — MacBinary resource-fork
+  inspector (built for #284's Path B work)
+- `scripts/build-wasm-rez.sh` — rebuilds `tools/wasm-rez/` and
+  vendors the result into `src/web/public/wasm-rez/`
 
-### Output
-
-Artefacts land under `tests/e2e/screenshots/`:
-
-- `<demo-id>-<iso-timestamp>.png` — the captured viewport.
-- `<demo-id>-<iso-timestamp>.json` — `{ demoId, sha256Prefix, durationMs,
-  prebuiltDemoConsoleLine, consoleLogs[] }`.
-
-### How to read the screenshot
-
-- **Bomb icon + "Sorry, a system error occurred"** → system-level crash
-  (CHK / type-1 / etc).
-- **Hand-stop + "The application 'X' has unexpectedly quit"** →
-  per-app crash caught by Process Manager.
-- **Emulated desktop with the app icon visible** → loader succeeded;
-  if no text was drawn, the app crashed silently OR exited cleanly.
-- **Visible drawn text** → the app actually got to its `DrawString`.
-
-### What's deliberately NOT here
-
-- Automated pass/fail on the screenshot. Today this is purely an
-  artefact-capture tool; the human (or AI agent) interpreting the
-  image is the assert step. Once the boot test passes we can add
-  pixel-diff or OCR for regression coverage.
-- CI gating. The 30s+ runtime per demo, plus emulator boot variance,
-  makes this unsuitable as a per-PR gate.
+See [`docs/DEBUGGING-VENDORED-APPS.md`](../docs/DEBUGGING-VENDORED-APPS.md)
+for the recipe that ties these tools together when a vendored Mac
+app fails silently.
