@@ -1294,6 +1294,35 @@ body.cvm-paused .emulator-canvas {
   z-index: 2;
 }
 
+/* Routines popup bar — CodeWarrior-style "{}" dropdown above the
+   editor listing every function in the current file. Hidden when
+   the file type has no routines we can extract (or when there are
+   zero). */
+.cvm-pg-routines-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--platinum-light);
+  border-bottom: 1px solid var(--shadow);
+  font-family: var(--font-chrome);
+  font-size: 11px;
+}
+.cvm-pg-routines-label {
+  color: var(--shadow);
+  white-space: nowrap;
+}
+.cvm-pg-routines-select {
+  flex-grow: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--paper);
+  border: 1px solid var(--shadow);
+  padding: 1px 4px;
+  color: var(--ink);
+}
+
 /* "+" New-file button at the end of the tab bar. Same shape as a
    tab but without the tab role + always inactive-styled, with a
    slightly larger glyph for affordance. */

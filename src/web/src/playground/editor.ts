@@ -30,6 +30,7 @@ import {
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { tags as t } from "@lezer/highlight";
 import { cpp } from "@codemirror/lang-cpp";
+import { syntaxTree } from "@codemirror/language";
 import { rez } from "./lang-rez";
 import { toolboxHoverTooltip } from "./toolbox-tooltip";
 import {
@@ -178,6 +179,12 @@ export async function mountPlayground(
     "#cvm-pg-project",
   )!;
   const tabBarEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-tabbar")!;
+  const routinesBarEl = rootEl.querySelector<HTMLDivElement>(
+    "#cvm-pg-routines-bar",
+  )!;
+  const routinesSelectEl = rootEl.querySelector<HTMLSelectElement>(
+    "#cvm-pg-routines",
+  )!;
   const downloadBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-download",
   )!;
@@ -534,6 +541,11 @@ export async function mountPlayground(
           // line are misleading — better to vanish until the next Build
           // run replays them on the freshly-compiled output.
           clearEditorDiagnostics(update.view);
+          // Keep the Routines popup in sync as the user types. Cheap —
+          // C path walks the lezer tree once, regex paths scan the
+          // (typically <100 KB) source. Debounce only if it shows up
+          // in a profile.
+          refreshRoutines();
         }
         if (update.selectionSet) {
           scheduleCursorSave();
@@ -751,6 +763,7 @@ export async function mountPlayground(
       loadingFile = false;
     }
     renderTabBar(nextProject, nextFile);
+    refreshRoutines();
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
     // Refresh the Assembly panel (if open). On a switch we still debounce —
@@ -854,8 +867,9 @@ export async function mountPlayground(
     void switchTo(current.project, tabs[next]!.dataset.file!);
   });
 
-  // Initial tab bar render.
+  // Initial tab bar + routines render.
   renderTabBar(project, filename);
+  refreshRoutines();
 
   // ── Tab bar rendering ─────────────────────────────────────────────────────
   // Builds the tab bar from scratch using DOM methods (no innerHTML injection)
@@ -909,6 +923,135 @@ export async function mountPlayground(
       editorMount.setAttribute("aria-labelledby", `cvm-pg-tab-${activeIdx}`);
     }
   }
+
+  // ── Routines popup (CodeWarrior-style) ───────────────────────────────
+  //
+  // A `{} Routines:` dropdown above the editor lists every function
+  // definition in the current file. Click → cursor jumps to the function.
+  // This is the iconic CodeWarrior IDE affordance from the late-90s Mac;
+  // pure period-correct authentication for cv-mac's "vibe-code Mac apps"
+  // pitch. C files use the lezer-cpp syntax tree to find
+  // FunctionDefinition nodes; .r files use a regex over the source to
+  // find `data 'TYPE' (id, "label")` resource declarations (Rez's
+  // equivalent unit of structure). .h files: function prototype regex.
+  // Anything else hides the bar entirely.
+
+  /** Walk the C/C++ syntax tree and collect FunctionDefinition entries
+   *  with their name + line. Returns []
+   *  if no defs found (the bar then hides). */
+  function extractRoutinesC(): Array<{ label: string; line: number }> {
+    const out: Array<{ label: string; line: number }> = [];
+    const tree = syntaxTree(view.state);
+    tree.cursor().iterate((node) => {
+      if (node.name !== "FunctionDefinition") return;
+      // The function's name lives in the Declarator subtree's Identifier.
+      // The grammar can wrap declarators (FunctionDeclarator → Identifier
+      // for plain `void foo()`, or PointerDeclarator → FunctionDeclarator
+      // → Identifier for `int *foo()`). Walk descendants for the first
+      // Identifier under a FunctionDeclarator.
+      let name: string | null = null;
+      const inner = node.node.cursor();
+      inner.iterate((n) => {
+        if (name) return false;
+        if (n.name === "Identifier" && n.node.parent?.name === "FunctionDeclarator") {
+          name = view.state.doc.sliceString(n.from, n.to);
+          return false;
+        }
+        return true;
+      });
+      if (name) {
+        const line = view.state.doc.lineAt(node.from).number;
+        out.push({ label: name, line });
+      }
+    });
+    return out;
+  }
+
+  /** Light-touch Rez "routine" extractor: every `data 'TYPE' (id…) {`
+   *  declaration. The "name" is the literal label inside the parens if
+   *  present, otherwise the type+id. Good enough for jumping around
+   *  Glypha's 2.7 MB .r or notepad's MBAR + MENU stack. */
+  function extractRoutinesRez(): Array<{ label: string; line: number }> {
+    const out: Array<{ label: string; line: number }> = [];
+    const text = view.state.doc.toString();
+    // Match `data 'TYPE' (id[, "name"]) {` — TYPE is 4 chars.
+    const re = /^(?:data|resource)\s+'(....)'\s*\(\s*(-?\d+)(?:\s*,\s*"([^"]*)")?/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const [, type, id, label] = m;
+      const line = view.state.doc.lineAt(m.index).number;
+      out.push({
+        label: label ? `'${type}' ${id} ${label}` : `'${type}' ${id}`,
+        line,
+      });
+    }
+    return out;
+  }
+
+  /** Header-file routines: function prototypes. Lightweight regex —
+   *  enough for clickable navigation in something like Glypha's
+   *  Externs.h. */
+  function extractRoutinesHeader(): Array<{ label: string; line: number }> {
+    const out: Array<{ label: string; line: number }> = [];
+    const text = view.state.doc.toString();
+    // Match `<type> <name>(`-shape prototypes at line start. Skip macros
+    // (#define / # at line start) + obvious non-decls. False positives
+    // are OK — this is for navigation, not parsing.
+    const re = /^\s*(?:(?:static|extern|pascal|inline)\s+)?[A-Za-z_][\w*\s]*?\s+(\*?)([A-Za-z_]\w*)\s*\(/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const [, , name] = m;
+      // Filter out C keywords that look like func names. Cheap allowlist.
+      if (/^(if|for|while|switch|return|sizeof|typedef)$/.test(name)) continue;
+      const line = view.state.doc.lineAt(m.index).number;
+      out.push({ label: name, line });
+    }
+    return out;
+  }
+
+  /** Re-populate the routines select for the current file. Hides the
+   *  bar entirely for file types we don't handle, or for files with
+   *  zero recognised routines. */
+  function refreshRoutines(): void {
+    const fname = current.filename.toLowerCase();
+    let routines: Array<{ label: string; line: number }> = [];
+    if (/\.c$/.test(fname)) routines = extractRoutinesC();
+    else if (/\.h$/.test(fname)) routines = extractRoutinesHeader();
+    else if (/\.r$/.test(fname)) routines = extractRoutinesRez();
+
+    if (routines.length === 0) {
+      routinesBarEl.hidden = true;
+      return;
+    }
+    routinesBarEl.hidden = false;
+    // Build the option list. First entry is a non-jumping placeholder so
+    // the same routine can be selected again (the change event won't
+    // fire if .value doesn't change, but we reset to "" after every
+    // jump so subsequent clicks fire).
+    const opts: string[] = [
+      `<option value="">{} ${routines.length} routine${routines.length === 1 ? "" : "s"}…</option>`,
+    ];
+    for (const r of routines) {
+      opts.push(
+        `<option value="${r.line}">${escapeHtml(r.label)}  (line ${r.line})</option>`,
+      );
+    }
+    routinesSelectEl.innerHTML = opts.join("");
+    routinesSelectEl.value = "";
+  }
+
+  routinesSelectEl.addEventListener("change", () => {
+    const line = parseInt(routinesSelectEl.value, 10);
+    if (!Number.isFinite(line) || line <= 0) return;
+    const ln = view.state.doc.line(line);
+    view.dispatch({
+      selection: { anchor: ln.from, head: ln.from },
+      scrollIntoView: true,
+    });
+    view.focus();
+    // Reset so the user can pick the same entry again.
+    routinesSelectEl.value = "";
+  });
 
   /** Add a new (empty) file to the active project. Prompts the user
    *  for a filename, validates extension + collision, persists the
@@ -1383,6 +1526,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         </button>
       </div>
       <div id="cvm-pg-tabbar" class="cvm-pg-tabbar" role="tablist" aria-label="Source files"></div>
+      <div class="cvm-pg-routines-bar" id="cvm-pg-routines-bar" hidden>
+        <label class="cvm-pg-routines-label" for="cvm-pg-routines">{} Routines:</label>
+        <select id="cvm-pg-routines" class="cvm-pg-routines-select" title="Jump to a function in the current file (CodeWarrior-style)">
+          <option value="">(no routines)</option>
+        </select>
+      </div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>
       <p class="cvm-pg-mobile-note">
         The editor is hidden on small screens. Open this page on a desktop
