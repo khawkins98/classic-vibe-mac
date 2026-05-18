@@ -203,6 +203,100 @@ Otherwise factoring out boilerplate from arbitrarily-shaped samples
 just hides the variation that does exist. Shelf first, shared header
 second.
 
+### 10. Closed-as-X-shipped-via-Y — when the premise is the bug
+
+[cv-mac #280](https://github.com/khawkins98/classic-vibe-mac/issues/280)
+sat open for a week framed as "asset-handling architecture: fork
+composition + multi-leaf HFS catalog + (optional) asset encoders." The
+trigger was Glypha III's 2.7 MB upstream `.r` file failing to compile
+in-browser. We shipped three real PRs of fork-composition
+infrastructure ([extractor #284](https://github.com/khawkins98/classic-vibe-mac/pull/284),
+[merger #285](https://github.com/khawkins98/classic-vibe-mac/pull/285),
+[`precompiledForkAssets` wiring #286](https://github.com/khawkins98/classic-vibe-mac/pull/286))
+on the assumption that "wasm-rez can't handle this input, so we need
+a separate path that doesn't go through it."
+
+After #286 landed, the user asked one question — *why do we need a
+bin to extract from? why can't we just compile the source code and
+assets?* — and that single sentence reframed the whole investigation.
+The actual root cause was a 64KB Emscripten stack overflow in
+wasm-rez's recursive evaluator on left-leaning CONCAT trees (the
+parser produces a deep AST for long sequences of `$"..."` hex
+literals). Fixed in
+[one line](https://github.com/khawkins98/classic-vibe-mac/pull/287)
+— `-sSTACK_SIZE=8388608` in `tools/wasm-rez/CMakeLists.txt`.
+Glypha's full upstream resource fork now compiles in-browser in
+~230 ms and the game plays cleanly via the source path. The
+fork-composition infra stays as scaffolding, but no current sample
+needs it.
+
+The diagnostic that should have run *first* — generate a synthetic
+input progressively larger and bisect until it fails — would have
+isolated the parser-stack issue in ~10 minutes. We didn't, because
+"vendored 3rd-party `.r` won't compile" *felt* like an inherent
+limit, so we built around it instead of into it. Three PRs of
+plumbing later, the question that surfaced the real cause was about
+the *shape of the work*, not the work itself.
+
+**Rule:** when a feature is closed/blocked because "the obvious path
+doesn't work," explicitly survey alternative paths through the same
+goal — even the ones that sound the same as the obvious one but
+with one variable different — before committing to infrastructure
+that routes around it. The user's question was "why can't we
+compile the source?", and the honest answer would have been "we
+think we can't, but we haven't actually bisected to find the
+ceiling." That's the missing diagnostic. (See Key Story #6 — same
+pattern at a different layer.)
+
+### 11. Distill the recipe while the context is fresh
+
+The Glypha closeout ([#287](https://github.com/khawkins98/classic-vibe-mac/pull/287)
+→ [#288](https://github.com/khawkins98/classic-vibe-mac/pull/288)
+→ [#289](https://github.com/khawkins98/classic-vibe-mac/pull/289)
+→ [#290](https://github.com/khawkins98/classic-vibe-mac/pull/290)
+→ [#291](https://github.com/khawkins98/classic-vibe-mac/pull/291)
+→ [#292](https://github.com/khawkins98/classic-vibe-mac/pull/292)
+plus [#294 toolkit](https://github.com/khawkins98/classic-vibe-mac/pull/294),
+[#295 vendoring recipe](https://github.com/khawkins98/classic-vibe-mac/pull/295),
+[#297 ALRT fix + audit-wasm-rez](https://github.com/khawkins98/classic-vibe-mac/pull/297),
+[#298 stale-modal fix](https://github.com/khawkins98/classic-vibe-mac/pull/298),
+[#299 audit-wasm-e2e](https://github.com/khawkins98/classic-vibe-mac/pull/299))
+produced three reusable artefacts that wouldn't exist if we'd just
+shipped #292 and moved on:
+
+1. **`scripts/splice-bin.mjs`** — offline reproducer of the browser's
+   `spliceResourceFork`. Lets you inspect what's in the spliced .bin
+   without spinning up a tab. Came out of a one-off Node script at
+   `/tmp/splice-glypha.mjs` that ruled out a hypothesised splice bug
+   in 5 minutes; promoted to `scripts/` after the fix landed.
+2. **`scripts/audit-wasm-e2e.mjs`** + `audit-wasm-rez.mjs` — local
+   pre-push checks that run the full `.c + .r` compile path for one
+   sample or all of them in ~5 seconds. The malformed-ALRT bug in
+   #297 would have been caught here before #296 ever merged if the
+   audit had existed at the time.
+3. **`docs/DEBUGGING-VENDORED-APPS.md`** + `VENDORING-A-MAC-APP.md` —
+   the recipe + the happy-path companion. The next person bringing
+   a third-party period app onto the shelf has both halves of the
+   playbook visible without rediscovering them.
+
+None of these existed in the original bug closeout. They came out
+of explicit "what's transferable?" conversations *after* the fix
+shipped — typically one round of "the next person debugging this
+will want X" → 30 minutes of refactoring/writing → ship as a
+separate small PR.
+
+**Rule:** after closing a meaty issue, before context evaporates,
+ask: *what would the next person debugging this same shape want?*
+The recipe distilling that yields outsized leverage. Three days
+later you'd remember the fix; one month later you'd have to read
+the PR chain again to remember why the fix was that fix. The
+recipe captures the shape, not just the fact.
+
+The corollary: the toolkit PRs above were all single-PR-scope each.
+Distilling-the-recipe doesn't mean writing a 1000-line framework;
+it means promoting the script you already wrote and the recipe you
+already followed into named, findable artefacts.
+
 ---
 
 ## How to use this file
