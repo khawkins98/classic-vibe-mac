@@ -437,23 +437,20 @@ export function mountMenubar(actions: MenubarActions): () => void {
     }
     // Global Cmd-key (Mac) / Ctrl-key (other) dispatch. We honour
     // shortcuts only when the modifier is held AND the key is a
-    // single character matching a registered MenuItem.shortcut. We
-    // skip when the user is typing in an input/textarea/contenteditable
-    // so CodeMirror keybindings (Cmd-A select-all etc.) win locally.
+    // single character matching a registered MenuItem.shortcut.
+    //
+    // Previously this also skipped when focus was in an editable
+    // surface (CodeMirror, input, textarea) to defer to local
+    // keybindings. None of the menubar's current shortcuts
+    // (O / P / S / , / ?) collide with CodeMirror's default keymap,
+    // and users do reach for ⌘P / ⌘? while typing in the editor —
+    // so the dispatcher now fires regardless of focus. If a future
+    // menu shortcut collides with a CodeMirror binding we'll add a
+    // per-shortcut skip rather than a blanket editable-focus skip.
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     if (!mod || e.altKey) return;
     // Only single-character keys are shortcuts (skip arrows, F-keys, etc.).
     if (e.key.length !== 1) return;
-    // Skip when focus is in an editable surface — CodeMirror, inputs, etc.
-    // Check BOTH event target (some events lift target to document.body)
-    // and the active element (the real focus owner). Either being editable
-    // is enough to defer to local keybindings.
-    if (
-      isEditableTarget(e.target as HTMLElement | null) ||
-      isEditableTarget(document.activeElement as HTMLElement | null)
-    ) {
-      return;
-    }
     const target = e.key.toUpperCase();
     // Walk every menu's schema looking for the shortcut. Static menus
     // only; the Windows menu's dynamic entries don't carry shortcuts.

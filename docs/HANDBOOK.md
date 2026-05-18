@@ -136,10 +136,11 @@ Click a routine → cursor jumps to that line. The popup hides
 itself for file types it can't parse (or when there are zero
 routines).
 
-### Open Quickly (⌘P)
+### Open Quickly (⌘P or ⌘D)
 
 Press **⌘P** anywhere on the page (Cmd-P on Mac, Ctrl-P
-elsewhere) → a centered fuzzy filename palette opens.
+elsewhere) → a centered fuzzy filename palette opens. **⌘D** is
+also accepted — it was CodeWarrior's original Open Quickly binding.
 
 - Type a few letters: `mai` for `main.c`, `gly` for `glypha3.r`
 - **↑** / **↓** navigate, **Enter** to open, **Esc** to dismiss
@@ -330,7 +331,7 @@ hand-rolled-sample recipe.
 
 | Keys | Where | What |
 |-|-|-|
-| ⌘P | anywhere | Open Quickly |
+| ⌘P, ⌘D | anywhere | Open Quickly (⌘D is the CodeWarrior alias) |
 | ⌘O | anywhere | Open Project (the richer picker) |
 | ⌘S | anywhere | Download current project as .zip |
 | ⌘? | anywhere | Help palette |

@@ -164,29 +164,19 @@ export function openOpenQuickly(): void {
   setTimeout(() => input.focus(), 0);
 }
 
-/** Install the ⌘P (Meta-P) / Ctrl-P keyboard shortcut for the case
- *  the menubar's global dispatcher *skips*: when focus is in an
- *  editable surface (CodeMirror's contenteditable, prompts, etc).
- *  The menubar binds the same shortcut via the File menu's
- *  `shortcut: "P"` field for the non-editor case — between the two
- *  handlers, ⌘P always works in the playground regardless of focus.
+/** Install the ⌘D (Meta-D / Ctrl-D) keyboard shortcut as an alias for
+ *  Open Quickly. ⌘P is bound via the menubar's File menu shortcut
+ *  field — the menubar's global keydown dispatcher fires it regardless
+ *  of focus. ⌘D is here because CodeWarrior's original Open Quickly
+ *  binding was ⌘D; period-Mac muscle memory reaches for that, modern
+ *  muscle memory reaches for ⌘P. Both work.
  *
  *  Returns the unbinder if a caller ever needs to detach. */
 export function installOpenQuicklyShortcut(): () => void {
   function handler(e: KeyboardEvent): void {
     if (!(e.metaKey || e.ctrlKey)) return;
-    if (e.altKey) return;
-    if (e.key !== "p" && e.key !== "P") return;
-    // Only fire when focus is in an editable surface — the menubar
-    // dispatcher already handles the non-editable case (where the
-    // browser's Print is least missed).
-    const ae = document.activeElement as HTMLElement | null;
-    const isEditable =
-      !!ae &&
-      (ae.tagName === "INPUT" ||
-        ae.tagName === "TEXTAREA" ||
-        ae.isContentEditable);
-    if (!isEditable) return;
+    if (e.altKey || e.shiftKey) return;
+    if (e.key.toLowerCase() !== "d") return;
     e.preventDefault();
     openOpenQuickly();
   }
