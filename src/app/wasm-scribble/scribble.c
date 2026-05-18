@@ -29,7 +29,15 @@
 #include <Events.h>
 #include <Memory.h>
 
+/* Debug Console — count strokes + log Clear events to the Output
+ * panel. Lets you see "stroke #3 -- 124 segments" scroll past while
+ * you draw, without having to add an on-screen counter that fights
+ * with the drawing surface. */
+#include <cvm_log.h>
+
 #define kWindowID 128
+
+static long gStrokeCount = 0;
 
 QDGlobals qd;
 
@@ -78,6 +86,7 @@ static void ClearDrawing(void) {
 
 static void TrackDraw(Point startLocal) {
     Point cur = startLocal;
+    long segments = 0;
     MoveTo(cur.h, cur.v);
     /* Two-pixel filled dot at the start so a tap registers. */
     Rect dot;
@@ -94,7 +103,23 @@ static void TrackDraw(Point startLocal) {
         if (now.h != cur.h || now.v != cur.v) {
             LineTo(now.h, now.v);
             cur = now;
+            segments++;
         }
+    }
+    /* Log the completed stroke. */
+    gStrokeCount++;
+    {
+        Str255 line; line[0] = 0;
+        const char *p = "stroke #";
+        while (*p && line[0] < 254) line[++line[0]] = *p++;
+        unsigned char tmp[16];
+        NumToString(gStrokeCount, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 253; i++) line[++line[0]] = tmp[i];
+        p = " -- "; while (*p && line[0] < 254) line[++line[0]] = *p++;
+        NumToString(segments, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 253; i++) line[++line[0]] = tmp[i];
+        p = " segments"; while (*p && line[0] < 254) line[++line[0]] = *p++;
+        cvm_log_p(line);
     }
 }
 
@@ -107,8 +132,11 @@ int main(void) {
     InitDialogs(0);
     InitCursor();
 
+    cvm_log_reset();
+    cvm_log("scribble: ready -- drag to draw, Clear to wipe");
+
     gWin = GetNewWindow(kWindowID, NULL, (WindowPtr)(-1));
-    if (!gWin) { SysBeep(10); return 1; }
+    if (!gWin) { cvm_log("scribble: GetNewWindow failed"); SysBeep(10); return 1; }
     SetPort((GrafPtr)gWin);
     TextFont(0); TextSize(12);
 
@@ -138,6 +166,7 @@ int main(void) {
                         while (TickCount() - t < 6) { /* ~100 ms flash */ }
                         InvertRoundRect(&gClearRect, 6, 6);
                         ClearDrawing();
+                        cvm_log("scribble: cleared");
                     } else {
                         TrackDraw(local);
                     }
