@@ -19,13 +19,15 @@
  *     resulting .o files)
  *   - prints a one-line per-sample summary + final pass/fail tally
  *
- * Out of scope: the .r resource fork. wasm-rez splicing only happens
- * in the browser today; this script verifies the C side links. If
- * the C side compiles, the .r splice is unlikely to be the failure
- * mode (it's been stable since cv-mac #88).
+ * Out of scope: the .r resource fork — that's audit-wasm-rez.mjs's
+ * companion job. For a combined .c + .r run see audit-wasm-e2e.mjs.
+ *
+ * Usage:
+ *   node scripts/audit-wasm-samples.mjs           # all wasm-* samples
+ *   node scripts/audit-wasm-samples.mjs <name>    # one sample
  *
  * Exit codes:
- *   0  every sample compiled
+ *   0  every audited sample compiled
  *   1  ≥1 sample failed (failures printed at end)
  *   2  toolchain bundle missing / unreadable
  */
@@ -176,9 +178,11 @@ async function compileProject(projectDir) {
   return { ok: true, binLen: result.bin.length };
 }
 
-// ── main: walk every wasm-* directory ───────────────────────────────
+// ── main: walk every wasm-* directory (or just the one named on the CLI) ──
+const filter = process.argv[2];
 const samples = readdirSync(APP_DIR)
   .filter((d) => d.startsWith("wasm-") && statSync(join(APP_DIR, d)).isDirectory())
+  .filter((d) => !filter || d === filter)
   .sort();
 
 console.log(`[audit] ${samples.length} wasm-* samples under ${APP_DIR}`);

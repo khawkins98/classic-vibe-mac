@@ -87,9 +87,14 @@ ground but check licenses carefully.
 6. **Audit + run the unit tests:**
 
    ```bash
-   node scripts/audit-wasm-samples.mjs
-   # ✓ wasm-myapp ⟦bytes⟧ ⟦ms⟧   — your new sample appears in the
-   #                                pass list
+   # Combined .c + .r audit — verifies both halves of the build path
+   # without a browser. ~5s for all samples, ~1.5s for one.
+   npm run audit:wasm-e2e -- wasm-myapp
+   # ✓ wasm-myapp  c=✓ ⟦bytes⟧ ⟦ms⟧  r=✓ ⟦bytes⟧ ⟦ms⟧
+
+   # Or run each half separately for full per-stage diagnostics:
+   node scripts/audit-wasm-samples.mjs wasm-myapp
+   node scripts/audit-wasm-rez.mjs wasm-myapp
 
    node --test tests/unit/wasm-rez-stack.test.mjs
    # ✓ wasm-rez handles 2000-literal stress
