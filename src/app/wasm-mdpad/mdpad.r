@@ -68,10 +68,20 @@ resource 'WIND' (128) {
     noAutoCenter
 };
 
+/* ALRT 128's stages array — one record per of 4 stages (1 click = stage
+ * advance). Each record is (default-button, visibility, sound-mask). The
+ * default Mac alert behaviour wants OK as default + visible + silent for
+ * every stage; previous "{ OK, OK, OK, OK }" shorthand was missing fields
+ * and tripped wasm-rez's assertion at ResourceDefinitions.cc:253. */
 resource 'ALRT' (128) {
     { 80, 80, 250, 420 },
     128,
-    { OK, OK, OK, OK },
+    {
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent
+    },
     alertPositionMainScreen
 };
 
