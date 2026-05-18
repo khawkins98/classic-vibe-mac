@@ -17,10 +17,19 @@ import {
   BUILT_AT,
   TOOLCHAIN_VERSION,
   SAMPLE_PROJECTS,
+  findProject,
+  setUserProjectsCache,
+  type SampleProject,
 } from "./playground/types";
 import {
   writeFile as persistWriteFile,
   writeUiState as persistWriteUiState,
+  readFile as persistReadFile,
+  readOrSeedFile,
+  getUserProjects,
+  saveUserProjects,
+  getUserFilenames,
+  addUserFilename,
 } from "./playground/persistence";
 
 // Identity stamp printed on every page load. Survives in DevTools across
@@ -499,6 +508,21 @@ async function consumeImportSourceFragment(): Promise<boolean> {
 // promise so the editor's first paint shows the imported content.
 const importReady: Promise<boolean> = consumeImportSourceFragment();
 
+// Hydrate the user-projects runtime cache (#308 Phase 1) BEFORE
+// mountPlayground runs. The dropdown render + initial project lookup
+// both happen during mount; if the cache is empty when they fire, the
+// user-projects from a previous session would silently disappear from
+// the picker until the next page reload.
+async function hydrateUserProjects(): Promise<void> {
+  try {
+    const list = await getUserProjects();
+    setUserProjectsCache(list);
+  } catch (e) {
+    console.warn("[cvm] failed to hydrate user-projects cache:", e);
+  }
+}
+const userProjectsReady = hydrateUserProjects();
+
 if (playgroundEl) {
   // Hot-load callback: hands the patched HFS image to the loader, which
   // tears down the worker, spawns a fresh one with the new disk in the
@@ -512,6 +536,9 @@ if (playgroundEl) {
       const sel = getProjectDropdown();
       if (sel) sel.value = "wasm-hello";
     }
+    // User-projects cache must be populated before mountPlayground
+    // renders the dropdown / looks up the initial project.
+    await userProjectsReady;
     const mount = mountPlayground(
       playgroundEl,
       import.meta.env.BASE_URL,
@@ -635,7 +662,7 @@ function listRecentProjects(): Array<{ label: string; switchTo: () => void }> {
   const current = activeProjectId();
   const recents = readRecents().filter((id) => id !== current);
   return recents
-    .map((id) => SAMPLE_PROJECTS.find((p) => p.id === id))
+    .map((id) => findProject(id))
     .filter((p): p is (typeof SAMPLE_PROJECTS)[number] => p !== undefined)
     .map((p) => ({
       label: p.label,
@@ -655,7 +682,7 @@ function switchFile(filename: string): void {
 function renderFileList(): void {
   if (!filesList) return;
   const projectId = activeProjectId();
-  const project = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+  const project = findProject(projectId);
   if (!project) {
     filesList.innerHTML = "";
     return;
@@ -731,6 +758,108 @@ if (filesList) {
   settle();
 }
 
+// ── Duplicate-as-new-project (#308 Phase 1) ────────────────────────────
+//
+// File → "Duplicate as new project…" — clones the currently-active
+// project (any shelf sample, or another user-project) into a new
+// IDB-only user project. The user names it + picks a 4-letter creator
+// code; we duplicate every file's current contents (whatever the user
+// has edited it to, not the bundled defaults), persist a new
+// SampleProject record under `cvm:user-projects`, refresh the dropdown
+// in place via the `cvm:user-projects-changed` event, and switch the
+// editor to the new project.
+//
+// Limitations (filed under #308 for the polish PR):
+//   - No delete affordance yet — clearing IDB or saveUserProjects(list
+//     - one) is the workaround for now.
+//   - No rename — user picks the label at create time.
+
+function slugifyProjectLabel(label: string): string {
+  const s = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return s.length > 0 ? s.slice(0, 24) : "project";
+}
+
+async function handleDuplicateProject(): Promise<void> {
+  const srcId = activeProjectId();
+  const src = findProject(srcId);
+  if (!src) {
+    console.warn("[cvm] duplicate: no active project");
+    return;
+  }
+  const label = window.prompt(
+    "Name your new project:",
+    `${src.label} (copy)`,
+  );
+  if (!label || !label.trim()) return;
+  const creator = window.prompt(
+    "4-letter creator code (e.g. CVMR). Uppercase ASCII, exactly 4:",
+    src.appCreator || "CVUS",
+  );
+  if (!creator || !/^[\x20-\x7E]{4}$/.test(creator)) {
+    window.alert("Creator code must be exactly 4 printable ASCII chars.");
+    return;
+  }
+
+  const baseUrl = import.meta.env.BASE_URL;
+  const id = `user-${slugifyProjectLabel(label)}-${Date.now().toString(36)}`;
+
+  // Duplicate the source's current files (including any user-added
+  // files in the source project) into the new project id.
+  const srcUserFiles = await getUserFilenames(src.id);
+  const allFiles = [...src.files, ...srcUserFiles.filter((f) => !src.files.includes(f))];
+  for (const filename of allFiles) {
+    // Prefer the user's edited copy in IDB; fall back to the bundled
+    // seed if the file hasn't been edited (only applies to shipped
+    // samples, not user-projects).
+    let content = await persistReadFile(src.id, filename);
+    if (content === undefined) {
+      try {
+        content = await readOrSeedFile(baseUrl, src.id, filename);
+      } catch {
+        content = "";
+      }
+    }
+    await persistWriteFile(id, filename, content);
+    if (!src.files.includes(filename)) {
+      // The file came from the source's user-files list — record it
+      // in the new project's user-files list so it appears in the
+      // tab bar on load.
+      await addUserFilename(id, filename);
+    }
+  }
+
+  // Persist the new project's metadata. Shape mirrors SAMPLE_PROJECTS:
+  // any properties the editor reads (label, files, rezFile, outputName,
+  // appType, appCreator, complexity) are carried straight from the
+  // source so the duplicate behaves identically until the user edits.
+  const newProject: SampleProject = {
+    ...src,
+    id,
+    label: label.trim(),
+    appCreator: creator,
+    // Clone the files list so subsequent mutations to the source don't
+    // leak into the duplicate.
+    files: [...src.files],
+  };
+  const list = await getUserProjects();
+  list.push(newProject);
+  await saveUserProjects(list);
+
+  // Update the runtime cache + ping the editor to re-render its
+  // dropdown. The editor listens for this event and re-renders without
+  // re-mounting.
+  setUserProjectsCache(list);
+  window.dispatchEvent(new CustomEvent("cvm:user-projects-changed"));
+
+  // Switch the dropdown / editor to the new project. recordRecentProject
+  // runs as part of switchProject.
+  switchProject(id);
+  console.info(`[cvm] duplicated ${src.id} → ${id} ("${label}", ${creator})`);
+}
+
 async function handleOpenZip(): Promise<void> {
   console.info("[cvm] open-zip: prompting user for file");
   const file = await pickZipFile();
@@ -759,7 +888,7 @@ async function handleOpenZip(): Promise<void> {
   }
 
   const result = await importZipFile(file);
-  const lookup = (id: string) => SAMPLE_PROJECTS.find((p) => p.id === id);
+  const lookup = (id: string) => findProject(id);
   console.info(`[cvm] open-zip: ${summariseImport(result, lookup)}`);
   for (const err of result.errors) console.warn(`[cvm] open-zip: ${err}`);
 
@@ -807,6 +936,7 @@ mountMenubar({
     onOpenZip: () => { void handleOpenZip(); },
   }),
   openZipPicker: () => { void handleOpenZip(); },
+  duplicateCurrentAsNewProject: () => { void handleDuplicateProject(); },
   downloadCurrentZip: () => {
     // The Playground toolbar exposes the canonical download trigger;
     // dispatch a click rather than re-implementing the build/zip flow.
