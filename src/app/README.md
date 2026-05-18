@@ -189,6 +189,11 @@ variations on a theme.
 | `wasm-dialog/` | `dialog.c` + `.r` | `DLOG` + `DITL` (StaticText + EditText + 2 Buttons), `GetNewDialog` / `ModalDialog` / `GetDialogItem` / `GetDialogItemText` / `SelectDialogItemText` (modern Universal Headers names — in-browser libInterface dropped the legacy aliases) | 180 |
 | `wasm-sound/` | `sound.c` + `.r` | `SysBeep(duration)` — the simplest, oldest Sound Manager entry-point | 140 |
 | `wasm-color/` | `color.c` + `.r` | Color QuickDraw `RGBColor`, `RGBForeColor`, `PaintRect` — the 1990 Macintosh II 6-colour palette | 140 |
+| `wasm-debug-console/` | `console.c` + `cvm_log.h` + `.r` | Reference for `cvm_log()` — the Mac-side debug-log API mounted as a system header so any sample can `#include <cvm_log.h>`. Writes through extfs `:Unix:` to a file the host polls and surfaces in the Output → Console tab | 220 |
+| `wasm-icon-gallery/` | `gallery.c` + `gallery.r` + `icons.rsrc.bin` | Pre-built `cicn` / `ICN#` / `ics#` resources spliced in via the `binaryAssets` mechanism — the first sample to demonstrate the playground can ship arbitrary precompiled `.rsrc.bin` alongside the user's editable `.r` | 250 |
+| `wasm-arkanoid/` | `arkanoid.c` + `.r` | Hand-rolled brick-breaker — `GetMouse`-driven paddle, vectorised brick grid, ball-vs-rect collision, `SysBeep` on hit. The game-loop pattern at meaningful scale | 250 |
+| `wasm-mdpad/` | `mdpad.c` + `.r` | Split-pane Markdown editor with live preview — source TextEdit on the left + custom-drawn rendered preview on the right (re-renders each keystroke). File → Open / Save / Save As round-trip `.md` files to `:Shared:` with CR↔LF translation at the file boundary. "Modern format in classic chrome" exhibit | 620 |
+| `wasm-glypha3/` | 9 `.c` files + `glypha3.r` (2.7 MB upstream Rez) | John Calhoun's 1992 arcade game, vendored whole from softdorothy/Glypha3 (MIT). Plays in the tab with full sprite art + 17 sound effects after the wasm-rez `STACK_SIZE` bump in #287 unblocked the upstream resource fork. The "real period app at scale" milestone | 6,600 |
 
 **Coverage gaps worth filling next** — surfaces no sample exercises:
 
