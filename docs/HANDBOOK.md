@@ -377,6 +377,39 @@ shortcuts take over again. The active pane's titlebar shows the
 classic Mac OS 8 pinstripes; inactive panes go flat — same
 affordance period Mac users will recognise from System 7/8 windows.
 
+### Shortcuts the browser refuses to give us
+
+Even with the Macintosh pane active, your browser keeps a small set
+of ⌘-shortcuts for itself and refuses to forward them to the page —
+this is a security feature, not a bug we can patch:
+
+| Shortcut | What your browser does | What you wanted |
+|-|-|-|
+| ⌘N | New browser window | New Mac document |
+| ⌘T | New browser tab | (varies) |
+| ⌘W | Close browser tab | Close Mac window |
+| ⌘Q | Quit browser | Quit Mac app |
+| ⌘L | Focus URL bar | (varies) |
+
+Two ways around it:
+
+1. **Use the menubar** inside the running Mac (the actual Mac OS
+   menubar at the top of the Macintosh pane). File → New, File →
+   Close, etc. all work because they don't depend on the host
+   browser releasing the keystroke.
+2. **Fullscreen Mac mode** (Chromium-only — Chrome, Edge, Brave,
+   etc.). Click the **Fullscreen Mac** button below the canvas.
+   The page goes fullscreen and uses the
+   [Keyboard Lock API](https://developer.mozilla.org/en-US/docs/Web/API/Keyboard/lock)
+   to capture the reserved shortcuts. Press Esc to leave fullscreen
+   and the host browser gets its shortcuts back.
+
+Firefox and Safari users don't see the Fullscreen Mac button
+(they'd just get a fullscreen view with no extra shortcut capture
+— the Keyboard Lock API isn't implemented there). You'll see a
+one-shot yellow note explaining this the first time you click into
+the Mac pane; tick the × to dismiss it for keeps.
+
 ---
 
 ## Where to go next
