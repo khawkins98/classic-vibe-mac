@@ -69,6 +69,8 @@ import {
   readUiState,
   writeUiState,
   clearProjectFiles,
+  getUserFilenames,
+  addUserFilename,
 } from "./persistence";
 import { preprocess } from "./preprocessor";
 import { createVfs } from "./vfs";
@@ -204,10 +206,24 @@ export async function mountPlayground(
   // we retired a project. Previously this defaulted to "reader" which
   // pointlessly survived Reader's retirement.)
   const savedProject = await readUiState<string>(UI_PROJECT);
-  const project: SampleProject =
+  const projectTemplate: SampleProject =
     (savedProject
       ? SAMPLE_PROJECTS.find((p) => p.id === savedProject)
       : undefined) ?? SAMPLE_PROJECTS[0]!;
+
+  // Live project: SAMPLE_PROJECTS entry with user-added filenames
+  // appended. `project.files` is mutated in place by newFile() (and
+  // by the project-switch handler when re-loading from a different
+  // sample). The build pipeline gathers sources from `project.files`
+  // + `readOrSeedFile` for content, so a freshly-added file flows
+  // through Build & Run without extra plumbing — the file just has
+  // to be in `project.files` and have content under
+  // `<projectId>/<filename>` in IDB.
+  const userFiles = await getUserFilenames(projectTemplate.id);
+  const project: SampleProject = {
+    ...projectTemplate,
+    files: [...projectTemplate.files, ...userFiles],
+  };
   const savedFile = (await readUiState<string>(UI_FILE)) ?? project.files[0]!;
   const filename = project.files.includes(savedFile)
     ? savedFile
@@ -680,8 +696,19 @@ export async function mountPlayground(
     const seq = ++switchSeq;
     await flushSave();
     if (seq !== switchSeq) return;
-    const nextProject = SAMPLE_PROJECTS.find((p) => p.id === projectId);
-    if (!nextProject) return;
+    const template = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+    if (!template) return;
+    // Live project for the target: template + any user-added filenames.
+    // Object.assign mutates the closure-captured `project` so other code
+    // sites that read project.files / project.id stay in sync with the
+    // currently-active project (newFile() pushes into project.files,
+    // build pipeline reads proj.files for source-gathering, etc.).
+    const nextUser = await getUserFilenames(projectId);
+    const nextProject: SampleProject = {
+      ...template,
+      files: [...template.files, ...nextUser],
+    };
+    Object.assign(project, nextProject);
     const nextFile = nextProject.files.includes(file)
       ? file
       : nextProject.files[0]!;
@@ -762,6 +789,14 @@ export async function mountPlayground(
 
   // ── Tab bar event delegation ──────────────────────────────────────────────
   tabBarEl.addEventListener("click", (e) => {
+    // "+" button at the end of the tab bar — adds a new file.
+    const newBtn = (e.target as Element).closest(
+      "[data-action='new-file']",
+    ) as HTMLButtonElement | null;
+    if (newBtn) {
+      void newFile();
+      return;
+    }
     const btn = (e.target as Element).closest(
       "[role='tab']",
     ) as HTMLButtonElement | null;
@@ -832,11 +867,52 @@ export async function mountPlayground(
       btn.appendChild(label);
       tabBarEl.appendChild(btn);
     });
+    // "+" button at the end of the tab bar — adds a new file to the
+    // current project. Stored in IDB only (not in the seeded bundle),
+    // tracked under getUserFilenames(projectId), gets included in
+    // Build & Run automatically because the build pipeline reads from
+    // `project.files` which we extend on add.
+    const newBtn = document.createElement("button");
+    newBtn.type = "button";
+    newBtn.className = "cvm-pg-tab cvm-pg-tab--new";
+    newBtn.title = "Add a new file to this project";
+    newBtn.setAttribute("aria-label", "Add a new file to this project");
+    newBtn.dataset.action = "new-file";
+    newBtn.textContent = "+";
+    tabBarEl.appendChild(newBtn);
     // Point the tabpanel at the active tab for screen readers.
     const editorMount = rootEl.querySelector("#cvm-pg-editor-mount");
     if (editorMount && activeIdx >= 0) {
       editorMount.setAttribute("aria-labelledby", `cvm-pg-tab-${activeIdx}`);
     }
+  }
+
+  /** Add a new (empty) file to the active project. Prompts the user
+   *  for a filename, validates extension + collision, persists the
+   *  empty content + filename, and switches the editor to it. */
+  async function newFile(): Promise<void> {
+    const raw = window.prompt(
+      "New filename (e.g. helper.c, foo.h, my.r):",
+      "helper.c",
+    );
+    if (raw === null) return;                          // user cancelled
+    const name = raw.trim();
+    if (!name) return;
+    if (!/^[A-Za-z0-9_.-]+\.(c|h|r)$/i.test(name)) {
+      window.alert(
+        "Filename must end in .c, .h, or .r and contain only " +
+          "letters/digits/underscores/hyphens/dots.",
+      );
+      return;
+    }
+    if (project.files.includes(name)) {
+      window.alert(`A file named ${name} already exists in this project.`);
+      return;
+    }
+    await addUserFilename(project.id, name);
+    await writeFile(project.id, name, "");
+    project.files.push(name);
+    await switchTo(project.id, name);
   }
 
   function updateTabBar(): void {
