@@ -1323,6 +1323,88 @@ body.cvm-paused .emulator-canvas {
   color: var(--ink);
 }
 
+/* Open Quickly palette (⌘P) — transient centered overlay with
+   filename input + filtered file list. Mac OS 8 paper inset, dark
+   semi-transparent backdrop. Lives outside any WinBox; the overlay
+   intercepts outside-clicks for dismissal. */
+.cvm-openquickly-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 10000; /* above WinBox + the menubar dropdown */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+.cvm-openquickly {
+  width: min(520px, 92vw);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    4px 4px 0 0 rgba(0, 0, 0, 0.35);
+  padding: 8px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink);
+}
+.cvm-openquickly__input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 5px 8px;
+  background: var(--paper);
+  border: 1px solid var(--shadow);
+  box-sizing: border-box;
+  outline: none;
+}
+.cvm-openquickly__input:focus {
+  border-color: var(--ink);
+  box-shadow: inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-openquickly__list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--shadow);
+  background: var(--paper);
+}
+.cvm-openquickly__row {
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cvm-openquickly__row--active,
+.cvm-openquickly__row:hover {
+  background: var(--accent, #336699);
+  color: var(--paper);
+}
+.cvm-openquickly__hint {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--shadow);
+  font-size: 10px;
+  color: var(--shadow);
+  text-align: center;
+}
+.cvm-openquickly__hint kbd {
+  font-family: var(--font-chrome);
+  font-size: 10px;
+  background: var(--platinum-light);
+  border: 1px solid var(--shadow);
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 1px;
+}
+
 /* "+" New-file button at the end of the tab bar. Same shape as a
    tab but without the tab role + always inactive-styled, with a
    slightly larger glyph for affordance. */
