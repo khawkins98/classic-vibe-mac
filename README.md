@@ -197,8 +197,9 @@ no CI fetch. The Mac canvas shows the welcome placeholder forever
 Output panel, and the audit all work normally:
 
 ```sh
-npm run dev      # → http://localhost:5173/
-npm run audit:wasm-shelf   # compile all 25 samples headlessly via wasm-cc1
+npm run dev               # → http://localhost:5173/
+npm run audit:wasm-e2e    # compile every sample's .c + .r locally, no browser
+npm run audit:wasm-e2e -- wasm-mdpad   # or just one
 ```
 
 **Full deploy** — also includes the boot disk so Build & Run actually
