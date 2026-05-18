@@ -38,8 +38,13 @@ export function openWelcome(): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wb: any = new WinBox({
     title: "Welcome to classic-vibe-mac",
-    width: "540px",
-    height: "580px",
+    // Sized to fit the full pitch + 2×2 gallery + "Don't show again"
+    // footer + Get started button without scrolling at the default
+    // viewport. Was 540×580 — the footer row clipped on the original
+    // chrome height, so users couldn't see the CTA or the
+    // dismiss-forever checkbox without resizing the WinBox manually.
+    width: "640px",
+    height: "640px",
     x: "center",
     y: "center",
     html: welcomeHtml(),
