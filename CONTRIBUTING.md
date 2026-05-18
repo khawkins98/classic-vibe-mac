@@ -154,12 +154,31 @@ feat(api)!: rename disk image output path
 
 ## Before opening a PR
 
-- Make sure the build passes locally (or in CI on your branch)
+- Make sure the build passes locally (or in CI on your branch). For
+  `wasm-*` sample changes, run `npm run audit:wasm-e2e -- <sample>`
+  — the combined `.c` + `.r` audit catches most regressions in ~1.5s
 - Update `README.md` / `PRD.md` if behavior or architecture changed
-- Add a note to [`LEARNINGS.md`](./LEARNINGS.md) if you discovered something
-  non-obvious along the way (Retro68 quirks, HFS gotchas, CORS issues,
-  System 7 API surprises, etc.) — future contributors will thank you
+- **Update [`docs/HANDBOOK.md`](./docs/HANDBOOK.md) when a user-facing
+  thing changes** — a new menu item, a new keyboard shortcut, a new
+  toolbar button, a new pane, a behavioural change to Build & Run, a
+  new persistence key, a new way to make/save/open a project or file.
+  The handbook is the end-user manual; if a visitor opening the page
+  would notice your change, the handbook should reflect it. Sections
+  worth scanning before you ship:
+  - "Menu bar reference" / "Keyboard reference" tables — for shortcuts
+    or menu items
+  - "File navigation" — for tab bar / file-list / picker changes
+  - "Build and Run" — for compile pipeline / progress modal changes
+  - "Persistence — what survives a reload" — for new IDB / localStorage
+    keys
+- Add a note to [`LEARNINGS.md`](./LEARNINGS.md) if you discovered
+  something non-obvious along the way (Retro68 quirks, HFS gotchas,
+  CORS issues, System 7 API surprises, etc.) — future contributors
+  will thank you. Cross-cutting meta-lessons belong in the "Key
+  stories" section at the top
 - Don't commit build artifacts or emulator ROMs
 
 If something breaks during setup or local dev, check
-[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) first.
+[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md) first. For
+vendored-app-specific silent failures, the recipes are in
+[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md).
