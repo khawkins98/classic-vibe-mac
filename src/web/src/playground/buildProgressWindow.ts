@@ -83,10 +83,25 @@ let active: Active | null = null;
 
 function ensureWindow(title: string): Active {
   if (active) {
-    // Reuse — reset for a fresh build.
+    // Reuse — reset for a fresh build. Three pieces of stale state
+    // can otherwise leak from the previous build:
+    //   1. the closeTimer (would auto-close mid-new-build)
+    //   2. the error message div (would show last build's failure
+    //      text under the new build's progress)
+    //   3. the elapsedTimer (cleared on the previous done/error;
+    //      without re-arming, the elapsed counter freezes at the
+    //      previous build's final time)
     if (active.closeTimer !== null) {
       clearTimeout(active.closeTimer);
       active.closeTimer = null;
+    }
+    const msgEl = document.getElementById("cvm-bp-message");
+    if (msgEl) {
+      msgEl.textContent = "";
+      msgEl.hidden = true;
+    }
+    if (active.elapsedTimer === null) {
+      active.elapsedTimer = window.setInterval(renderElapsed, 100);
     }
     active.phases = newPhases();
     active.startMs = performance.now();
