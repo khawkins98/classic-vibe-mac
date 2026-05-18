@@ -47,6 +47,7 @@ import {
   ICON_BUILDRUN,
   ICON_DOWNLOAD,
   ICON_RESET,
+  ICON_SHARE,
   ICON_SHOWASM,
 } from "./toolbar-icons";
 import {
@@ -80,6 +81,7 @@ import { createVfs } from "./vfs";
 import { compile } from "./rez";
 import { consumeFetchMs } from "./fetchStats";
 import { dispatchBuildPhase } from "./buildProgressWindow";
+import { parseShareUrl, buildShareUrl } from "../shareLink";
 import {
   spliceResourceFork,
   triggerDownload,
@@ -185,6 +187,9 @@ export async function mountPlayground(
   const routinesSelectEl = rootEl.querySelector<HTMLSelectElement>(
     "#cvm-pg-routines",
   )!;
+  const shareBtn = rootEl.querySelector<HTMLButtonElement>(
+    "#cvm-pg-share",
+  );
   const downloadBtn = rootEl.querySelector<HTMLButtonElement>(
     "#cvm-pg-download",
   )!;
@@ -209,16 +214,15 @@ export async function mountPlayground(
   // Last Build & Run context; populated after every successful hot-load.
   let lastBuildCtx: BuildExplainContext | null = null;
 
-  // Restore last-open project + file, falling back to the first sample.
-  // (No string default — the .find ?? SAMPLE_PROJECTS[0] cascade picks
-  // the first sample either way if the saved id is stale, e.g. when
-  // we retired a project. Previously this defaulted to "reader" which
-  // pointlessly survived Reader's retirement.)
+  // 1. URL share params win (someone landed via a shared link).
+  // 2. Saved-from-last-session is the normal returning-user path.
+  // 3. SAMPLE_PROJECTS[0] is the fresh-install fallback.
+  const shareTarget = await parseShareUrl();
   const savedProject = await readUiState<string>(UI_PROJECT);
   const projectTemplate: SampleProject =
-    (savedProject
-      ? findProject(savedProject)
-      : undefined) ?? SAMPLE_PROJECTS[0]!;
+    (shareTarget?.projectId ? findProject(shareTarget.projectId) : undefined) ??
+    (savedProject ? findProject(savedProject) : undefined) ??
+    SAMPLE_PROJECTS[0]!;
 
   // Live project: SAMPLE_PROJECTS entry with user-added filenames
   // appended. `project.files` is mutated in place by newFile() (and
@@ -233,9 +237,16 @@ export async function mountPlayground(
     ...projectTemplate,
     files: [...projectTemplate.files, ...userFiles],
   };
+  // Share-URL filename trumps the saved last-open file iff it actually
+  // exists in the resolved project — otherwise we'd land the user on
+  // a "file not found" empty buffer for typo'd share links.
   const savedFile = (await readUiState<string>(UI_FILE)) ?? project.files[0]!;
-  const filename = project.files.includes(savedFile)
-    ? savedFile
+  const candidateFile =
+    (shareTarget?.filename && project.files.includes(shareTarget.filename)
+      ? shareTarget.filename
+      : undefined) ?? savedFile;
+  const filename = project.files.includes(candidateFile)
+    ? candidateFile
     : project.files[0]!;
 
   // Seed project dropdown. Star-prefix the option text so visitors
@@ -314,7 +325,21 @@ export async function mountPlayground(
   let switchSeq = 0;
 
   // Mount CodeMirror.
-  const initialContent = await readOrSeedFile(baseUrl, project.id, filename);
+  let initialContent = await readOrSeedFile(baseUrl, project.id, filename);
+  // Share-URL content seed: if the URL carried `?c=`, override the
+  // IDB/seed content with the link's payload and persist it to IDB so
+  // subsequent visits remember the shared edits. Only applies when the
+  // share target's project + file actually resolved to a real file in
+  // this project — otherwise we'd silently discard the user's saved
+  // work for an unrelated mismatched link.
+  if (
+    shareTarget?.content !== undefined &&
+    shareTarget.projectId === project.id &&
+    shareTarget.filename === filename
+  ) {
+    initialContent = shareTarget.content;
+    void saveFile(project.id, filename, initialContent);
+  }
   const langCompartment = new Compartment();
 
   // Track the (project, filename) the editor currently shows so save
@@ -1113,6 +1138,39 @@ export async function mountPlayground(
     }
   });
 
+  // Share — copy a URL that opens this project + the user's current
+  // edits in any browser. If the encoded URL would exceed our size cap
+  // we silently downgrade to a pointer-only link and surface that in
+  // the status bar so the user knows the receiver won't see their
+  // edits (they should download the .zip and share that instead).
+  if (shareBtn) {
+    shareBtn.addEventListener("click", async () => {
+      await flushSave();
+      shareBtn.disabled = true;
+      try {
+        const content = view.state.doc.toString();
+        const built = await buildShareUrl(current.project, current.filename, content);
+        try {
+          await navigator.clipboard.writeText(built.url);
+          setStatus(
+            statusEl,
+            built.truncated
+              ? "Link copied — file too big for URL encoding; shared pointer only (receiver gets the sample, not your edits)."
+              : "Share link copied to clipboard.",
+            built.truncated ? "info" : "ok",
+          );
+        } catch {
+          // Clipboard denied (insecure context, permissions) — fall
+          // back to a prompt() so the user can copy manually. Not as
+          // smooth but never silently fails.
+          window.prompt("Copy this URL:", built.url);
+        }
+      } finally {
+        shareBtn.disabled = false;
+      }
+    });
+  }
+
   // Reset to bundled defaults — wipes IDB for the current project and
   // re-seeds every file from `public/sample-projects/`. Useful when the
   // sample sources have been updated server-side and the user wants
@@ -1505,6 +1563,12 @@ function renderShell(persistent: boolean, preservedCount: number): string {
                 title="Download the current project's source files as a .zip">
           <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_DOWNLOAD}</span>
           <span class="cvm-pg-iconbtn__label">Download</span>
+        </button>
+        <button type="button" id="cvm-pg-share"
+                class="cvm-pg-iconbtn"
+                title="Copy a shareable URL that opens this project + your current edits in any browser">
+          <span class="cvm-pg-iconbtn__icon" aria-hidden="true">${ICON_SHARE}</span>
+          <span class="cvm-pg-iconbtn__label">Share</span>
         </button>
         <button type="button" id="cvm-pg-reset"
                 class="cvm-pg-iconbtn"
