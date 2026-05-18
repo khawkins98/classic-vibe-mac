@@ -504,6 +504,11 @@ for the root, `hls ":System Folder:"` for a subdirectory. See
   register.
 - [`docs/NETWORKING.md`](./NETWORKING.md) — deploying the optional
   Cloudflare DO Ethernet relay for `?zone=` networking.
+- [`docs/HANDBOOK.md`](./HANDBOOK.md) — end-user manual for the
+  playground: every button, every shortcut (⌘P, Routines popup,
+  Build & Run, Debug Console), where files live, how to fork a
+  sample as your own project. Start here if you don't know what
+  something *does*.
 - [`docs/VENDORING-A-MAC-APP.md`](./VENDORING-A-MAC-APP.md) — recipe
   for adding a third-party period Mac app to the sample shelf so it
   builds + runs in the playground end-to-end.
