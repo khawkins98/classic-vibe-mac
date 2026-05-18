@@ -16,6 +16,8 @@
  * 1-pixel-tall divider with no padding.
  */
 
+import { isMacActive } from "./activePane";
+
 export interface MenuItem {
   /** Visible label. May contain "…" suffix per Mac convention when the
    *  command opens a dialog. */
@@ -439,14 +441,15 @@ export function mountMenubar(actions: MenubarActions): () => void {
     // shortcuts only when the modifier is held AND the key is a
     // single character matching a registered MenuItem.shortcut.
     //
-    // Previously this also skipped when focus was in an editable
-    // surface (CodeMirror, input, textarea) to defer to local
-    // keybindings. None of the menubar's current shortcuts
-    // (O / P / S / , / ?) collide with CodeMirror's default keymap,
-    // and users do reach for ⌘P / ⌘? while typing in the editor —
-    // so the dispatcher now fires regardless of focus. If a future
-    // menu shortcut collides with a CodeMirror binding we'll add a
-    // per-shortcut skip rather than a blanket editable-focus skip.
+    // None of the menubar's current shortcuts (O / P / S / , / ?)
+    // collide with CodeMirror's default keymap, so we fire even when
+    // the editor has focus — users do reach for ⌘P / ⌘? while typing.
+    //
+    // BUT: skip when the Macintosh pane is the active focus owner.
+    // ⌘S in a Mac-side TextEdit should save the Mac document, not
+    // download the host's project zip. emulator-input.ts forwards
+    // the key to BasiliskII in that case. See src/web/src/activePane.ts.
+    if (isMacActive()) return;
     const mod = IS_MAC ? e.metaKey : e.ctrlKey;
     if (!mod || e.altKey) return;
     // Only single-character keys are shortcuts (skip arrows, F-keys, etc.).

@@ -24,6 +24,8 @@
  * duplicates from #320 automatically without any new wiring.
  */
 
+import { isMacActive } from "./activePane";
+
 let active: { close: () => void } | null = null;
 
 interface FileEntry {
@@ -171,9 +173,14 @@ export function openOpenQuickly(): void {
  *  binding was ⌘D; period-Mac muscle memory reaches for that, modern
  *  muscle memory reaches for ⌘P. Both work.
  *
+ *  Defers to the emulated Mac when the Macintosh pane is the active
+ *  focus owner — ⌘D inside Mac Finder means "Duplicate," and that
+ *  takes precedence over our Open Quickly alias.
+ *
  *  Returns the unbinder if a caller ever needs to detach. */
 export function installOpenQuicklyShortcut(): () => void {
   function handler(e: KeyboardEvent): void {
+    if (isMacActive()) return;
     if (!(e.metaKey || e.ctrlKey)) return;
     if (e.altKey || e.shiftKey) return;
     if (e.key.toLowerCase() !== "d") return;
