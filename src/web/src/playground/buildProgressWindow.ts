@@ -21,12 +21,14 @@
  */
 
 import "winbox/dist/winbox.bundle.min.js";
+import { peekFetchMs, isAnyFetchInflight } from "./fetchStats";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
 
 type Phase =
   | "preparing"
+  | "fetching"
   | "compiling"
   | "packaging"
   | "mounting"
@@ -47,6 +49,7 @@ interface BuildPhaseEvent {
 // marker with ✕ but keeps the list otherwise intact.
 const PHASE_ORDER: Phase[] = [
   "preparing",
+  "fetching",
   "compiling",
   "packaging",
   "mounting",
@@ -55,6 +58,7 @@ const PHASE_ORDER: Phase[] = [
 
 const DEFAULT_LABELS: Record<Phase, string> = {
   preparing: "Preparing sources",
+  fetching: "Fetching toolchain",
   compiling: "Compiling C and Rez",
   packaging: "Packaging MacBinary",
   mounting: "Mounting disk",
@@ -62,6 +66,15 @@ const DEFAULT_LABELS: Record<Phase, string> = {
   done: "Done",
   error: "Build failed",
 };
+
+// "fetching" is driven by a poll of fetchStats rather than by an explicit
+// dispatchBuildPhase call: timeFetch() wraps every dynamic-import + binary
+// fetch the build pipeline issues, and the buildProgressWindow watches the
+// inflight count to flip the line between pending/active/done. This avoids
+// having to thread a phase callback through cc1.ts / compilePipeline.mjs.
+// On a warm-cache build the count never rises and the line stays "pending"
+// then auto-completes when compiling finishes (handlePhase's walk skips it).
+const FETCH_QUIESCENT_DEBOUNCE_MS = 200;
 
 interface PhaseState {
   status: "pending" | "active" | "done" | "error";
@@ -106,6 +119,8 @@ function ensureWindow(title: string): Active {
     active.phases = newPhases();
     active.startMs = performance.now();
     active.errored = false;
+    lastFetchActivityMs = 0;
+    lastSeenFetchMs = peekFetchMs();
     active.wb.setTitle?.(title);
     render();
     return active;
@@ -139,6 +154,8 @@ function ensureWindow(title: string): Active {
     closeTimer: null,
     errored: false,
   };
+  lastFetchActivityMs = 0;
+  lastSeenFetchMs = peekFetchMs();
   render();
   return active;
 }
@@ -191,6 +208,11 @@ const SLOW_COMPILE_HINT_THRESHOLD_S = 15;
 
 function renderElapsed(): void {
   if (!active) return;
+  // Poll the fetchStats counter and flip the "fetching" phase state to
+  // match what timeFetch() is doing under the hood. See the comment by
+  // FETCH_QUIESCENT_DEBOUNCE_MS for why this is poll-driven instead of
+  // dispatched explicitly.
+  syncFetchingPhase();
   const el = document.getElementById("cvm-bp-elapsed");
   if (!el) return;
   const elapsed = ((performance.now() - active.startMs) / 1000).toFixed(1);
@@ -231,6 +253,71 @@ function renderElapsed(): void {
     } else {
       hint.hidden = true;
     }
+  }
+}
+
+/** Track the last point in time at which a fetch was either in-flight
+ *  or the cumulative fetchMs counter changed. Used to debounce the
+ *  active→done transition for the "fetching" phase so a brief gap
+ *  between two sequential fetches doesn't ping-pong the UI. */
+let lastFetchActivityMs = 0;
+let lastSeenFetchMs = 0;
+
+function syncFetchingPhase(): void {
+  if (!active) return;
+  const fetching = active.phases.get("fetching");
+  if (!fetching) return;
+  // Don't flip fetching state once we've moved past the compile window
+  // — packaging/mounting/booting are downstream of any fetch activity.
+  const compiling = active.phases.get("compiling");
+  const past =
+    compiling?.status === "done" ||
+    active.phases.get("packaging")?.status !== "pending" ||
+    active.phases.get("mounting")?.status !== "pending" ||
+    active.phases.get("booting")?.status !== "pending";
+  if (past) return;
+
+  const now = performance.now();
+  const inflight = isAnyFetchInflight();
+  const cum = peekFetchMs();
+  if (inflight || cum > lastSeenFetchMs) {
+    lastFetchActivityMs = now;
+    lastSeenFetchMs = cum;
+    if (fetching.status === "pending") {
+      fetching.status = "active";
+      fetching.startMs = now;
+      // The Compiling line, if any, is still "pending" until fetches
+      // quiesce — but if Compiling is already marked active by
+      // editor.ts firing its phase dispatch, demote it back to pending
+      // until fetching finishes so the UI shows them sequentially.
+      if (compiling?.status === "active") {
+        compiling.status = "pending";
+        compiling.startMs = undefined;
+      }
+      render();
+    } else if (fetching.status === "active") {
+      // Update the running timing readout in place — render() rebuilds
+      // the list every frame which is fine at 10fps.
+      render();
+    }
+    return;
+  }
+
+  // No inflight + counter stable: if we were active and the quiescent
+  // window has elapsed, mark done and let Compiling resume.
+  if (
+    fetching.status === "active" &&
+    now - lastFetchActivityMs >= FETCH_QUIESCENT_DEBOUNCE_MS
+  ) {
+    fetching.status = "done";
+    if (fetching.startMs !== undefined) {
+      fetching.durationMs = now - fetching.startMs;
+    }
+    if (compiling?.status === "pending") {
+      compiling.status = "active";
+      compiling.startMs = now;
+    }
+    render();
   }
 }
 
