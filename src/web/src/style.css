@@ -2631,6 +2631,80 @@ body.cvm-paused .emulator-canvas {
   word-break: break-word;
   background: var(--paper);
 }
+
+/* Console pane upgrades (#326): filter input + empty-state hint +
+   keyword-coloured lines. */
+.cvm-output__console-tools {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  background: var(--platinum-light);
+  border-bottom: 1px solid var(--shadow);
+}
+.cvm-output__filter {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 11px;
+  padding: 2px 6px;
+  background: var(--paper);
+  border: 1px solid var(--shadow);
+  box-sizing: border-box;
+}
+.cvm-output__filter:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: inset 1px 1px 0 0 var(--shadow);
+}
+.cvm-output__console-hint {
+  margin: 8px 12px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 1px solid var(--shadow);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+}
+.cvm-output__console-hint p {
+  margin: 0 0 6px;
+}
+.cvm-output__console-hint p:last-child {
+  margin-bottom: 0;
+}
+.cvm-output__console-hint code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--platinum-light);
+  padding: 0 3px;
+}
+.cvm-output__console-hint-code {
+  margin: 6px 0;
+  padding: 6px 8px;
+  background: var(--platinum-light);
+  border-left: 3px solid var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow-x: auto;
+}
+.cvm-output__console-hint a {
+  color: var(--accent, #336699);
+}
+.cvm-output__log-line {
+  /* Each log entry is its own <div> so the filter can hide individual
+     lines without breaking pre-wrap. Inherits font/size from .cvm-output__log. */
+}
+.cvm-output__log-error {
+  color: #b3261e;
+  font-weight: bold;
+}
+.cvm-output__log-warn {
+  color: #a07a00;
+  font-weight: bold;
+}
 /* Clickable diagnostic entry inside the Build log. Looks like a
    hyperlink — blue underlined text — and triggers a jump-to-source
    on click. */
