@@ -68,6 +68,7 @@ import {
 } from "./openQuicklyPalette";
 import { installBuildProgressWindow } from "./playground/buildProgressWindow";
 import { installActivePaneTracker } from "./activePane";
+import { installFullscreenMac } from "./fullscreenMac";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -998,3 +999,8 @@ installOpenQuicklyShortcut();
 // Track which docked pane "owns" the keyboard so ⌘-keys route to the
 // right side (host menubar vs. emulated Mac). See activePane.ts.
 installActivePaneTracker();
+
+// Fullscreen Mac (Chromium-only) + reserved-shortcut notice
+// (Firefox/Safari). Wires the caption-row button and the one-shot
+// info banner; see fullscreenMac.ts for the support split.
+installFullscreenMac();
