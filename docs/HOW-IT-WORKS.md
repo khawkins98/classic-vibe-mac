@@ -69,38 +69,45 @@ cache.
 |       |                                               |
 |       v                                               |
 |  System 7.5.5 boot disk (HFS, chunked)                |
-|     :System Folder:Startup Items: Reader, MacWeather, |
-|     Hello Mac, Pixel Pad, Markdown Viewer             |
-|     :Applications: re-launchable copies               |
+|     :System Folder:Startup Items: (empty — visitor    |
+|       picks a sample and clicks Build & Run; the      |
+|       compiled .bin mounts on a fresh secondary disk) |
 |     :Shared: HTML pages baked at build time           |
 +-------------------------------------------------------+
 ```
 
-### 5. Five apps auto-launch
+### 5. The user picks a sample and clicks Build & Run
 
-System 7's Startup Items folder now contains five real 68k binaries —
-`Reader`, `MacWeather`, `Hello Mac`, `Pixel Pad`, and `Markdown Viewer`
-— all cross-compiled by [Retro68](https://github.com/autc04/Retro68)
-in CI, so all five auto-launch when the desktop comes up. Each app is a
-CMake target under `src/app/`, usually splitting cleanly into a Toolbox
-shell (`<app>.c`) and a pure-C engine that also compiles with the host
-`cc` so unit tests run in milliseconds. The build still emits
-`BNDL`/`FREF`/`ICN#` resources by hand from `<app>.r` because Retro68's
-RIncludes don't ship `Finder.r` macros. See
-[`src/app/README.md`](../src/app/README.md).
+The Mac canvas opens in a "Welcome to Macintosh" placeholder
+(deferred-boot UX, #279). No app auto-launches on first paint — the
+visitor picks a sample from the picker on the left, hits **Build &
+Run**, and only then does the System 7 boot sequence kick off with
+the sample's freshly-compiled `.bin` on a secondary disk that mounts
+alongside the System disk. Subsequent Build & Runs reuse the warm
+boot disk and finish in ~1 second.
 
-`Pixel Pad` also shows the simplest Mac→host data bridge in the repo.
-The app exports its 64×64 1-bit drawing to `:Unix:__drawing.bin`, and a
-main-thread watcher notices that file change and renders a live PNG
-preview beside the emulator. It's still just a file handoff, which is
-why it feels period-correct while staying easy to reason about.
+26 wasm-* samples ship today — a Toolbox-surface ladder from
+`wasm-hello` (one `DrawString`) through `wasm-mdpad` (split-pane
+Markdown editor + live preview) up to `wasm-glypha3` (John Calhoun's
+1992 arcade game, 6,600 LOC, vendored whole). Each sample is a
+self-contained subdirectory under `src/app/wasm-<name>/` with C
+source + an optional `.r` resource file + occasionally a precompiled
+binary resource bundle (`precompiledForkAssets`). See
+[`src/app/README.md`](../src/app/README.md) for the per-sample
+matrix.
 
-`Reader` now has the matching two-way bridge for its URL bar. The Mac
-writes a request file to `:Unix:__url-request.txt`, the host fetches the
-page, then writes the result back as `:Unix:__url-result-<id>.html`.
-Each request carries an ID so stale responses don't win, and each host
-fetch gets its own `AbortController`, which keeps the flow simple even
-when the visitor changes their mind mid-load.
+The simplest Mac→host data bridge in the repo is the
+[`cvm_log`](../src/app/wasm-debug-console/cvm_log.h) Debug Console:
+samples write log lines through extfs to `:Unix:__cvm_console.log`
+and the Output panel's Console tab polls + surfaces them. The
+`wasm-bounce` sample uses it to live-trace ball positions; the
+recipe is documented in
+[`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md)
+Recipe 1.
+
+The same `:Shared:` / `:Unix:` pattern handles the modern-Markdown
+round-trip in `wasm-mdpad` (#305) — File → Save lands a `.md` file
+on the host, with CR→LF translation at the boundary.
 
 ### 6. The IDE: four draggable WinBox panes + a real menubar
 
