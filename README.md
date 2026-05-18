@@ -1,13 +1,20 @@
 # classic-vibe-mac
 
-A 1990s Macintosh in a browser tab — with a System 7-style IDE that
-compiles classic Mac C straight to a `.bin` and boots it. **Open the
-page, pick a sample, click Build & Run; the Mac wakes up with your
-freshly-compiled app on the desktop.** `cc1` + `as` + `ld` + `Elf2Mac`
-are all wasm-bundled — no install, no toolchain on your machine, no
-backend. Edit the source in the page; hit Build & Run again; the Mac
-reboots in ~1s with your changes. The full read / edit / compile /
-hot-load loop is live in production today.
+**Vibe-code classic Macintosh apps in your browser.** Edit C in the
+page, hit Build & Run, your code is running on an emulated Mac OS 7
+in seconds. Pair it with your favorite AI coding assistant and you
+can write period-correct Macintosh software the way nobody could in
+1995 — with autocomplete, a chat that knows the Toolbox APIs, and no
+install needed.
+
+Under the covers: a System 7-style IDE that compiles classic Mac C
+straight to a `.bin` and boots it. **Open the page, pick a sample,
+click Build & Run; the Mac wakes up with your freshly-compiled app
+on the desktop.** `cc1` + `as` + `ld` + `Elf2Mac` are all wasm-bundled
+— no install, no toolchain on your machine, no backend. Edit the
+source in the page; hit Build & Run again; the Mac reboots in ~1s
+with your changes. The full read / edit / compile / hot-load loop is
+live in production today.
 
 > **Two-repo project.** This repo ships the playground, demo apps,
 > and the in-browser editor + emulator integration. The wasm
