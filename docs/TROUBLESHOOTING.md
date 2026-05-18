@@ -3,7 +3,9 @@
 Cmd-F for your symptom. Each entry maps **symptom → root cause → fix**.
 Detailed walkthrough follows the quick-reference table.
 
-Cross-links: [`DEVELOPMENT.md`](./DEVELOPMENT.md) (iteration loops),
+Cross-links: [`HANDBOOK.md`](./HANDBOOK.md) (end-user manual for the
+playground — every button, every shortcut, where files live),
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) (iteration loops),
 [`LEARNINGS.md`](../LEARNINGS.md) (running gotchas log),
 [`README.md`](../README.md#try-it) (Try it),
 [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md) (when
