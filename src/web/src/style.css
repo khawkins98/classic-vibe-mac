@@ -1430,6 +1430,105 @@ body.cvm-paused .emulator-canvas {
   background: #fff8d6;
 }
 
+/* "Try this next" card — slides up from the bottom of the Playground
+   pane after a successful Build & Run, surfaces one curated experiment
+   the user can try next. Mac OS 8 yellow-note chrome. Auto-hides
+   after 12s; mouse-enter pauses the timer so the user can read
+   longer text. */
+.cvm-try-next {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff8d6;
+  border: 1px solid var(--ink);
+  font-family: var(--font-chrome);
+  font-size: 12px;
+  color: var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow),
+    3px 3px 0 0 rgba(0, 0, 0, 0.25);
+  z-index: 50;
+  animation: cvm-try-next-slide 220ms ease-out;
+}
+@keyframes cvm-try-next-slide {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.cvm-try-next__icon {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.cvm-try-next__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cvm-try-next__heading {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.cvm-try-next__text {
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+.cvm-try-next__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cvm-try-next__btn {
+  font-family: var(--font-chrome);
+  font-size: 11px;
+  padding: 2px 10px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink);
+  box-shadow:
+    inset 1px 1px 0 0 var(--highlight),
+    inset -1px -1px 0 0 var(--shadow);
+}
+.cvm-try-next__btn:hover {
+  background: var(--highlight);
+}
+.cvm-try-next__btn:active {
+  box-shadow:
+    inset 1px 1px 0 0 var(--shadow),
+    inset -1px -1px 0 0 var(--highlight);
+}
+.cvm-try-next__btn--primary {
+  font-weight: bold;
+}
+.cvm-try-next__close {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  font-family: var(--font-chrome);
+  font-size: 14px;
+  line-height: 14px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.cvm-try-next__close:hover {
+  background: var(--highlight);
+}
+
+/* The playground container needs a positioning context so the card's
+   `position: absolute` anchors to it instead of the document. */
+#cvm-playground {
+  position: relative;
+}
+
 /* Open Quickly palette (⌘P) — transient centered overlay with
    filename input + filtered file list. Mac OS 8 paper inset, dark
    semi-transparent backdrop. Lives outside any WinBox; the overlay
