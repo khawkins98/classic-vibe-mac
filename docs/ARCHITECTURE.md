@@ -254,64 +254,102 @@ runs normally.
 
 ## The multi-app model
 
-`src/app/` is a CMake aggregator with one subdirectory per Mac app.
-See [`src/app/README.md`](../src/app/README.md) for the canonical guide.
+`src/app/` is a flat directory of in-browser-compiled samples — one
+subdirectory per Mac app. See
+[`src/app/README.md`](../src/app/README.md) for the canonical guide +
+the per-sample Toolbox-surface matrix.
 
 ```
 src/app/
-  CMakeLists.txt              -> add_subdirectory(reader); add_subdirectory(macweather);
-                                add_subdirectory(hello-mac); add_subdirectory(pixelpad);
-                                add_subdirectory(markdownviewer);
-  reader/
-    reader.c                  Toolbox shell (event loop, drawing, menus)
-    reader.r                  Rez resources (WIND, MBAR, MENU, ALRT, BNDL/FREF/ICN# as raw data)
-    html_parse.{c,h}          pure-C engine, host-testable
-    CMakeLists.txt            add_application(Reader CREATOR CVMR ...)
-  macweather/
-    macweather.c              Toolbox shell
-    macweather.r              Rez resources
-    weather_parse.{c,h}       pure-C JSON parser (host-testable)
-    weather_glyphs.{c,h}      1-bit pixel-art QuickDraw routines
-    CMakeLists.txt            add_application(MacWeather CREATOR CVMW ...)
-  hello-mac/
-    hello.c                   minimal Toolbox shell / starter example
-    hello.r                   Rez resources
-    CMakeLists.txt            add_application(HelloMac CREATOR CVHM ...)
-  pixelpad/
-    pixelpad.c                64×64 drawing shell + export hook
-    pixelpad.r                Rez resources
-    CMakeLists.txt            add_application(PixelPad CREATOR CVPP ...)
-  markdownviewer/
-    markdownviewer.c          Toolbox shell
-    markdownviewer.r          Rez resources
-    markdown_parse.{c,h}      pure-C Markdown parser (host-testable)
-    CMakeLists.txt            add_application(MarkdownViewer CREATOR CVMV ...)
+  CMakeLists.txt              -> aggregator scaffolding (no apps under
+                                 add_subdirectory() any more; #276
+                                 retired the Reader/MacWeather/HelloMac
+                                 /PixelPad/MarkdownViewer precompiled
+                                 path in favour of in-browser compile)
+  wasm-hello/
+    hello.c                   minimal "DrawString" sample, the floor
+                              of the shelf
+  wasm-hello-window/
+    hello.c                   GetNewWindow + BeginUpdate/EndUpdate
+    hello.r                   WIND resource + signature + SIZE
+  wasm-mdpad/
+    mdpad.c                   split-pane Markdown editor + live preview
+    mdpad.r                   MBAR/MENU + Open/Save + signature 'CVMD'
+  wasm-glypha3/                first vendored 3rd-party period app
+    Main.c / Enemy.c / Graphics.c / Interface.c / Play.c /
+    Prefs.c / SetUpTakeDown.c / Sound.c / Utilities.c
+    Externs.h
+    glypha3.r                 2.7 MB upstream Rez (sprites + snds + ...)
+    LICENSE.upstream          softdorothy/Glypha3 MIT
+  …
 ```
 
-Each app:
+26 wasm-* samples today (as of #310). Production samples compile
+in-browser via `wasm-cc1` + `wasm-rez` (see "Build & Run" in
+[`HOW-IT-WORKS.md`](./HOW-IT-WORKS.md)), not via Retro68 at CI time.
 
-- has its own four-letter creator code (Reader=`CVMR`,
-  MacWeather=`CVMW`, HelloMac=`CVHM`, PixelPad=`CVPP`,
-  MarkdownViewer=`CVMV`) — passed to
-  `add_application(... CREATOR XXXX ...)` so the `-c` flag reaches Rez
-  and the MacBinary header carries `APPL/XXXX`. Without the creator,
-  Finder binding silently no-ops
-  (see [`LEARNINGS.md`](../LEARNINGS.md) on BNDL/FREF/ICN#).
-- emits `BNDL`, `FREF`, `ICN#` and the signature resource as raw
-  `data` blobs in the `.r` file — Retro68's RIncludes don't ship
-  `Finder.r` macros, so the bytes are written longhand.
-- splits cleanly into a **Toolbox shell** (`<app>.c`) and a **pure-C
-  engine** (`html_parse.c`, `weather_parse.c`). The engine compiles
-  with both Retro68 and the host `cc`, so `tests/unit/` runs in
-  milliseconds without ever touching an emulator. See
-  [`tests/README.md`](../tests/README.md).
+Each sample:
 
-`scripts/build-boot-disk.sh` takes a comma-separated list of `.bin`
-paths and packs all of them into the same boot disk — both
-`:System Folder:Startup Items:` (auto-launch) and `:Applications:`
-(re-launch from desktop). Adding a new app is one
-`add_subdirectory()` line + a directory under `src/app/` + a comma
-in CI's invocation.
+- has its own four-letter creator code (`CVHL` Wasm Hello,
+  `CVWP` Wasm WordPad, `CVMD` Wasm Markdown, `CVGl` Glypha III, …)
+  declared in `SAMPLE_PROJECTS` in
+  `src/web/src/playground/types.ts` + emitted via a `data 'CVxx' (0)`
+  Owner-signature resource in the sample's `.r`. The Finder pairs the
+  app's MacBinary type/creator with the signature on launch so the
+  binding holds end-to-end. (Without the signature, Finder binding
+  silently no-ops — see [`LEARNINGS.md`](../LEARNINGS.md) on
+  BNDL/FREF/ICN#.)
+- may have an `.r` file (most do — WIND, MENU, MBAR, SIZE etc.) or be
+  pure-C with no resources (`wasm-hello`, `wasm-hello-multi`).
+- pure-C engine code (used to be `html_parse.c` / `weather_parse.c`)
+  can sit alongside the Toolbox shell and host-compile via
+  `tests/unit/` for sub-second unit-test feedback. The samples that
+  shipped this style (Reader, MacWeather) retired in #276; the
+  scaffolding remains in `tests/unit/` for whoever wants to ship a
+  next-generation host-testable sample.
+
+Adding a sample is documented in
+[`docs/VENDORING-A-MAC-APP.md`](./VENDORING-A-MAC-APP.md) for
+third-party imports, or `src/app/README.md` for a hand-rolled one.
+Local pre-push smoke test for either case: `npm run audit:wasm-e2e --
+<sample>` runs the full `.c` + `.r` compile path in ~1.5 s.
+
+### Vendored-app fork composition (PathB)
+
+The simple case is "one user `.r` per sample" — wasm-rez compiles it,
+the result splices over the C-built fork from Elf2Mac. For large
+third-party apps that ship their own precompiled resource bundle
+alongside the user's editable `.r`, the playground supports a
+`precompiledForkAssets` list in `SAMPLE_PROJECTS`. The pipeline:
+
+```
+   user .r  -> wasm-rez ----+
+                            |
+   .code.bin (from cc1+ld+Elf2Mac) --+----> spliceResourceFork
+                            |        |
+   precompiledForkAssets ---+--------+      (user wins on collision)
+   (e.g. icons.rsrc.bin)
+```
+
+The merger
+([`src/web/src/playground/resourceForkMerger.mjs`](../src/web/src/playground/resourceForkMerger.mjs),
+#285) treats "first fork wins on (type, id) collision" as the
+contract; the splice in `build.ts` orders the user's fork first so
+their edits override the precompiled fork's entries. The same merger
+is reused offline by
+[`scripts/splice-bin.mjs`](../scripts/splice-bin.mjs) (#294) for
+inspection — see
+[`docs/DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md)
+Recipe 3.
+
+When this matters in practice: `wasm-icon-gallery` ships an
+`icons.rsrc.bin` of pre-built `cicn`/`ICN#`/`ics#` resources alongside
+its editable `gallery.r`. Glypha III briefly had a more elaborate
+version of this story (#280) before it turned out wasm-rez could just
+compile the full upstream `.r` directly after #287's `STACK_SIZE`
+bump — the infrastructure stays useful for future binary-only
+imports, but no current sample needs it as critical-path. (See
+LEARNINGS Key Story #10.)
 
 ## The CI pipeline
 

@@ -170,11 +170,14 @@ Click Build. The page does, for every sample project in the picker:
    ([wasm-retro-cc](https://github.com/khawkins98/wasm-retro-cc)'s
    Retro68 GCC ported to wasm): cc1 → as → ld → Elf2Mac, yielding a
    complete MacBinary II APPL.
-3. If the project has an `.r` file (e.g. `wasm-hello-window`,
-   `wasm-snake`, `wasm-textedit`), compiles it through the
-   ~100 KB Apple Rez wasm and splices the resulting resource fork
-   over the C-built fork — user resources (WIND, MENU, SIZE) win
-   on (type, id) collision.
+3. If the project has an `.r` file (most do — `wasm-hello-window`,
+   `wasm-snake`, `wasm-textedit`, `wasm-mdpad`, `wasm-glypha3`, etc),
+   compiles it through the ~100 KB Apple Rez wasm and splices the
+   resulting resource fork over the C-built fork — user resources
+   (WIND, MENU, SIZE) win on (type, id) collision. Vendored apps
+   that also ship a precompiled resource bundle (`precompiledForkAssets`
+   in `SAMPLE_PROJECTS`) get that merged in too — see
+   [`ARCHITECTURE.md`'s vendored-app section](./ARCHITECTURE.md#vendored-app-fork-composition-pathb).
 4. Patches the merged MacBinary into an in-memory HFS disk image
    (template-splice path: ship one empty `.dsk` as a CI artifact,
    patch the catalog leaf + bitmap + MDB to insert one file).
@@ -251,8 +254,11 @@ your idea fits one of these, you'll have fun:
 - **Tiny utility apps.** Calculator, clock, dice roller, unit
   converter, password generator. Anything that fits in ~100KB
   compiled, draws with QuickDraw, and uses Toolbox dialogs/menus
-  from `Inside Macintosh`. The two shipped sample apps (Reader and
-  MacWeather) are both under 50KB of compiled 68k code each.
+  from `Inside Macintosh`. Most samples on the shelf land in the
+  12-18 KB range — `wasm-clock`, `wasm-calculator`, `wasm-dialog`
+  are concrete examples. The upper end is `wasm-glypha3`, a vendored
+  6,600-LOC period game that compiles to ~110 KB of code + a 540 KB
+  resource fork.
 - **Demo / portfolio apps you can link from a website.** "Here's a
   thing I made; click the URL, it boots in your browser, no
   install." That's the whole pitch. Great for talks, blog posts,
