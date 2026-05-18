@@ -85,11 +85,20 @@ resource 'WIND' (128) {
     noAutoCenter
 };
 
-/* About box: a one-button modal with a short message. */
+/* About box: a one-button modal with a short message. The stages
+ * array needs one record per of 4 click stages, each (default-button,
+ * visibility, sound-mask). The "{ OK, OK, OK, OK }" shorthand was
+ * missing fields per the ALRT template and tripped wasm-rez's
+ * assertion at ResourceDefinitions.cc:253. */
 resource 'ALRT' (128) {
     { 80, 80, 220, 380 },
     128,                 /* DITL id */
-    { OK, OK, OK, OK },  /* stop-style on all stages */
+    {
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent
+    },
     alertPositionMainScreen
 };
 
