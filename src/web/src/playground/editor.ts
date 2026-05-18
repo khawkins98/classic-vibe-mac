@@ -81,6 +81,7 @@ import { createVfs } from "./vfs";
 import { compile } from "./rez";
 import { consumeFetchMs } from "./fetchStats";
 import { dispatchBuildPhase } from "./buildProgressWindow";
+import { showTryThisNext } from "./tryThisNextCard";
 import { parseShareUrl, buildShareUrl } from "../shareLink";
 import {
   spliceResourceFork,
@@ -1415,6 +1416,31 @@ export async function mountPlayground(
       await hotLoad({ bytes: patched, volumeName: volName });
       const totalMs = performance.now() - tStart;
       dispatchBuildPhase({ phase: "done" });
+      // Surface a "Try this next" card if the project has prompts curated.
+      // Skipped silently when tryNext is absent — most samples don't ship
+      // prompts yet. See playground/types.ts for the curation guide.
+      const proj2 = findProject(current.project);
+      if (proj2) {
+        showTryThisNext(proj2, {
+          onJump: (file, line) => {
+            const targetFile = file ?? current.filename;
+            const navigate = async () => {
+              if (targetFile !== current.filename) {
+                await switchTo(current.project, targetFile);
+              }
+              if (line && Number.isFinite(line) && line > 0) {
+                const ln = view.state.doc.line(line);
+                view.dispatch({
+                  selection: { anchor: ln.from, head: ln.from },
+                  scrollIntoView: true,
+                });
+                view.focus();
+              }
+            };
+            void navigate();
+          },
+        });
+      }
       // Surface the binary size alongside the wall time. The Build-only
       // path already does this via formatBytes(); Build & Run was
       // silent on size. Useful for "is my last edit smaller / bigger

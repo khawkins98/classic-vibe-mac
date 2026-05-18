@@ -190,6 +190,23 @@ moment" reassurance hint reveals itself.
 On failure, the build log surfaces the error; click any
 `file:line:col` to jump.
 
+### "Try this next" cards
+
+After a successful **Build & Run**, some samples surface a small
+yellow card at the bottom of the Playground pane with one concrete
+experiment you can try ("Make the snake faster — change MOVE_TICKS
+to 3"). Click **Take me there** and the editor jumps to the right
+line, or × to dismiss. The card auto-hides after 12 seconds and
+cycles to a different prompt on each subsequent build.
+
+If you don't want the prompts for a particular sample at all, click
+**Don't show for this sample** — the dismissal is per-project and
+persists in localStorage.
+
+Authoring: add a `tryNext: [...]` array to your project's
+`SampleProject` entry in `src/web/src/playground/types.ts`. Keep
+each prompt to one short imperative sentence.
+
 ---
 
 ## The two ways data crosses Mac ↔ host
