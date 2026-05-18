@@ -251,6 +251,26 @@ without context, instrumenting the suspect function with `cvm_log`
 is the cheapest path to ground truth. Full recipe in
 [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md).
 
+**Console affordances:**
+
+- **Filter bar at the top** — type a substring to hide non-matching
+  lines. New lines that don't match are hidden on arrival; clear
+  the filter to see everything again.
+- **Keyword highlighting** — lines containing `error` / `fail` /
+  `fatal` / `panic` / `aborted` get the word coloured red and
+  bolded; `warn` / `warning` / `caution` get amber. Case-insensitive.
+- **Empty-state hint** — the pane shows a paste-ready
+  `#include <cvm_log.h>` snippet until your first log line lands,
+  so first-time visitors don't have to dig for the API.
+- **Reset divider** — calling `cvm_log_reset()` from the Mac side
+  surfaces as a `— cvm console reset —` line in the pane.
+- **Tab unread indicator** — the Console tab gets a dot when new
+  output arrives while you're on a different tab.
+- **Copy** + **Clear** in the Output panel toolbar do what they say.
+- **Auto-scroll lock** — scrolling up to read history won't get
+  yanked back to the bottom by new output; resume tracking by
+  scrolling to the bottom yourself.
+
 ---
 
 ## Persistence — what survives a reload, what doesn't

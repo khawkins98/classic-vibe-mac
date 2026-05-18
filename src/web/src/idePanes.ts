@@ -170,8 +170,37 @@ function outputHtml(): string {
         <!-- Live tail of /Shared/__cvm_console.log. The Mac app calls
              cvm_log() from <cvm_log.h> to append lines; console-watcher
              polls the file via the emulator worker and surfaces the
-             new tail here every ~1s. Empty until the first cvm_log()
-             fires (or watcher initializes). -->
+             new tail here every ~1s. -->
+        <div class="cvm-output__console-tools">
+          <input
+            type="text"
+            id="cvm-output-console-filter"
+            class="cvm-output__filter"
+            placeholder="Filter lines: type a substring…"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="Filter Console lines"
+          />
+        </div>
+        <!-- Empty-state hint, hidden once any non-startup log line arrives.
+             Tells first-time visitors how to actually use the Debug Console
+             without making them read the handbook first. -->
+        <div id="cvm-output-console-hint" class="cvm-output__console-hint">
+          <p><strong>No output yet.</strong> Your Mac app emits to this
+          pane via <code>cvm_log()</code>:</p>
+          <pre class="cvm-output__console-hint-code">#include &lt;cvm_log.h&gt;
+
+void main(void) {
+    cvm_log_reset();
+    cvm_log("hello from the Mac side");
+    /* … */
+}</pre>
+          <p>Build &amp; Run, then the lines you emit show up here in
+          near-real-time. For formatted output use
+          <code>sprintf</code> into a stack buffer first
+          (<code>cvm_log</code> is a single-string API).
+          <a href="https://github.com/khawkins98/classic-vibe-mac/blob/main/docs/HANDBOOK.md#debug-console" target="_blank">Handbook → Debug Console</a>.</p>
+        </div>
         <pre id="cvm-output-console" class="cvm-output__log"></pre>
       </div>
     </div>
