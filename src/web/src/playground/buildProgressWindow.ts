@@ -196,6 +196,26 @@ function renderElapsed(): void {
   const elapsed = ((performance.now() - active.startMs) / 1000).toFixed(1);
   el.textContent = `${elapsed}s elapsed`;
 
+  // Refresh the in-flight step's running-elapsed counter. We do this
+  // surgically (a single querySelector + textContent update) instead
+  // of re-running render(), which would rebuild the whole list at
+  // 10fps. The data attribute is set on the active step's timing
+  // span by render() above.
+  const activeTiming = document.querySelector<HTMLElement>(
+    '[data-bp-active-timing="1"]',
+  );
+  if (activeTiming) {
+    // Find the matching phase to read its startMs. There's only ever
+    // one active phase at a time so a single scan is fine.
+    for (const p of PHASE_ORDER) {
+      const st = active.phases.get(p);
+      if (st?.status === "active" && st.startMs !== undefined) {
+        activeTiming.textContent = `${(performance.now() - st.startMs).toFixed(0)}ms`;
+        break;
+      }
+    }
+  }
+
   // Reveal the slow-compile hint once the Compiling phase has been
   // active for >15s. Hide it if we've moved past Compiling (so it
   // doesn't linger through Packaging/Mounting/Booting on the rare
@@ -241,6 +261,12 @@ function render(): void {
     timing.className = "cvm-buildprogress__timing";
     if (st.durationMs !== undefined) {
       timing.textContent = `${st.durationMs.toFixed(0)}ms`;
+    } else if (st.status === "active" && st.startMs !== undefined) {
+      // Show a running elapsed for the in-flight step; the elapsed-timer
+      // tick in renderElapsed() refreshes this every 100ms via the
+      // `data-bp-active-timing` lookup below.
+      timing.textContent = `${(performance.now() - st.startMs).toFixed(0)}ms`;
+      timing.dataset.bpActiveTiming = "1";
     }
     li.append(marker, lab, timing);
     list.append(li);
