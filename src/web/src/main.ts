@@ -62,6 +62,10 @@ import { openAbout } from "./aboutPalette";
 import { openPreferences } from "./preferencesPalette";
 import { mountMenubar } from "./menubarMenus";
 import { openWelcome, maybeShowFirstRunWelcome } from "./welcomePalette";
+import {
+  openOpenQuickly,
+  installOpenQuicklyShortcut,
+} from "./openQuicklyPalette";
 import { installBuildProgressWindow } from "./playground/buildProgressWindow";
 
 const root = document.getElementById("app");
@@ -937,6 +941,7 @@ mountMenubar({
   }),
   openZipPicker: () => { void handleOpenZip(); },
   duplicateCurrentAsNewProject: () => { void handleDuplicateProject(); },
+  openOpenQuickly,
   downloadCurrentZip: () => {
     // The Playground toolbar exposes the canonical download trigger;
     // dispatch a click rather than re-implementing the build/zip flow.
@@ -982,3 +987,9 @@ mountMenubar({
 // Deferred so the playground's mount sequence (project dropdown,
 // initial sample seeding) is settled before the modal renders.
 maybeShowFirstRunWelcome();
+
+// Open Quickly (⌘P) — quick fuzzy file-jump palette. The menubar's
+// File → "Open Quickly…" dispatches the action on its own when focus
+// is outside the editor; this handler covers the in-editor case where
+// the menubar's keydown handler defers to local keybindings.
+installOpenQuicklyShortcut();
