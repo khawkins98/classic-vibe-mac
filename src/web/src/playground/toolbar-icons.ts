@@ -143,3 +143,26 @@ export const ICON_SHOWASM = /* html */ `
     <rect x="12" y="9" width="2" height="1" fill="currentColor"/>
   </svg>
 `;
+
+/** Share — an outgoing arrow rising over a small base ("link out").
+ *  Pixel-grid friendly, matches the rest of the icon set's chunky
+ *  Mac OS 8 aesthetic. Used by the Share / Copy-link toolbar button. */
+export const ICON_SHARE = /* html */ `
+  <svg viewBox="0 0 16 16" shape-rendering="crispEdges"
+       focusable="false" aria-hidden="true">
+    <!-- base box (the "current thing" being shared) -->
+    <rect x="2" y="9" width="9" height="1" fill="currentColor"/>
+    <rect x="2" y="14" width="9" height="1" fill="currentColor"/>
+    <rect x="2" y="9" width="1" height="6" fill="currentColor"/>
+    <rect x="10" y="9" width="1" height="6" fill="currentColor"/>
+    <!-- arrow shaft rising up-and-out from the box -->
+    <rect x="9" y="3" width="1" height="7" fill="currentColor"/>
+    <rect x="10" y="2" width="1" height="6" fill="currentColor"/>
+    <rect x="11" y="1" width="1" height="5" fill="currentColor"/>
+    <rect x="12" y="2" width="1" height="4" fill="currentColor"/>
+    <rect x="13" y="3" width="1" height="3" fill="currentColor"/>
+    <!-- arrow head -->
+    <rect x="11" y="1" width="3" height="1" fill="currentColor"/>
+    <rect x="13" y="1" width="1" height="4" fill="currentColor"/>
+  </svg>
+`;
