@@ -48,13 +48,30 @@ npm run test:unit            # runs make -C tests/unit run
 make -C tests/unit clean     # clean up binaries
 ```
 
-Today the unit suite covers `html_parse.c` (the pure-C HTML tokenizer
-+ layout used by Reader) and `weather_parse.c` (the open-meteo JSON
-parser used by MacWeather). The Toolbox-shell sources `reader.c` /
-`macweather.c` are NOT host-compilable. There's also a Node-side
-unit test for the playground's TypeScript preprocessor at
-`tests/unit/preprocessor.test.mjs` (`npm run test:unit:js`); the
-`test:unit` script runs both the C tests and the JS test.
+The host C suite (`tests/unit/Makefile` + `tests/unit/*.c`) is small
+scaffolding for any future pure-C unit a wasm-* sample might want.
+It used to carry `html_parse.c` + `weather_parse.c` for the Reader
+and MacWeather apps; both apps retired in #276 and the tests went
+with them.
+
+The Node-side suite (`npm run test:unit:js`) is where most of the
+real coverage lives now:
+
+- `tests/unit/preprocessor.test.mjs` — the playground's TS
+  preprocessor for `.r` files (#83 territory)
+- `tests/unit/hfs-patcher.test.mjs` — HFS catalog patcher round-trip
+  against hfsutils ground truth
+- `tests/unit/resource-fork-merger.test.mjs` — pure-JS resource-fork
+  merger (#285)
+- `tests/unit/wasm-rez-stack.test.mjs` — regression guard for the
+  wasm-rez parser-stack overflow fixed in #287; compiles the vendored
+  Glypha `.r` every PR
+- `tests/unit/shared-poller.test.mjs` — polled-file watcher (the
+  `cvm_log` Console-tab plumbing)
+
+`npm run test:unit` runs both the C and JS suites. For end-to-end
+checks on a wasm-* sample's build, use the combined audit:
+`npm run audit:wasm-e2e -- <sample>` (or no arg for all 26).
 
 **Requires:** a host C compiler (`cc` / `gcc` / `clang`). Standard on macOS
 and Ubuntu CI runners. No Retro68 needed.
