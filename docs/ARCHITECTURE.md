@@ -53,11 +53,10 @@ present and a relay base URL was compiled in.
   |  |  |       v                                          |  |  |
   |  |  |  +--------------------------------------------+ |  |  |
   |  |  |  | System 7.5.5 boot disk (HFS)              | |  |  |
-  |  |  |  |   :System Folder:Startup Items:Reader      | |  |  |
-  |  |  |  |   :System Folder:Startup Items:MacWeather  | |  |  |
-  |  |  |  |   :Applications: Hello Mac, Pixel Pad,     | |  |  |
-  |  |  |  |                  Markdown Viewer, Reader,  | |  |  |
-  |  |  |  |                  MacWeather                | |  |  |
+  |  |  |  |   :System Folder:Startup Items: empty      | |  |  |
+  |  |  |  |     (sample's .bin lives on a secondary    | |  |  |
+  |  |  |  |     disk mounted at Build & Run time —     | |  |  |
+  |  |  |  |     boot disk stays clean across samples)  | |  |  |
   |  |  |  |   :Shared: (HTML pages baked at build)     | |  |  |
   |  |  |  +--------------------------------------------+ |  |  |
   |  |  +--------------------------------------------------+  |  |
@@ -81,8 +80,8 @@ and redraws. There is no socket inside the Mac.
 
 ## The boot pipeline
 
-What happens between "user navigates" and "Reader paints its first
-window."
+What happens between "user navigates" and "Mac canvas shows the
+Welcome placeholder, ready for Build & Run."
 
 1. **First navigation** lands on `index.html`. `coi-serviceworker.min.js`
    loads as a non-module `<script>` at the top of `<head>`, registers a
@@ -128,7 +127,9 @@ window."
    waits, input polling. `globalThis.workerApi` must match upstream
    `EmulatorWorkerApi` exactly — that interface is the WASM ABI.
 7. **Boot.** System 7.5.5 paints, blesses its System Folder, runs
-   Startup Items. Reader and MacWeather both auto-launch.
+   Startup Items (empty by default — the boot disk no longer
+   auto-launches anything). The sample the visitor picked is
+   mounted on a fresh secondary disk and auto-launches from there.
 
 Total wall time on the deployed site: ~5-10s on a warm cache.
 
