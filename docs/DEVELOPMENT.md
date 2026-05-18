@@ -267,6 +267,23 @@ You don't need to rebuild the Mac binary or the boot disk for this.
 
 ## Common-task recipes
 
+### Smoke-test a sample change before pushing
+
+The combined `.c` + `.r` audit runs both halves of the in-browser
+build locally — what you want before opening a PR that touches any
+`wasm-*` sample:
+
+```sh
+npm run audit:wasm-e2e -- wasm-mdpad   # one sample, ~1.5 s
+npm run audit:wasm-e2e                  # every sample, ~5 s
+```
+
+If a sample fails on the `.r` side, re-run that half alone for full
+diagnostics: `node scripts/audit-wasm-rez.mjs <sample>`. Same for
+the `.c` side via `node scripts/audit-wasm-samples.mjs <sample>`.
+For deeper "did the splice produce the expected resource fork?"
+work see [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md).
+
 ### Change app behavior
 
 Toolbox-side change (event handling, menu, drawing). Loop 2.
