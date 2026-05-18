@@ -84,13 +84,20 @@ resource 'MENU' (132, "Size") {
 /* Style menu — items get the bold/italic/underline face decorations
  * applied to their own labels (classic Mac convention so the menu
  * is self-documenting). Plain has no decoration. */
+/* Face mask for each item is the byte at the end. Our cv-mac
+ * Multiverse.r stub's MENU template only declares `plain` as a named
+ * byte value; bold/italic/underline aren't enum'd, so we use the
+ * literal face-bit values (Inside Mac: bold=1, italic=2, underline=4).
+ * The label-side decoration (bold/italic/etc on the menu item text
+ * itself) would come from a separate "label face" field that this
+ * cv-mac stub template doesn't carry — items render in plain text.*/
 resource 'MENU' (133, "Style") {
     133, textMenuProc, allEnabled, enabled, "Style",
     {
         "Plain",     noIcon, noKey, noMark, plain;
-        "Bold",      noIcon, "B",   noMark, bold;
-        "Italic",    noIcon, "I",   noMark, italic;
-        "Underline", noIcon, "U",   noMark, underline;
+        "Bold",      noIcon, "B",   noMark, 0x01;   /* bold */
+        "Italic",    noIcon, "I",   noMark, 0x02;   /* italic */
+        "Underline", noIcon, "U",   noMark, 0x04;   /* underline */
     }
 };
 
@@ -104,10 +111,20 @@ resource 'WIND' (128) {
     noAutoCenter
 };
 
+/* ALRT stages array — one record per of 4 click stages, each is
+ * (default-button, visibility, sound-mask). The previous
+ * "{ OK, OK, OK, OK }" shorthand was missing fields per the
+ * Multiverse.r ALRT template (3 fields per stage) and tripped
+ * wasm-rez's assertion at ResourceDefinitions.cc:253. */
 resource 'ALRT' (128) {
     { 80, 80, 240, 400 },
     128,
-    { OK, OK, OK, OK },
+    {
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent;
+        OK, visible, silent
+    },
     alertPositionMainScreen
 };
 
