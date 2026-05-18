@@ -95,6 +95,18 @@ in-browser, but
 [`scripts/splice-bin.mjs`](../scripts/splice-bin.mjs) reproduces it in
 Node so you can inspect the result without spinning up a tab.
 
+**First check** (cheapest signal — does each half compile at all?):
+
+```bash
+# Both halves at once. ~1.5 s for one sample, ~5 s for all 26.
+npm run audit:wasm-e2e -- wasm-glypha3
+# ✓ wasm-glypha3  c=✓ 112256 B  …  r=✓ 555801 B  …
+```
+
+If a side fails, the audit prints which side and a one-line reason.
+If both pass and the app still misbehaves, drop down to the
+finer-grained pipeline below to inspect what's actually in the .bin.
+
 ```bash
 # 1. Compile the .c via Node-side wasm-cc1 (audit pipeline)
 #    — see scripts/build-and-extract-sample.mjs for a reusable harness.

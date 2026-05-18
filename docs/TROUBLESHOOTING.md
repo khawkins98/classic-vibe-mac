@@ -5,7 +5,10 @@ Detailed walkthrough follows the quick-reference table.
 
 Cross-links: [`DEVELOPMENT.md`](./DEVELOPMENT.md) (iteration loops),
 [`LEARNINGS.md`](../LEARNINGS.md) (running gotchas log),
-[`README.md`](../README.md#try-it) (Try it).
+[`README.md`](../README.md#try-it) (Try it),
+[`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md) (when
+a vendored period app fails silently — instrumentation recipes +
+offline splice repro).
 
 ---
 
@@ -24,6 +27,11 @@ Cross-links: [`DEVELOPMENT.md`](./DEVELOPMENT.md) (iteration loops),
 | In-browser C build: WasmHello downloads but bombs with type-3 at launch | Likely the `--emit-relocs` ld flag is missing — relocations aren't preserved in the output ELF so `Retro68Relocate` walks empty RELA at runtime and pointers fault. | Already fixed on main (cv-mac #97). If you're forking, make sure `cc1.ts`'s ld argv includes `--emit-relocs`. |
 | In-browser C build fails with `unknown filename` or similar MEMFS error | The compile pipeline writes intermediate files to `/tmp/` in the Module FS; a previous failed run may have left stale files | Reload the page (each fresh page load gets fresh Modules). Or check `src/web/src/playground/cc1.ts` for `FS.unlink` calls before each write. |
 | `bundleVersion` in console doesn't change after deploying a toolchain fix | `bundleVersion` hashes the C sample sources only, not the wasm-cc1 toolchain. Toolchain updates change `toolchainVersion` instead. | Look for `toolchainVersion=<hex>` in the same `[cvm] build` console line. |
+| Vendored app shows its own error alert ("Failed Loading X") or ExitToShells silently after partial boot | Almost always heap exhaustion (memFullErr / `-108`) — period apps' default `SIZE -1` hint is small. Sometimes a missing resource the app's C code hardcodes. | Bump `SIZE -1` in the app's `.r` to 4 MB pref / 2 MB min as a first try. Full diagnostic recipe in [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md). |
+| Build fails with `WASM-Rez threw: Aborted(Assertion failed: i < n, at: …/ResourceDefinitions.cc,253,compile)` | Malformed `ALRT` resource in the `.r` — shorthand `{ OK, OK, OK, OK }` instead of the full per-stage tuple `{ OK, visible, silent; … }` | Spell out the tuple. `npm run audit:wasm-rez` catches this in CI. (Fixed for shipped samples in #297.) |
+| Build fails with `Aborted: memory access out of bounds` deep in wasm-rez on a large `.r` (e.g. a 2.7 MB vendored upstream) | wasm-rez's C-stack overflows on left-leaning CONCAT trees in long hex-literal sequences. Cliff was at ~1340 literals/resource. | Already fixed on main (#287, STACK_SIZE bumped to 8 MB). If you forked off pre-#287, rebuild wasm-rez from `tools/wasm-rez/`. |
+| Build progress modal shows the *previous* build's failure or a frozen elapsed timer | Stale state left in the reused WinBox | Already fixed on main (#298). Hard-reload to get the new bundle. |
+| Doing local pre-push smoke tests on a `wasm-*` sample change | n/a — what to run | `npm run audit:wasm-e2e -- <sample>` runs both .c + .r locally in ~1.5 s. Drop the `--` for all samples. |
 
 ---
 
@@ -131,6 +139,8 @@ icon, open it, and double-click your app to launch it.
 
 ---
 
-_This file is extracted from `docs/DEVELOPMENT.md § Common failure modes`.
-If you add a fix here, add the corresponding entry to
-[`LEARNINGS.md`](../LEARNINGS.md) too so future contributors can find it._
+_If you add a fix here, add the corresponding entry to
+[`LEARNINGS.md`](../LEARNINGS.md) too so future contributors can find it.
+For vendored-app debugging specifically, the deeper recipes
+(`cvm_log` instrumentation, splice repro, heap diagnosis) live in
+[`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md)._

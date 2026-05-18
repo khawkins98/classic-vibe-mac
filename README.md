@@ -20,10 +20,11 @@ hot-load loop is live in production today.
 ## Live at
 
 **https://khawkins98.github.io/classic-vibe-mac/** — the full
-playground: 25 in-browser-buildable samples (a small
+playground: 26 in-browser-buildable samples (a small
 Toolbox-coverage ladder from one-line "Hello, World!" up to the
-1992 game *Glypha III* port), edit-and-rebuild loop running, the
-Mac wakes up the moment you click Build & Run.
+1992 game *Glypha III* — playable, with sprite art and sound),
+edit-and-rebuild loop running, the Mac wakes up the moment you
+click Build & Run.
 
 Toolchain-only proof of life: **https://khawkins98.github.io/wasm-retro-cc/**
 — compile a Toolbox `hello.c` straight through the four wasm tools
@@ -51,11 +52,12 @@ This README serves three different visitors:
 The deployed page is the IDE first; the Mac is a build target the
 IDE delivers into. Four docked panes:
 
-- **The Project picker** (top-left) — 25 sample apps in a small
+- **The Project picker** (top-left) — 26 sample apps in a small
   Toolbox-coverage ladder, from one-line "Hello, World!" up through
   GWorld double-buffering, dialog managers, file I/O, custom icon
-  resources, and (at the top of the ladder) the 1992 game *Glypha
-  III* port. Pick one; it opens in the editor.
+  resources, a Markdown editor with live preview, and (at the top
+  of the ladder) the 1992 game *Glypha III*. Pick one; it opens in
+  the editor.
 - **The Playground** (centre-left) — CodeMirror 6 with C syntax
   highlighting, a project tab bar, and per-project file persistence
   in IndexedDB. ⌘-click any Toolbox identifier to pin its
@@ -107,7 +109,7 @@ for the long version.
 
 ### The sample shelf
 
-25 small-to-medium classic Mac apps under `src/app/wasm-*/`. The
+26 small-to-medium classic Mac apps under `src/app/wasm-*/`. The
 playground picker surfaces all of them with a complexity rating
 (★☆☆☆☆☆ → ★★★★★★) so visitors can pick an on-ramp matched to their
 comfort level. Highlights:
@@ -130,20 +132,22 @@ comfort level. Highlights:
   `cvm_log()` / `cvm_log_p()` / `cvm_log_reset()`, the Mac-side
   API the IDE's Console tab picks up via a polled `:Unix:` file.
 - **Glypha III** ★★★★★★ — John Calhoun's 1992 game, vendored
-  whole. 6,600 LOC, nine .c files. The "real period app at scale"
-  proof-of-feasibility for the compile pipeline. Won't actually
-  render gameplay yet — its 2.7 MB upstream resource fork needs
-  the fork-composition infrastructure tracked in
-  [#280](https://github.com/khawkins98/classic-vibe-mac/issues/280) —
-  but compiles + links + boots end-to-end through the playground
-  in ~1 second once cached.
+  whole. 6,600 LOC, nine .c files. Plays in the browser tab with
+  sprite art, 17 sound effects, and a working menu bar — the "real
+  period app at scale" milestone for the in-browser pipeline. The
+  underlying wasm-rez stack-overflow that briefly blocked it was
+  fixed in #287; full closeout story is `docs/DEBUGGING-VENDORED-APPS.md`.
+- **Wasm Markdown** ★★★★☆☆ — split-pane Markdown editor with live
+  preview. The "modern format, classic chrome" sample — Markdown
+  post-dates System 7 by a decade, but here it is in Geneva and
+  Chicago against grey bevel windows.
 
 Full inventory + coverage matrix in
 [`src/app/README.md`](./src/app/README.md). Adding a sample is a
 new `src/app/wasm-<name>/` directory + a `SAMPLE_PROJECTS` entry
 in `src/web/src/playground/types.ts` + a SEED_FILES entry in
 `src/web/vite.config.ts` — no CMake, no CI step, no toolchain
-install. The audit at `npm run audit:wasm-shelf` compiles every
+install. The audit at `npm run audit:wasm-e2e` compiles every
 sample headlessly on every PR so regressions surface at review
 time, not at "user clicks Build."
 
@@ -303,10 +307,11 @@ run loop**. Highlights of what's shipped on `main` today:
   Build & Run on any sample boots the result cleanly in BasiliskII.
   First time anyone has compiled classic Mac C in a tab and watched
   it launch.
-- **25-sample shelf** under `src/app/wasm-*/`, climbing from a
+- **26-sample shelf** under `src/app/wasm-*/`, climbing from a
   one-line "Hello, World!" up through GWorld double-buffering,
-  modal dialogs, file I/O, custom resource fork assets, and (at
-  the top) the 6,600-LOC 1992 game *Glypha III*.
+  modal dialogs, file I/O, custom resource fork assets, a Markdown
+  editor with live preview, and (at the top) the 6,600-LOC 1992
+  game *Glypha III* — playable, with sprite art and 17 sound effects.
 - **Deferred-boot UX** — the Mac canvas shows a welcome placeholder
   on first paint; boots into System 7.5.5 with your freshly-built
   app's disk on the desktop when you click Build & Run. Page load
@@ -325,9 +330,11 @@ run loop**. Highlights of what's shipped on `main` today:
 The canonical shipped-state checklist — what's live, what's
 closed-Epic, what's next — lives in
 [`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md#status). The current
-forward-looking work is in
-[#280 (asset-handling architecture)](https://github.com/khawkins98/classic-vibe-mac/issues/280)
-and [#256 (Glypha gameplay needs the resource fork)](https://github.com/khawkins98/classic-vibe-mac/issues/256).
+forward-looking work is open in the
+[issue tracker](https://github.com/khawkins98/classic-vibe-mac/issues)
+— Aaron UI window-manager prototype (#246), boot-disk Finder window
+suppression (#245), and the rainbow Apple menu + runtime color-depth
+switching (#224) are the live tickets at the time of writing.
 
 ## Recently shipped
 
@@ -341,11 +348,26 @@ and [#256 (Glypha gameplay needs the resource fork)](https://github.com/khawkins
   Mac, Pixel Pad, Markdown Viewer) were retired wholesale; the
   in-browser pipeline is now the only path. ~9,000 LOC of
   scaffolding gone.
-- **Glypha III onboarding** (2026-05-16, #255). First third-party
-  period app on the shelf — 6,600 LOC, John Calhoun's 1992 game,
-  vendored whole. Compiles + links + boots through the playground
-  in ~1 second (cached). Actual gameplay still needs the resource
-  fork; tracked in #256 + #280.
+- **Glypha III playable** (2026-05-17 → 2026-05-18, #287–#292,
+  closing #256). First third-party period app on the shelf — 6,600
+  LOC, John Calhoun's 1992 game, vendored whole. Now boots into the
+  real game with sprite art, 17 sound effects, and a working menu
+  bar. The closeout pulled in two reusable pieces: the wasm-rez
+  STACK_SIZE bump that unblocked any large `.r` (#287), and the
+  vendored-app debugging toolkit captured in
+  [`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md) +
+  [`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md).
+- **Wasm Markdown (live preview)** (2026-05-18, #296). New
+  split-pane sample: source TextEdit on the left, custom-drawn
+  rendered preview on the right, re-renders on each keystroke. The
+  "modern format in classic chrome" exhibit.
+- **`audit:wasm-e2e` + diagnostic toolkit** (2026-05-17 → 2026-05-18,
+  #294, #297, #299). `npm run audit:wasm-e2e` runs both halves of
+  the build (`.c` via wasm-cc1 + `.r` via wasm-rez) and prints a
+  combined pass/fail line per sample — the local pre-push check
+  for any playground change. Companion `scripts/splice-bin.mjs`
+  reproduces the browser's resource-fork splice in plain Node for
+  offline inspection.
 - **Debug Console tab** (2026-05-16, #261). `cvm_log()` API +
   watcher pipeline. Originally the "Coming soon" placeholder under
   Output → Console; now live with unread indicators and a system
@@ -384,8 +406,9 @@ with the deploy.
      appCreator, complexity).
    - `src/web/vite.config.ts` → push the same files into the
      `SEED_FILES` map so they get copied into the playground bundle.
-4. **Verify locally.** `npm run audit:wasm-shelf` compiles your
-   new sample alongside the other 25. If it goes green, the
+4. **Verify locally.** `npm run audit:wasm-e2e -- wasm-<your-name>`
+   runs both halves of the build (`.c` + `.r`) for your sample.
+   If it goes green, the
    browser-side Build will too.
 5. **Push to `main`.** GitHub Actions builds the bundle (no
    cross-compile step — the wasm toolchain ships in the bundle)
@@ -436,6 +459,13 @@ works, modify the platform, or extend it.* Suggested reading order:
    Symptom → cause → fix table for the common things that break.
 9. **[`docs/NETWORKING.md`](./docs/NETWORKING.md)** — Specialised:
    the opt-in AppleTalk zone relay.
+10. **[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md)** —
+    Recipe for adding a third-party period Mac app to the sample
+    shelf so it builds end-to-end in the playground. Distilled from
+    the Glypha III closeout (#287–#292).
+11. **[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md)** —
+    Companion to the vendoring recipe: instrumentation patterns +
+    offline splice repro for when a vendored app fails silently.
 
 For cross-repo context (the wasm toolchain itself), see
 [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc).
