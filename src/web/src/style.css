@@ -1294,6 +1294,22 @@ body.cvm-paused .emulator-canvas {
   z-index: 2;
 }
 
+/* "+" New-file button at the end of the tab bar. Same shape as a
+   tab but without the tab role + always inactive-styled, with a
+   slightly larger glyph for affordance. */
+.cvm-pg-tab--new {
+  margin-left: 6px;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 18px;
+  color: var(--shadow);
+}
+.cvm-pg-tab--new:hover {
+  background: var(--platinum-light);
+  color: var(--ink);
+}
+
 .cvm-pg-tab[aria-selected="false"]:hover {
   background: #d0d0d0; /* lightly raised platinum on hover */
 }

@@ -224,6 +224,47 @@ export async function writeUiState(key: string, value: unknown): Promise<void> {
   });
 }
 
+// ── User-added files per project ───────────────────────────────────
+//
+// Each SAMPLE_PROJECTS entry ships a fixed `files: string[]` list —
+// the "seed" files we copy into IDB on first paint. Anything the
+// user creates after that (File → New file…) lives in a separate
+// per-project list stored under `cvm:user-files:<projectId>`. The
+// editor merges seed + user filenames on project switch to render
+// the tab bar and gather sources for the build pipeline.
+//
+// File contents themselves still go through writeFile/readFile under
+// `<projectId>/<filename>` — same plumbing as the seeded files. The
+// only thing the user-files list tracks is which filenames exist.
+
+const USER_FILES_PREFIX = "cvm:user-files:";
+
+export async function getUserFilenames(projectId: string): Promise<string[]> {
+  const list = await readUiState<string[]>(USER_FILES_PREFIX + projectId);
+  return Array.isArray(list) ? [...list] : [];
+}
+
+export async function addUserFilename(
+  projectId: string,
+  filename: string,
+): Promise<void> {
+  const list = await getUserFilenames(projectId);
+  if (list.includes(filename)) return;
+  list.push(filename);
+  await writeUiState(USER_FILES_PREFIX + projectId, list);
+}
+
+export async function removeUserFilename(
+  projectId: string,
+  filename: string,
+): Promise<void> {
+  const list = await getUserFilenames(projectId);
+  const idx = list.indexOf(filename);
+  if (idx < 0) return;
+  list.splice(idx, 1);
+  await writeUiState(USER_FILES_PREFIX + projectId, list);
+}
+
 /**
  * Record the hash of a file's bundled content at seeding time.
  * Used later to detect whether the user has edited the file.
