@@ -181,6 +181,12 @@ export async function mountPlayground(
     "#cvm-pg-project",
   )!;
   const tabBarEl = rootEl.querySelector<HTMLDivElement>("#cvm-pg-tabbar")!;
+  const stepsLabelEl = rootEl.querySelector<HTMLLabelElement>(
+    "#cvm-pg-steps-label",
+  );
+  const stepsSelectEl = rootEl.querySelector<HTMLSelectElement>(
+    "#cvm-pg-steps",
+  );
   const routinesBarEl = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-routines-bar",
   )!;
@@ -571,6 +577,7 @@ export async function mountPlayground(
           // (typically <100 KB) source. Debounce only if it shows up
           // in a profile.
           refreshRoutines();
+          refreshSteps();
         }
         if (update.selectionSet) {
           scheduleCursorSave();
@@ -789,6 +796,7 @@ export async function mountPlayground(
     }
     renderTabBar(nextProject, nextFile);
     refreshRoutines();
+    refreshSteps();
     await writeUiState(UI_PROJECT, projectId);
     await writeUiState(UI_FILE, nextFile);
     // Refresh the Assembly panel (if open). On a switch we still debounce —
@@ -895,6 +903,7 @@ export async function mountPlayground(
   // Initial tab bar + routines render.
   renderTabBar(project, filename);
   refreshRoutines();
+  refreshSteps();
 
   // ── Tab bar rendering ─────────────────────────────────────────────────────
   // Builds the tab bar from scratch using DOM methods (no innerHTML injection)
@@ -1077,6 +1086,79 @@ export async function mountPlayground(
     // Reset so the user can pick the same entry again.
     routinesSelectEl.value = "";
   });
+
+  // ── Annotated-sample Tour (@cvm-step N: …) ────────────────────────
+  //
+  // Samples can sprinkle `/* @cvm-step <N>: <text> */` block comments
+  // throughout the source. Those become numbered entries in the
+  // "→ Tour:" dropdown above the editor — click one and you jump to
+  // that landmark + the line briefly flashes. This converts a wall of
+  // 400 lines of C into a guided read: "1. set up the toolbox, 2. open
+  // the window, 3. here's the event loop". Sorting is by N (not by
+  // line position) so authors can re-order without renumbering.
+  //
+  // The annotations are plain C block comments — no Rez / parser
+  // intrusion, no separate metadata file, no IDE-only state.
+  function extractSteps(): Array<{ n: number; label: string; line: number }> {
+    const text = view.state.doc.toString();
+    // Match `/* @cvm-step 3: <body> */` — body may span lines until
+    // the */ terminator. Whitespace between marker and number is
+    // tolerated; trailing whitespace in the body is trimmed by the
+    // post-process below.
+    const re = /\/\*\s*@cvm-step\s+(\d+)\s*:\s*([\s\S]*?)\*\//g;
+    const out: Array<{ n: number; label: string; line: number }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const n = parseInt(m[1]!, 10);
+      const body = m[2]!.replace(/\s+/g, " ").trim();
+      const line = view.state.doc.lineAt(m.index).number;
+      out.push({ n, label: body, line });
+    }
+    // Sort by step number, not by line position, so authors can place
+    // a "step 1" intro at the bottom of the file if they want to.
+    out.sort((a, b) => a.n - b.n);
+    return out;
+  }
+
+  function refreshSteps(): void {
+    if (!stepsSelectEl || !stepsLabelEl) return;
+    const steps = extractSteps();
+    if (steps.length === 0) {
+      stepsSelectEl.hidden = true;
+      stepsLabelEl.hidden = true;
+      return;
+    }
+    stepsSelectEl.hidden = false;
+    stepsLabelEl.hidden = false;
+    const opts: string[] = [
+      `<option value="">→ ${steps.length} step${steps.length === 1 ? "" : "s"}…</option>`,
+    ];
+    for (const s of steps) {
+      // Cap label length so a verbose annotation doesn't blow out the
+      // dropdown width. CodeMirror's gutter already shows the line.
+      const trimmed =
+        s.label.length > 70 ? s.label.slice(0, 67) + "…" : s.label;
+      opts.push(
+        `<option value="${s.line}">${s.n}. ${escapeHtml(trimmed)}</option>`,
+      );
+    }
+    stepsSelectEl.innerHTML = opts.join("");
+    stepsSelectEl.value = "";
+  }
+
+  if (stepsSelectEl) {
+    stepsSelectEl.addEventListener("change", () => {
+      const line = parseInt(stepsSelectEl.value, 10);
+      if (!Number.isFinite(line) || line <= 0) return;
+      const ln = view.state.doc.line(line);
+      view.dispatch({
+        selection: { anchor: ln.from, head: ln.from },
+        scrollIntoView: true,
+      });
+      view.focus();
+      stepsSelectEl.value = "";
+    });
+  }
 
   /** Add a new (empty) file to the active project. Prompts the user
    *  for a filename, validates extension + collision, persists the
@@ -1594,6 +1676,17 @@ function renderShell(persistent: boolean, preservedCount: number): string {
         <label class="cvm-pg-routines-label" for="cvm-pg-routines">{} Routines:</label>
         <select id="cvm-pg-routines" class="cvm-pg-routines-select" title="Jump to a function in the current file (CodeWarrior-style)">
           <option value="">(no routines)</option>
+        </select>
+        <!-- Take-the-tour selector. Hidden when the active file has no
+             @cvm-step annotations. Sibling to Routines so the editor
+             chrome stays a single tidy row across both jumpers. -->
+        <label class="cvm-pg-routines-label cvm-pg-steps-label"
+               for="cvm-pg-steps" hidden id="cvm-pg-steps-label">→ Tour:</label>
+        <select id="cvm-pg-steps"
+                class="cvm-pg-routines-select cvm-pg-steps-select"
+                hidden
+                title="Take a guided tour of this sample — jumps to annotated landmarks (@cvm-step) in order">
+          <option value="">(no steps)</option>
         </select>
       </div>
       <div id="cvm-pg-editor-mount" class="cvm-pg-editor" role="tabpanel"></div>

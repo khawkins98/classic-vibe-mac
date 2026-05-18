@@ -72,6 +72,10 @@ typedef struct {
 
 typedef enum { DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT } Direction;
 
+/* @cvm-step 1: Game state lives in one struct — snake body cells,
+   direction, apple, score, RNG. All the interesting game tweaks
+   touch this struct or the handlers below; the Toolbox boilerplate
+   at the bottom (main / event loop) is the same in every Mac app. */
 typedef struct {
     SnakeCell body[SNAKE_MAX];   /* body[0] = head, body[len-1] = tail */
     short len;
@@ -156,6 +160,11 @@ static void reset_game(void) {
     place_apple();
 }
 
+/* @cvm-step 2: The heart of the game — one tick of the snake.
+   Wall-collision check, self-collision check, apple-eat check,
+   then shift the body forward. Try changing what happens on an
+   apple-eat (line ~218) — maybe the snake should grow by 2, or
+   the score by a different amount. */
 static void advance_snake(void) {
     SnakeCell new_head;
     short i;
@@ -337,6 +346,10 @@ static void draw_game_over(void) {
     DrawString(buf);
 }
 
+/* @cvm-step 3: Drawing. QuickDraw on classic Mac is "set the pen
+   colour, paint a rect, draw a string." No GPU, no compositor.
+   Try changing the apple's colour, the snake's segment style,
+   or how the score is rendered. */
 static void redraw_all(void) {
     Rect bounds = win->portRect;
     EraseRect(&bounds);
@@ -368,6 +381,10 @@ static void handle_key(EventRecord *ev) {
 
 QDGlobals qd;
 
+/* @cvm-step 4: The canonical Mac event loop — InitGraf / InitWindows
+   / GetNewWindow then a forever loop on WaitNextEvent. Same shape in
+   every Mac app from MacPaint (1984) to OS 9 (1999). The keyDown /
+   mouseDown / updateEvt branches below dispatch to your game logic. */
 int main(void) {
     EventRecord ev;
     long now;
