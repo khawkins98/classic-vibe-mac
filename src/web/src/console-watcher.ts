@@ -68,14 +68,122 @@ function getPre(): HTMLPreElement | null {
   return document.getElementById("cvm-output-console") as HTMLPreElement | null;
 }
 
+/** Keyword spans to colour-highlight inside log lines. Order matters
+ *  — first match wins per character span. Case-insensitive matched. */
+const HIGHLIGHT_PATTERNS: ReadonlyArray<{
+  pattern: RegExp;
+  className: string;
+}> = [
+  { pattern: /\b(error|fail(ed|ure)?|fatal|panic|aborted?)\b/gi,
+    className: "cvm-output__log-error" },
+  { pattern: /\b(warn(ing)?|caution)\b/gi,
+    className: "cvm-output__log-warn" },
+];
+
+/** Hide the Console pane's empty-state hint once any non-startup
+ *  line has been appended. Idempotent — sets a flag so we don't
+ *  re-query the DOM on every line. */
+let hintHidden = false;
+function hideHintIfPresent(): void {
+  if (hintHidden) return;
+  const hint = document.getElementById("cvm-output-console-hint");
+  if (hint) hint.hidden = true;
+  hintHidden = true;
+}
+
+/** Apply the active filter (if any) to a single `<div>` line.
+ *  Returns true if the line should be visible. */
+function applyFilterToElement(el: HTMLElement, query: string): boolean {
+  if (!query) return true;
+  const visible = el.textContent?.toLowerCase().includes(query) ?? false;
+  el.hidden = !visible;
+  return visible;
+}
+
+/** The live filter query — captured at filter-input time, applied
+ *  to new lines as they arrive so newly-emitted output respects the
+ *  current filter without the user having to re-type. */
+let filterQuery = "";
+
 function appendLine(line: string): void {
   const pre = getPre();
   if (!pre) return;
   const atBottom =
     pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
-  pre.append(document.createTextNode(`${timestamp()} ${line}\n`));
+  // Wrap each line in its own <div> so the filter can hide individual
+  // lines without breaking the layout — a <pre> with plain text nodes
+  // wouldn't give us that granularity.
+  const lineEl = document.createElement("div");
+  lineEl.className = "cvm-output__log-line";
+  // Timestamp prefix, no highlighting.
+  lineEl.append(document.createTextNode(`${timestamp()} `));
+  // Body — highlight keywords by splitting + wrapping matches in
+  // styled spans. Anything not matched is a plain text node, so
+  // XSS isn't a concern.
+  appendHighlighted(lineEl, line);
+  // Apply the active filter so new lines that don't match are hidden
+  // on arrival.
+  applyFilterToElement(lineEl, filterQuery);
+  pre.append(lineEl);
   if (atBottom) pre.scrollTop = pre.scrollHeight;
+  hideHintIfPresent();
   markConsoleTabUnread();
+}
+
+/** Append `text` to `parent`, wrapping any matches of the keyword
+ *  patterns in styled spans. Everything not matched goes in as a
+ *  plain text node — never raw HTML. */
+function appendHighlighted(parent: HTMLElement, text: string): void {
+  type Span = { from: number; to: number; className: string };
+  const spans: Span[] = [];
+  for (const { pattern, className } of HIGHLIGHT_PATTERNS) {
+    // Re-create the regex per call — RegExp.lastIndex stickiness with
+    // the /g flag would otherwise break re-runs on different strings.
+    const re = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      spans.push({ from: m.index, to: m.index + m[0].length, className });
+    }
+  }
+  spans.sort((a, b) => a.from - b.from);
+  let cursor = 0;
+  for (const sp of spans) {
+    if (sp.from < cursor) continue; // overlap from earlier match — skip
+    if (sp.from > cursor) {
+      parent.append(document.createTextNode(text.slice(cursor, sp.from)));
+    }
+    const span = document.createElement("span");
+    span.className = sp.className;
+    span.textContent = text.slice(sp.from, sp.to);
+    parent.append(span);
+    cursor = sp.to;
+  }
+  if (cursor < text.length) {
+    parent.append(document.createTextNode(text.slice(cursor) + "\n"));
+  } else {
+    parent.append(document.createTextNode("\n"));
+  }
+}
+
+/** Wire the filter input. Called once on first append (lazy — the
+ *  input may not exist on first watcher startup if the Output pane
+ *  is still building, so we set up on the first appendLine call). */
+let filterWired = false;
+function wireFilterInput(): void {
+  if (filterWired) return;
+  const input = document.getElementById(
+    "cvm-output-console-filter",
+  ) as HTMLInputElement | null;
+  if (!input) return;
+  filterWired = true;
+  input.addEventListener("input", () => {
+    filterQuery = input.value.trim().toLowerCase();
+    const pre = getPre();
+    if (!pre) return;
+    for (const el of pre.querySelectorAll<HTMLElement>(".cvm-output__log-line")) {
+      applyFilterToElement(el, filterQuery);
+    }
+  });
 }
 
 /** Tag the Output panel's Console tab as having unread content if
@@ -120,13 +228,16 @@ export function startConsoleWatcher(cfg: ConsoleWatcherConfig): void {
   if (started) return;
   started = true;
 
-  // Announce in the pane that the watcher is live — replaces the
-  // "Coming soon" placeholder text on first paint. idePanes.ts
-  // primes the pane with an empty <pre>; we add a header line.
-  const pre = getPre();
-  if (pre && !pre.textContent) {
-    appendLine("Listening for cvm_log() output on :Unix:__cvm_console.log…");
-  }
+  // Wire up the filter input. Lazy because the Output pane DOM may
+  // still be building when this fires — wireFilterInput tolerates
+  // missing input and re-runs on first user interaction implicitly
+  // via the per-line code path.
+  wireFilterInput();
+
+  // The empty-state hint card handles the "no output yet" UX in the
+  // pane background; no startup banner line needed any more (it just
+  // duplicated information the hint already shows). The hint hides
+  // automatically on first real log line via hideHintIfPresent().
 
   createPollingWatcher<{ type: "console_data"; bytes: Uint8Array | null; totalSize: number }>({
     worker: cfg.worker,
