@@ -66,8 +66,17 @@ export function openWelcome(): void {
  * First-run hook. Call after the playground has mounted (so the
  * project dropdown exists for the "Try this" buttons to drive).
  * No-op if the user has already dismissed the modal once.
+ *
+ * Also a no-op under automation: Playwright + every other browser
+ * driver sets `navigator.webdriver === true`, and a first-run modal
+ * that intercepts clicks would break every e2e test that targets the
+ * playground controls. Real users open this with the modal visible;
+ * automated tests get a pristine UI. (Apple → "Welcome to
+ * classic-vibe-mac…" still opens it on demand if a test ever needs
+ * to exercise the modal itself.)
  */
 export function maybeShowFirstRunWelcome(): void {
+  if (typeof navigator !== "undefined" && navigator.webdriver) return;
   let seen = false;
   try { seen = localStorage.getItem(FLAG_KEY) === "1"; } catch { /* ignore */ }
   if (seen) return;
