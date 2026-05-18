@@ -626,3 +626,48 @@ export const TOOLCHAIN_VERSION: string =
 export function fileKey(projectId: string, filename: string): string {
   return `${projectId}/${filename}`;
 }
+
+// ── User-projects runtime cache ────────────────────────────────────
+//
+// `SAMPLE_PROJECTS` ships at build time and is immutable. User-created
+// projects (File → "Duplicate as new project…") live in IDB and are
+// hydrated at startup via persistence.getUserProjects(); main.ts seeds
+// the cache below before mountPlayground runs so every project-lookup
+// site in the editor sees both seeded + user-created projects via the
+// same sync helper. Same shape (SampleProject) — user projects just
+// carry user-chosen ids / labels / creator codes.
+
+let userProjectsCache: SampleProject[] = [];
+
+/** Replace the runtime cache of user-created projects. Called once at
+ *  startup from main.ts and after any user-project add / remove. */
+export function setUserProjectsCache(
+  projects: readonly SampleProject[],
+): void {
+  userProjectsCache = [...projects];
+}
+
+/** All projects visible in the picker — seeded SAMPLE_PROJECTS first,
+ *  then user-created ones in their stored order. */
+export function getAllProjects(): readonly SampleProject[] {
+  return userProjectsCache.length === 0
+    ? SAMPLE_PROJECTS
+    : [...SAMPLE_PROJECTS, ...userProjectsCache];
+}
+
+/** Sync lookup by id across both seed + user projects. Returns
+ *  undefined if no match (caller should fall back to SAMPLE_PROJECTS[0]
+ *  the same way the existing code does for a stale persisted id). */
+export function findProject(id: string): SampleProject | undefined {
+  return (
+    SAMPLE_PROJECTS.find((p) => p.id === id) ??
+    userProjectsCache.find((p) => p.id === id)
+  );
+}
+
+/** Predicate for "this is a user-created project, not a shipped sample."
+ *  Used by the UI to render a "(your project)" affordance + enable
+ *  user-only actions (delete, rename) the seeded samples don't get. */
+export function isUserProject(id: string): boolean {
+  return userProjectsCache.some((p) => p.id === id);
+}

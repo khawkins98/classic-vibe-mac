@@ -58,6 +58,8 @@ import {
   SAMPLE_PROJECTS,
   TOOLCHAIN_VERSION,
   complexityStars,
+  findProject,
+  getAllProjects,
   type SampleProject,
 } from "./types";
 import type { Diagnostic } from "./preprocessor";
@@ -208,7 +210,7 @@ export async function mountPlayground(
   const savedProject = await readUiState<string>(UI_PROJECT);
   const projectTemplate: SampleProject =
     (savedProject
-      ? SAMPLE_PROJECTS.find((p) => p.id === savedProject)
+      ? findProject(savedProject)
       : undefined) ?? SAMPLE_PROJECTS[0]!;
 
   // Live project: SAMPLE_PROJECTS entry with user-added filenames
@@ -232,11 +234,32 @@ export async function mountPlayground(
   // Seed project dropdown. Star-prefix the option text so visitors
   // can read the project's complexity level at a glance (#233 stepped-
   // complexity demo curation). `★★★☆☆ Wasm Snake (game)` etc.
-  projectSelect.innerHTML = SAMPLE_PROJECTS.map(
-    (p) =>
-      `<option value="${p.id}">${complexityStars(p.complexity)}  ${escapeHtml(p.label)}</option>`,
-  ).join("");
+  // Includes user-created projects appended after the shipped samples
+  // (see types.ts `getAllProjects`).
+  function renderProjectDropdown(): void {
+    projectSelect.innerHTML = getAllProjects()
+      .map(
+        (p) =>
+          `<option value="${p.id}">${complexityStars(p.complexity)}  ${escapeHtml(p.label)}</option>`,
+      )
+      .join("");
+  }
+  renderProjectDropdown();
   projectSelect.value = project.id;
+
+  // Cross-module hook so main.ts (where the File menu wires
+  // "Duplicate as new project…") can refresh the dropdown after a
+  // user-project is created/removed without re-mounting the editor.
+  window.addEventListener("cvm:user-projects-changed", (() => {
+    const prev = projectSelect.value;
+    renderProjectDropdown();
+    // Try to keep the same selection; if the project was deleted, the
+    // dropdown silently falls back to its first option and the caller
+    // is expected to dispatch a switch.
+    if ([...projectSelect.options].some((o) => o.value === prev)) {
+      projectSelect.value = prev;
+    }
+  }) as EventListener);
 
   // ── Dirty-state tracking (issue #22) ─────────────────────────────────────
   // Maps "${projectId}/${filename}" → edit-version at last user keystroke.
@@ -596,7 +619,7 @@ export async function mountPlayground(
     // Gather project sibling files so quoted `#include "x.h"` in the
     // active buffer resolves. We read from IDB (or seed) — only the
     // active file uses the live editor buffer.
-    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    const proj = findProject(current.project);
     const siblings: Array<{ name: string; content: string }> = [];
     if (proj) {
       for (const f of proj.files) {
@@ -696,7 +719,7 @@ export async function mountPlayground(
     const seq = ++switchSeq;
     await flushSave();
     if (seq !== switchSeq) return;
-    const template = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+    const template = findProject(projectId);
     if (!template) return;
     // Live project for the target: template + any user-added filenames.
     // Object.assign mutates the closure-captured `project` so other code
@@ -745,7 +768,7 @@ export async function mountPlayground(
   ): Promise<void> {
     // Switch tabs first if needed; the dispatch below races otherwise.
     if (file !== current.filename) {
-      const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+      const proj = findProject(current.project);
       if (!proj || !proj.files.includes(file)) return;
       await switchTo(current.project, file);
     }
@@ -774,7 +797,7 @@ export async function mountPlayground(
 
   projectSelect.addEventListener("change", () => {
     const newId = projectSelect.value;
-    const newProject = SAMPLE_PROJECTS.find((p) => p.id === newId);
+    const newProject = findProject(newId);
     if (!newProject) return;
     void switchTo(newId, newProject.files[0]!);
   });
@@ -916,7 +939,7 @@ export async function mountPlayground(
   }
 
   function updateTabBar(): void {
-    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    const proj = findProject(current.project);
     if (!proj) return;
     renderTabBar(proj, current.filename);
   }
@@ -937,7 +960,7 @@ export async function mountPlayground(
   downloadBtn.addEventListener("click", async () => {
     await flushSave();
     const projectId = current.project;
-    const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+    const proj = findProject(projectId);
     if (!proj) return;
     downloadBtn.disabled = true;
     try {
@@ -955,7 +978,7 @@ export async function mountPlayground(
   if (resetBtn) {
     resetBtn.addEventListener("click", async () => {
       const projectId = current.project;
-      const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+      const proj = findProject(projectId);
       if (!proj) return;
       const ok = window.confirm(
         `Discard your edits to ${proj.label} and reload from the bundled ` +
@@ -1024,7 +1047,7 @@ export async function mountPlayground(
   buildBtn.addEventListener("click", async () => {
     await flushSave();
     const projectId = current.project;
-    const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
+    const proj = findProject(projectId);
     if (!proj) return;
 
     buildBtn.disabled = true;
@@ -1077,7 +1100,7 @@ export async function mountPlayground(
       return;
     }
     await flushSave();
-    const proj = SAMPLE_PROJECTS.find((p) => p.id === current.project);
+    const proj = findProject(current.project);
     if (!proj) return;
 
     // Disable BOTH build buttons while a reboot is in progress; re-enable
