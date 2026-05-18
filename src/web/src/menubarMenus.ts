@@ -51,6 +51,7 @@ export interface MenubarActions {
   openAbout: () => void;
   openPreferences: () => void;
   openHelp: () => void;
+  openWelcome: () => void;
   openToolboxReference: () => void;
   openProjectPicker: () => void;
   openZipPicker: () => void;
@@ -102,6 +103,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
       const recent = actions.listRecentProjects();
       const base: MenuEntry[] = [
         { label: "About classic-vibe-mac…", action: actions.openAbout },
+        { label: "Welcome to classic-vibe-mac…", action: actions.openWelcome },
       ];
       if (recent.length === 0) return base;
       // Classic System 7 Apple-menu shape: About at top, then a divider,

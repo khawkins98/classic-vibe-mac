@@ -52,6 +52,7 @@ import { openToolboxReference } from "./playground/toolbox-reference-window";
 import { openAbout } from "./aboutPalette";
 import { openPreferences } from "./preferencesPalette";
 import { mountMenubar } from "./menubarMenus";
+import { openWelcome, maybeShowFirstRunWelcome } from "./welcomePalette";
 import { installBuildProgressWindow } from "./playground/buildProgressWindow";
 
 const root = document.getElementById("app");
@@ -794,6 +795,7 @@ mountMenubar({
   openAbout,
   openPreferences,
   openHelp,
+  openWelcome,
   // Help → Toolbox Reference… opens the pinned WinBox with a sensible
   // first entry. The user can browse from there via the See-Also links;
   // most Toolbox programs touch InitGraf early, so it's a friendly
@@ -843,3 +845,10 @@ mountMenubar({
   },
   listRecentProjects,
 });
+
+// First-run onboarding: opens the welcome modal the first time the
+// page loads. No-op once the user dismisses it with "Don't show again"
+// checked (default), or whenever they re-open it from the Apple menu.
+// Deferred so the playground's mount sequence (project dropdown,
+// initial sample seeding) is settled before the modal renders.
+maybeShowFirstRunWelcome();
