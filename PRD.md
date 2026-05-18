@@ -1,6 +1,6 @@
 # PRD: classic-vibe-mac
 
-_Last updated: 2026-05-09._
+_Last updated: 2026-05-18._
 
 ## Problem Statement
 
