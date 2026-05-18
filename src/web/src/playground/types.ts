@@ -118,6 +118,39 @@ export interface SampleProject {
    * these as binary assets (same as `binaryAssets`).
    */
   precompiledForkAssets?: string[];
+  /**
+   * Optional curated list of "try this next" prompts surfaced as a
+   * card after a successful Build & Run. Closes the loop between
+   * "the app worked" and "now what?" — every entry should be a
+   * single concrete experiment a new user can try in under a minute,
+   * with a file + line that anchors the prompt to the right place.
+   *
+   * The cards cycle: the playground tracks which prompt index was
+   * shown last per project (localStorage) and advances on the next
+   * successful build, so a user clicking Build & Run repeatedly
+   * sees a different prompt each time. Once all prompts have been
+   * cycled through, the rotation starts over.
+   *
+   * Authoring guide: keep prompts to one short sentence. Imperative
+   * voice ("Make the snake start at length 8"). The `file` + `line`
+   * combo opens the editor on the right line so the user can act on
+   * the suggestion without hunting.
+   */
+  tryNext?: TryNextPrompt[];
+}
+
+/**
+ * A single "try this next" suggestion for a sample. See
+ * SampleProject.tryNext for the curation guide.
+ */
+export interface TryNextPrompt {
+  /** One-sentence imperative experiment ("Add a beep on game over"). */
+  prompt: string;
+  /** File to open when the user clicks "Try this". Defaults to the
+   *  project's primary .c file when omitted. */
+  file?: string;
+  /** Line within `file` to scroll the editor to. */
+  line?: number;
 }
 
 /**
@@ -172,6 +205,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     // don't ship a custom icon for this demo.
     appCreator: "????",
     complexity: 1,
+    tryNext: [
+      { prompt: "Change the greeting text — edit the kHelloStr bytes (don't forget to update the length prefix)." },
+      { prompt: "Draw at a different spot — change MoveTo(100, 100) to MoveTo(50, 30)." },
+      { prompt: "Add a second DrawString call after the first to print two lines." },
+    ],
   },
   {
     // wasm-hello-multi — multi-file C demo (cv-mac #100 Phase A).
@@ -217,6 +255,13 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVSN",
     complexity: 3,
+    tryNext: [
+      { prompt: "Make the snake faster — change MOVE_TICKS to 3 for a real challenge.", file: "snake.c" },
+      { prompt: "Score more per apple — bump 'game.score += 10' to 25.", file: "snake.c" },
+      { prompt: "Grow by 2 on each apple — duplicate the body-shift block in the ate branch.", file: "snake.c" },
+      { prompt: "Resize the playfield — try GRID_W=32, GRID_H=20 (update WIND bounds in snake.r too).", file: "snake.c" },
+      { prompt: "Add a SysBeep(20) call right before game.alive = false on a wall hit.", file: "snake.c" },
+    ],
   },
   {
     // wasm-textedit — TextEdit demo, foundation for a future word
@@ -313,6 +358,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVCK",
     complexity: 2,
+    tryNext: [
+      { prompt: "Add a 12/24-hour toggle — divide dt.hour by 12 and append 'am'/'pm' below the readout." },
+      { prompt: "Make the second hand red — wrap DrawHands in RGBForeColor + RGBBackColor calls (need <Quickdraw.h>)." },
+      { prompt: "Hide the analog face — comment out DrawFace() in main and just keep the digital readout." },
+    ],
   },
   {
     // wasm-multiwin — three windows, one event loop. Every other sample
@@ -387,6 +437,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVCA",
     complexity: 3,
+    tryNext: [
+      { prompt: "Add a sqrt button — extend BTN_LABELS to 17, add a new row, and call sqrt-by-Newton's-method on press." },
+      { prompt: "Beep on divide-by-zero — add SysBeep(10) inside the gCur == 0 branch in EvalPending." },
+      { prompt: "Bigger display — bump DISP_BOT from 42 to 60 and use TextSize(18) inside DrawDisplay." },
+    ],
   },
   {
     // wasm-scribble — mouse-tracking draw demo (cv-mac #125). Yet
@@ -445,6 +500,11 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     appType: "APPL",
     appCreator: "CVBO",
     complexity: 3,
+    tryNext: [
+      { prompt: "Speed it up — bump gVX / gVY initial values to 5." },
+      { prompt: "Bigger ball — change BALL_SIZE from 16 to 24 and watch CopyBits still keep up." },
+      { prompt: "Add gravity — increment gVY by 1 each frame in MoveBall (then clamp it)." },
+    ],
   },
   {
     // wasm-debug-console — exercises the IDE Output panel's Console
