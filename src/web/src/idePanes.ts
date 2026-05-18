@@ -125,6 +125,33 @@ function macHtml(): string {
       </div>
       <div class="emulator-caption" role="group" aria-label="Emulator status">
         <span class="emulator-caption__status" id="cvm-pause-status" aria-live="polite"></span>
+        <!-- Fullscreen-Mac trigger. fullscreenMac.ts wires the click +
+             hides itself on browsers that can't grab reserved shortcuts
+             so users aren't shown a button that delivers nothing. -->
+        <button type="button"
+                id="cvm-mac-fullscreen"
+                class="emulator-caption__btn"
+                title="Fullscreen the Mac — captures ⌘N / ⌘T / ⌘W etc. for the emulator (Chromium-only)"
+                hidden>Fullscreen Mac</button>
+      </div>
+      <!-- One-shot banner shown the first time the user clicks into
+           the Mac pane on a browser whose reserved shortcuts can't be
+           intercepted (Firefox, Safari). Dismissed for the session
+           via close-X; "Don't show again" persists via localStorage. -->
+      <div id="cvm-mac-reserved-keys-note"
+           class="cvm-mac-reserved-keys-note"
+           hidden
+           role="status">
+        <span class="cvm-mac-reserved-keys-note__icon">⚠︎</span>
+        <span class="cvm-mac-reserved-keys-note__body">
+          Some shortcuts (⌘N, ⌘T, ⌘W, ⌘Q, ⌘L) are reserved by your
+          browser and can't be forwarded to the Mac. Use the menubar
+          inside the running Mac, or switch to a Chromium browser to
+          get a Fullscreen-Mac button that captures everything.
+        </span>
+        <button type="button"
+                class="cvm-mac-reserved-keys-note__close"
+                aria-label="Dismiss this notice for the session">×</button>
       </div>
     </div>
   `;
