@@ -27,6 +27,12 @@
 #include <OSUtils.h>   /* GetDateTime, SecondsToDate */
 #include <Events.h>
 
+/* Debug Console — log a "tick: HH:MM:SS" line every minute so the
+ * Output panel's Console tab shows the clock running even when the
+ * window is shaded. (Once-a-second would be log spam; once-a-minute
+ * matches the analog minute-hand jump.) */
+#include <cvm_log.h>
+
 #define kWindowID 128
 #define kFaceMargin 12      /* px inset from window edge to clock face */
 #define kFaceSize 160       /* clock face diameter in px */
@@ -166,6 +172,8 @@ static void DrawReadout(short hour, short minute, short second) {
     DrawString(buf);
 }
 
+static short gLastLoggedMin = -1;
+
 static void Tick(void) {
     unsigned long secs;
     DateTimeRec dt;
@@ -173,6 +181,25 @@ static void Tick(void) {
     SecondsToDate(secs, &dt);
     if (dt.second == gLastSec) return;
     gLastSec = dt.second;
+    /* Log once per minute (skip the second-by-second redraws). */
+    if (dt.minute != gLastLoggedMin) {
+        gLastLoggedMin = dt.minute;
+        Str255 line; line[0] = 0;
+        unsigned char tmp[8];
+        AppendNum(line, dt.hour, false);
+        line[++line[0]] = ':';
+        AppendNum(line, dt.minute, true);
+        line[++line[0]] = ':';
+        AppendNum(line, dt.second, true);
+        unsigned char prefix[8] = { 6, 'c','l','o','c','k',':' };
+        /* Prepend "clock: " for grep-friendliness. */
+        unsigned char out[64]; out[0] = 0;
+        for (short i = 1; i <= prefix[0] && out[0] < 62; i++) out[++out[0]] = prefix[i];
+        out[++out[0]] = ' ';
+        for (short i = 1; i <= line[0] && out[0] < 62; i++) out[++out[0]] = line[i];
+        (void)tmp;
+        cvm_log_p(out);
+    }
     DrawHands(dt.hour, dt.minute, dt.second);
     DrawReadout(dt.hour, dt.minute, dt.second);
 }
@@ -183,8 +210,11 @@ int main(void) {
     InitWindows();
     InitCursor();
 
+    cvm_log_reset();
+    cvm_log("clock: starting -- logs HH:MM:SS once per minute");
+
     gWin = GetNewWindow(kWindowID, NULL, (WindowPtr)(-1));
-    if (!gWin) { SysBeep(10); return 1; }
+    if (!gWin) { cvm_log("clock: GetNewWindow failed"); SysBeep(10); return 1; }
     SetPort((GrafPtr)gWin);
 
     /* Initial paint. */
