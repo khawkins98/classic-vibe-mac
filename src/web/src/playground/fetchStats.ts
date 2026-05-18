@@ -11,6 +11,7 @@
 // called once per build by the stats accumulator in editor.ts.
 
 let totalFetchMs = 0;
+let inflightCount = 0;
 
 /** Wrap a fetch/import promise; adds its wall time to the session counter.
  *  Also emits a `[cvm-fetch]` line for each fetch that takes >50ms so the
@@ -20,11 +21,13 @@ let totalFetchMs = 0;
  *  the noise. */
 export async function timeFetch<T>(label: string, run: () => Promise<T>): Promise<T> {
   const t0 = performance.now();
+  inflightCount++;
   try {
     return await run();
   } finally {
     const ms = performance.now() - t0;
     totalFetchMs += ms;
+    inflightCount--;
     if (ms >= 50) {
       console.info(`[cvm-fetch] ${label} ${Math.round(ms)}ms`);
     }
@@ -37,4 +40,19 @@ export function consumeFetchMs(): number {
   const v = totalFetchMs;
   totalFetchMs = 0;
   return v;
+}
+
+/** Peek at the running fetch total without resetting. Used by the build
+ *  progress window to drive a "Fetching toolchain" phase line that
+ *  tracks cumulative network/import time during a build, separate from
+ *  actual compile time. */
+export function peekFetchMs(): number {
+  return totalFetchMs;
+}
+
+/** True while at least one timeFetch() call is awaiting its promise.
+ *  Used together with peekFetchMs() to drive the live "Fetching
+ *  toolchain" progress line. */
+export function isAnyFetchInflight(): boolean {
+  return inflightCount > 0;
 }
