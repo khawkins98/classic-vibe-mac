@@ -67,6 +67,7 @@ import {
   installOpenQuicklyShortcut,
 } from "./openQuicklyPalette";
 import { installBuildProgressWindow } from "./playground/buildProgressWindow";
+import { installActivePaneTracker } from "./activePane";
 
 const root = document.getElementById("app");
 if (!root) {
@@ -993,3 +994,7 @@ maybeShowFirstRunWelcome();
 // is outside the editor; this handler covers the in-editor case where
 // the menubar's keydown handler defers to local keybindings.
 installOpenQuicklyShortcut();
+
+// Track which docked pane "owns" the keyboard so ⌘-keys route to the
+// right side (host menubar vs. emulated Mac). See activePane.ts.
+installActivePaneTracker();

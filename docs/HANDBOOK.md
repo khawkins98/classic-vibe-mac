@@ -351,11 +351,11 @@ hand-rolled-sample recipe.
 
 | Keys | Where | What |
 |-|-|-|
-| ⌘P, ⌘D | anywhere | Open Quickly (⌘D is the CodeWarrior alias) |
-| ⌘O | anywhere | Open Project (the richer picker) |
-| ⌘S | anywhere | Download current project as .zip |
-| ⌘? | anywhere | Help palette |
-| ⌘, | anywhere | Preferences |
+| ⌘P, ⌘D | host panes¹ | Open Quickly (⌘D is the CodeWarrior alias) |
+| ⌘O | host panes¹ | Open Project (the richer picker) |
+| ⌘S | host panes¹ | Download current project as .zip |
+| ⌘? | host panes¹ | Help palette |
+| ⌘, | host panes¹ | Preferences |
 | ⌘F | editor | Find |
 | ⌘G / ⇧⌘G | editor | Walk matches |
 | ⌘⌥F | editor | Find-and-replace |
@@ -367,6 +367,15 @@ hand-rolled-sample recipe.
 | Esc | Open Quickly / modal | dismiss |
 
 (On non-Mac: Cmd → Ctrl.)
+
+¹ **Focus routing.** ⌘-key shortcuts route to whichever pane you
+last clicked into. Click the **Macintosh** pane and ⌘S now Saves
+inside the running Mac app (e.g. TextEdit) instead of downloading
+your project zip — the shortcut goes to BasiliskII. Click any host
+pane (Project / Playground / Output) and the host menubar
+shortcuts take over again. The active pane's titlebar shows the
+classic Mac OS 8 pinstripes; inactive panes go flat — same
+affordance period Mac users will recognise from System 7/8 windows.
 
 ---
 

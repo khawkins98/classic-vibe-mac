@@ -2127,6 +2127,44 @@ body.cvm-paused .emulator-canvas {
   background: var(--paper) !important;
 }
 
+/* Active-pane affordance for docked IDE panes — classic Mac OS 8
+   pattern: the active window's titlebar shows pinstripes, inactive
+   windows show plain chrome. activePane.ts updates the
+   `data-active-pane` attribute on <body> on every pointerdown so
+   ⌘-key shortcuts route to the right side. Mirroring that decision
+   visually here keeps the user oriented: "I clicked into the Mac,
+   so ⌘S now saves the Mac document instead of downloading the zip."
+
+   Only applies to the four docked panes (cvm-pane-*), not the
+   floating palettes (about / help / preferences) which are always
+   "active" in the period-correct dialog sense. */
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-editor .wb-header,
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-files .wb-header,
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-output .wb-header,
+body[data-active-pane="editor"]
+  .cvm-mac-winbox.cvm-pane-mac .wb-header {
+  /* Drop the stripes — flat paper titlebar reads as "inactive". */
+  background-image: none !important;
+  background-color: var(--paper) !important;
+}
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-editor .wb-title,
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-files .wb-title,
+body[data-active-pane="mac"]
+  .cvm-mac-winbox.cvm-pane-output .wb-title,
+body[data-active-pane="editor"]
+  .cvm-mac-winbox.cvm-pane-mac .wb-title {
+  /* Borderless title field on inactive windows — matches Mac OS 8
+     where the recessed-paper border only appears on the focused
+     window. */
+  border-color: transparent !important;
+  color: var(--shadow) !important;
+}
+
 /* Build-progress dialog — Mac OS 8 "File Copy"-style window. The
    chrome (border, header stripes, paper title field) is shared with
    the other Mac palettes via .cvm-mac-winbox; only the body layout
