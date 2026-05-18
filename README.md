@@ -45,6 +45,12 @@ This README serves three different visitors:
 
 - **[I'm curious — what is this?](#what-it-does)** Two-minute read.
   Screenshots, the live link, what's running where.
+- **["I'm using the playground" → the handbook](./docs/HANDBOOK.md)**
+  End-user manual. What every button does, the keyboard shortcuts
+  (⌘P for Open Quickly, the Routines popup, Build & Run, the Debug
+  Console), where files live, how to fork a sample as a new project
+  of your own. Start here if you opened the page and want to do
+  something.
 - **[I want to try it / build something with it](#try-it)** Step-by-step
   walkthrough from "open the URL" through "compile my own C code in
   the tab" through "fork it for my own app."
@@ -345,6 +351,24 @@ switching (#224) are the live tickets at the time of writing.
 
 ## Recently shipped
 
+- **IDE affordances — make a Mac app without leaving the tab**
+  (2026-05-18, #319 / #320 / #321 / #322). Four new playground
+  affordances ship a real "vibe-code a Mac app" loop end-to-end:
+  the **`+`** in the tab bar adds a new `.c` / `.h` / `.r` file to
+  the current project (#319); **File → Duplicate as new project…**
+  forks any sample into an IDB-only project you can edit + Build
+  independently (#320); a **{ } Routines** popup above the editor
+  jumps you to any function in the current file (CodeWarrior-style)
+  (#321); and **⌘P** opens a fuzzy file-jump palette (#322).
+  Together they make starting from a sample → forking → editing
+  multiple files → building a single uninterrupted loop. New
+  end-user manual at
+  [`docs/HANDBOOK.md`](./docs/HANDBOOK.md).
+- **Welcome modal + sample gallery** (2026-05-18, #307). First-run
+  greeter with a curated 4-card sample gallery (Wasm Hello / Wasm
+  Markdown / Wasm Bounce / Wasm Glypha III) so first-time visitors
+  see the ladder. Re-openable from Apple → "Welcome to
+  classic-vibe-mac…".
 - **Deferred-boot IDE** (2026-05-17, #279). Mac doesn't auto-boot
   on page load; canvas shows a welcome placeholder until first
   Build & Run. Page load went from "25 MB boot disk + 15s of cold
@@ -464,13 +488,17 @@ works, modify the platform, or extend it.* Suggested reading order:
    Stories at the top are required reading for toolchain work.
 8. **[`docs/TROUBLESHOOTING.md`](./docs/TROUBLESHOOTING.md)** —
    Symptom → cause → fix table for the common things that break.
-9. **[`docs/NETWORKING.md`](./docs/NETWORKING.md)** — Specialised:
-   the opt-in AppleTalk zone relay.
-10. **[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md)** —
+9. **[`docs/HANDBOOK.md`](./docs/HANDBOOK.md)** — End-user manual for
+   the playground itself: every button, every shortcut, where files
+   live, how to fork a sample as your own project. Use this when you
+   want to know what something *does*, not how it's built.
+10. **[`docs/NETWORKING.md`](./docs/NETWORKING.md)** — Specialised:
+    the opt-in AppleTalk zone relay.
+11. **[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md)** —
     Recipe for adding a third-party period Mac app to the sample
     shelf so it builds end-to-end in the playground. Distilled from
     the Glypha III closeout (#287–#292).
-11. **[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md)** —
+12. **[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md)** —
     Companion to the vendoring recipe: instrumentation patterns +
     offline splice repro for when a vendored app fails silently.
 
