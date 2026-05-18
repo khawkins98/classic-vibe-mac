@@ -11,8 +11,9 @@ licensing. Want to see what writing for System 7.5.5 feels like in
 
 This project closes both gaps in the same browser tab:
 
-1. A 1990s Macintosh boots at a URL with five real demo apps already
-   running, so visitors can use one before deciding to build one.
+1. A 1990s Macintosh boots at a URL on demand, with 26 in-browser
+   buildable samples a visitor can pick from and run before deciding
+   to build something of their own.
 2. A source-code editor sits below the Mac with the same C and Rez
    files that produced the apps running above it. Edits persist
    locally; an in-browser Rez compiler (WASM-Rez, shipped) plus an
@@ -35,8 +36,11 @@ A Vite + TypeScript page that:
 
 - Boots **Basilisk II** (compiled to WebAssembly by the Infinite
   Mac project) against a self-hosted, chunked **System 7.5.5** boot
-  disk. All three demo apps auto-launch from `:System Folder:Startup
-  Items:`.
+  disk — on demand. Page load shows the IDE in 2 seconds; the Mac
+  canvas displays a "Welcome to Macintosh" placeholder until the
+  visitor picks a sample and clicks Build & Run (deferred-boot UX,
+  #279). The sample's freshly-compiled `.bin` is hot-loaded onto a
+  fresh secondary disk that boots alongside the System disk.
 - Mounts a CodeMirror 6 editor seeded with the same C and Rez
   sources that built the apps. Edits persist in IndexedDB
   (`bundleVersion`-keyed invalidation), download as a zip via
@@ -128,44 +132,37 @@ two-way `:Shared:` data flow, and the multi-app model are all there.
 
 ### 1. Mac Apps (`src/app/`)
 
-Multiple apps coexist under `src/app/<name>/`. The top-level
-`CMakeLists.txt` is a tiny aggregator
-(`add_subdirectory(reader)`, `add_subdirectory(macweather)`); each
-app has its own creator code, `add_application()` call, and
-resource fork. Outputs land in `build/<app>/`. The boot-disk script
-installs every `.bin` into both `:System Folder:Startup Items:`
-(auto-launch) and `:Applications:` (re-launch from the desktop).
+26 wasm-* samples coexist under `src/app/wasm-<name>/`, one
+subdirectory each. Each sample has its own four-letter creator code
+(declared in `SAMPLE_PROJECTS` in
+`src/web/src/playground/types.ts` + emitted via a `data 'CVxx' (0)`
+Owner-signature resource in its `.r`). Production samples compile
+**in-browser** via the wasm-cc1 toolchain — not via Retro68 at CI
+time. The CMake aggregator at `src/app/CMakeLists.txt` is kept as
+scaffolding for any future host-native build; no apps currently sit
+under its `add_subdirectory()` list (the original five precompiled
+apps — Reader / MacWeather / HelloMac / PixelPad / MarkdownViewer
+— retired in #276).
 
-Each app splits deliberately into a **Toolbox shell** (`<app>.c`)
-that owns the platform — event loop, drawing, menus — and a
-**pure-C engine** (`html_parse.{c,h}`, `weather_parse.{c,h}`) with
-no Toolbox includes. The engine compiles with both Retro68 and the
-host `gcc`, so `tests/unit/` runs in milliseconds without booting
-an emulator.
+Each sample either has a `.r` file (most do — WIND, MENU, MBAR,
+SIZE, signature) or is pure-C with no resources. Pure-C engine code
+(e.g. `html_parse.c` for the retired Reader) can sit alongside the
+Toolbox shell and host-compile via `tests/unit/` for sub-second
+unit-test feedback; the scaffolding remains for whoever ships a
+next-generation host-testable sample.
 
-- **Reader** (`CVMR`) — HTML viewer in C reading from `:Shared:` on
-  the boot disk. Supports headings, paragraphs, lists, bold/italic,
-  monospace blocks, links between bundled files, common entities.
-  Has a URL bar: the Mac writes a request file to
-  `:Unix:__url-request.txt`, the host fetches the URL, writes the
-  result to `:Unix:__url-result-<id>.html`. Out of scope: images,
-  tables, CSS, forms, JavaScript.
-- **MacWeather** (`CVMW`) — live-data demo reading
-  `:Unix:weather.json` (BasiliskII's extfs surfaces
-  Emscripten's `/Shared/` as the Mac volume `Unix:`), parsing the
-  open-meteo shape with a hand-rolled JSON parser, drawing current
-  conditions + a 3-day forecast in pixel-art QuickDraw glyphs.
-- **Hello Mac** (`CVHM`) — minimal "Hello, World!" Toolbox app;
-  the default playground sample and the on-ramp for new contributors.
-- **Pixel Pad** (`CVMP`) — freehand QuickDraw drawing app that
-  exports its 64×64 1-bit canvas to `:Unix:__drawing.bin`; the host
-  watcher converts it to a live PNG preview below the emulator.
-- **Markdown Viewer** (`CVMD`) — reads `.md` files from `:Shared:`
-  and renders them with a hand-rolled C Markdown parser; supports
-  headings, paragraphs, bold, italic, code, fenced blocks, lists.
-
-Per-app architectural details and the add-your-own-app guide live
-in [`src/app/README.md`](./src/app/README.md).
+The samples form a deliberate Toolbox-surface ladder: `wasm-hello`
+(one `DrawString`) → `wasm-hello-window` (first `.r`) →
+`wasm-textedit` / `wasm-notepad` / `wasm-wordpad` (TextEdit ladder)
+→ `wasm-bounce` / `wasm-gworld` (double-buffering) → `wasm-mdpad`
+(productivity-app exhibit, split-pane Markdown editor) →
+`wasm-glypha3` (full vendored 1992 game, ~6,600 LOC). Per-sample
+Toolbox-surface matrix + the add-your-own-sample guide live in
+[`src/app/README.md`](./src/app/README.md); the vendor-a-third-party
+recipe is in
+[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md);
+the debug recipe for when a vendored sample fails silently is in
+[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md).
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
 
@@ -286,7 +283,7 @@ content here.
 > See [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
 > for the full shipped-state table. Summary:
 
-- ✅ Boot loop, multi-app demo (5 apps), GitHub Pages deploy
+- ✅ Boot loop, 26-sample wasm-shelf with in-browser compile, GitHub Pages deploy
 - ✅ Playground Phase 1: editor + IDB persistence + download-as-zip (PR #32)
 - ✅ Playground Phase 2: WASM-Rez in-browser compilation
 - ✅ Playground Phase 3: hot-load, ~820ms warm round-trip
@@ -384,10 +381,13 @@ All planned playground polish shipped. Summary:
 
 ### Demo apps roadmap
 
-- [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9)
-  — Markdown viewer + basic editor as a third demo app. Reuses
-  Reader's `:Shared:` pattern, adds TextEdit for editing,
-  demonstrates two-way file flow.
+- [#9](https://github.com/khawkins98/classic-vibe-mac/issues/9) ✅
+  — Markdown viewer + editor. Shipped twice: a precompiled
+  MarkdownViewer that retired with the rest of the precompiled-path
+  apps (#276), and `wasm-mdpad` (#296) — a split-pane Markdown
+  editor with live preview, in-browser-compiled, with File →
+  Open / Save / Save As round-tripping `.md` files to the host
+  via `:Shared:` (#305).
 - [#14](https://github.com/khawkins98/classic-vibe-mac/issues/14)
   — Reader URL bar; bounded, host-fetched, CORS-permissive
   sources only.
@@ -449,39 +449,70 @@ research spike with a ruthless time-box — not as a feature Epic.
 
 ```
 classic-vibe-mac/
-├── .github/workflows/        ← build.yml (Retro68→disks→Pages), test.yml
+├── .github/workflows/        ← build.yml (Vite→Pages), test.yml, lint-markdown
 ├── docs/
 │   ├── DEVELOPMENT.md        ← day-to-day iteration loops
 │   ├── ARCHITECTURE.md       ← system architecture as built
 │   ├── PLAYGROUND.md         ← Epic #21 design rationale
-│   └── AGENT-PROCESS.md      ← five-reviewer pass + dispatch hygiene
+│   ├── HOW-IT-WORKS.md       ← guided tour for the curious dev
+│   ├── AGENT-PROCESS.md      ← five-reviewer pass + dispatch hygiene
+│   ├── TROUBLESHOOTING.md    ← symptom → root cause → fix
+│   ├── NETWORKING.md         ← opt-in AppleTalk zone relay
+│   ├── VENDORING-A-MAC-APP.md     ← recipe for adding a 3rd-party app
+│   ├── DEBUGGING-VENDORED-APPS.md ← recipes for silent failures
+│   └── AUDIT-FINDINGS.md     ← historical multi-reviewer audit notes
 ├── src/
-│   ├── app/                  ← Mac C source (Retro68 + Toolbox)
-│   │   ├── CMakeLists.txt    ← aggregator
-│   │   ├── README.md
-│   │   ├── reader/           ← Reader (CVMR): HTML viewer
-│   │   └── macweather/       ← MacWeather (CVMW): live-data demo
+│   ├── app/                  ← Mac C source — 26 in-browser samples
+│   │   ├── CMakeLists.txt    ← scaffolding (no apps under it any more)
+│   │   ├── README.md         ← per-sample Toolbox-surface matrix
+│   │   ├── wasm-hello/       ← the floor sample (DrawString only)
+│   │   ├── wasm-mdpad/       ← split-pane Markdown editor w/ live preview
+│   │   ├── wasm-glypha3/     ← first vendored period game (MIT, 1992)
+│   │   └── …                 ← 23 more, all in-browser-compiled
 │   └── web/                  ← Vite + TypeScript page + editor
 │       ├── public/
 │       │   ├── coi-serviceworker.min.js  ← SAB on GH Pages
 │       │   ├── emulator/                 ← BasiliskII WASM (gitignored)
 │       │   ├── shared/                   ← HTML baked into :Shared:
-│       │   └── sample-projects/          ← editor seed (build-time)
+│       │   ├── sample-projects/          ← editor seed (build-time)
+│       │   ├── wasm-cc1/                 ← vendored cc1+as+ld+Elf2Mac
+│       │   └── wasm-rez/                 ← vendored WASM-Rez + RIncludes
 │       └── src/
-│           ├── main.ts, style.css        ← System 7 chrome
+│           ├── main.ts, style.css        ← Mac OS 8 chrome
 │           ├── emulator-{config,loader,worker,input}.ts
-│           ├── weather-poller.ts         ← open-meteo → Mac
+│           ├── aboutPalette.ts, helpPalette.ts,
+│           │   preferencesPalette.ts, welcomePalette.ts ← palettes
+│           ├── menubarMenus.ts, idePanes.ts             ← chrome
+│           ├── projectPicker.ts, zipImport.ts           ← project flows
+│           ├── ethernet.ts, ethernet-provider.ts        ← AppleTalk zones
+│           ├── console-watcher.ts, pollingWatcher.ts,
+│           │   shared-poller.ts                         ← cvm_log polling
 │           └── playground/
-│               ├── editor.ts             ← CodeMirror 6 host
-│               ├── persistence.ts        ← IDB + bundleVersion
-│               └── types.ts
-├── tests/                    ← unit (host-cc) / e2e (Playwright) / visual (Claude)
+│               ├── editor.ts                            ← CodeMirror 6 host
+│               ├── persistence.ts                       ← IDB + bundleVersion
+│               ├── cc1.ts, rez.ts, compilePipeline.mjs  ← toolchain wrappers
+│               ├── build.ts                             ← MacBinary splice
+│               ├── resourceForkMerger.mjs               ← shared merger (#285)
+│               ├── buildProgressWindow.ts               ← MOS 8 progress modal
+│               └── types.ts                             ← SAMPLE_PROJECTS
+├── tests/                    ← unit (host-cc + Node) / e2e (Playwright) / visual
 ├── scripts/
 │   ├── fetch-emulator.sh     ← BasiliskII core + ROM (pinned)
 │   ├── build-disk-image.sh   ← app.dsk packer
 │   ├── build-boot-disk.sh    ← System 7.5.5 + chunks
+│   ├── build-wasm-rez.sh     ← rebuilds tools/wasm-rez/
+│   ├── audit-wasm-samples.mjs     ← .c half of the wasm-shelf audit
+│   ├── audit-wasm-rez.mjs         ← .r half
+│   ├── audit-wasm-e2e.mjs         ← both halves, combined report
+│   ├── splice-bin.mjs             ← offline spliceResourceFork repro
+│   ├── extract-resource-fork.mjs  ← MacBinary fork inspector
+│   ├── stress-wasm-rez.mjs        ← wasm-rez stress driver (#282)
 │   ├── write-chunked-manifest.py
-│   └── capture-deployed-screenshot.mjs
+│   └── …
+├── tools/
+│   ├── README.md
+│   ├── wasm-rez/             ← in-browser Rez compiler source
+│   └── m68k-runner/          ← native Musashi 68k boot tracer (#89)
 ├── public/                   ← landing-page screenshots
 ├── package.json              ← npm workspaces (root + src/web)
 ├── PRD.md                    ← this file
