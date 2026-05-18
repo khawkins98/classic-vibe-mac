@@ -56,6 +56,7 @@ export interface MenubarActions {
   openProjectPicker: () => void;
   openZipPicker: () => void;
   downloadCurrentZip: () => void;
+  duplicateCurrentAsNewProject: () => void;
   resetLayout: () => void;
   rebootEmulator: () => void;
   /** Live predicate for whether Reboot Mac should be enabled. False
@@ -501,6 +502,11 @@ function buildMenuSchema(a: MenubarActions): Record<string, MenuEntry[]> {
     file: [
       { label: "Open Project…", action: a.openProjectPicker, shortcut: "O" },
       { label: "Open .zip…", action: a.openZipPicker },
+      { separator: true },
+      {
+        label: "Duplicate as new project…",
+        action: a.duplicateCurrentAsNewProject,
+      },
       { separator: true },
       { label: "Download .zip", action: a.downloadCurrentZip, shortcut: "S" },
     ],
