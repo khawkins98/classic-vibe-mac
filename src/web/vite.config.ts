@@ -152,6 +152,16 @@ const SEED_FILES: SeedSpec[] = [
     filename: f,
     sourcePath: join(REPO_ROOT, "src", "app", "wasm-wordpad", f),
   })),
+  // wasm-mdpad — split-pane Markdown editor with live preview. Modern
+  // format (Markdown post-dates System 7 by a decade), classic chrome.
+  // Source TextEdit on the left, custom-drawn preview on the right;
+  // re-renders on every keystroke. The first business-app sample on
+  // the shelf to lean on a "modern format in classic UI" framing.
+  ...["mdpad.c", "mdpad.r"].map((f) => ({
+    project: "wasm-mdpad",
+    filename: f,
+    sourcePath: join(REPO_ROOT, "src", "app", "wasm-mdpad", f),
+  })),
   // wasm-calculator — 4-function calculator (#125). Different surface
   // from the TextEdit ladder: hand-drawn buttons + PtInRect hit-testing
   // + NumToString display. No TextEdit, no scrap.

@@ -280,6 +280,25 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     complexity: 3,
   },
   {
+    // wasm-mdpad — split-pane Markdown editor with live preview. The
+    // pitch is "modern format, classic chrome": Markdown didn't exist
+    // until 2004, but here it is rendered in Geneva and Chicago with
+    // bevel-button window furniture. Single window, vertical split,
+    // source TextEdit on the left, custom-drawn preview on the right;
+    // every keystroke invalidates the preview rect and the next update
+    // re-renders. Inline-style scanner handles `**bold**`, `*italic*`,
+    // and `` `code` `` with fall-through to literal on unclosed markers.
+    // Fenced code blocks (```…```) switch the whole block to Monaco.
+    id: "wasm-mdpad",
+    label: "Wasm Markdown (live preview)",
+    files: ["mdpad.c", "mdpad.r"],
+    rezFile: "mdpad.r",
+    outputName: "WasmMarkdown.bin",
+    appType: "APPL",
+    appCreator: "CVMD",
+    complexity: 4,
+  },
+  {
     // wasm-clock — analog desk clock with digital readout (cv-mac #125).
     // Different Toolbox slice from the rest of the shelf: GetDateTime +
     // SecondsToDate, idle-tick redraw loop (1-second WaitNextEvent
