@@ -136,6 +136,32 @@ Click a routine → cursor jumps to that line. The popup hides
 itself for file types it can't parse (or when there are zero
 routines).
 
+### Tour (annotated samples)
+
+Some samples ship with `/* @cvm-step N: ... */` annotations that
+mark the load-bearing parts of the code. When the active file has
+them, a yellow **→ Tour:** selector appears next to Routines:
+
+- Click an entry → editor jumps to that landmark.
+- Steps are numbered (1, 2, 3…) so you can read them in order.
+- Authors can put `step 1` anywhere in the file — sort is by N,
+  not by line position.
+
+If you're writing a sample, sprinkle a few `@cvm-step` comments
+to give first-time readers a guided path. Three to six landmarks
+turn a 400-line C file from "wall of code" into "here's where to
+start." See `wasm-hello/hello.c` or `wasm-snake/snake.c` for the
+convention in use.
+
+### Hover-docs for Mac Toolbox calls
+
+Hover any classic Mac Toolbox API in the editor — `WaitNextEvent`,
+`NewWindow`, `DrawString`, etc. — and a tooltip pops up with the
+Inside-Macintosh-style signature, a one-paragraph description,
+and a "see also" list. ~150 entries cover the calls the bundled
+samples actually reach for. If you find one missing, add it to
+`src/web/src/playground/toolbox-reference.json`.
+
 ### Open Quickly (⌘P or ⌘D)
 
 Press **⌘P** anywhere on the page (Cmd-P on Mac, Ctrl-P

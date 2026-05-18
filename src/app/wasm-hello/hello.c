@@ -40,9 +40,9 @@
 #include <Events.h>
 #include <Memory.h>
 
-/* QDGlobals — the Toolbox's QuickDraw state. Every Mac app has one of
- * these at A5; InitGraf wires it up. Pascal toolchains expose it as
- * `qd` automatically; we declare it explicitly for C. */
+/* @cvm-step 1: The Toolbox's QuickDraw state lives here.
+   Every Mac app declares one `QDGlobals qd;` at file scope —
+   InitGraf below wires it up so every other manager can read it. */
 QDGlobals qd;
 
 /* "Hello, World!" as a Pascal string: byte 0 = length (13), then chars.
@@ -59,8 +59,9 @@ static const unsigned char kHelloStr[] = {
 
 int main(void)
 {
-    /* Toolbox initialisation — order matters: InitGraf MUST be first
-     * (it sets up the QuickDraw globals every other manager reads). */
+    /* @cvm-step 2: Toolbox init. The order matters — InitGraf goes
+       first (it sets up the QuickDraw globals every other manager
+       reads). This sequence is the same in every classic Mac app. */
     InitGraf(&qd.thePort);
     InitFonts();
     InitWindows();
@@ -70,7 +71,10 @@ int main(void)
     InitCursor();
     FlushEvents(everyEvent, 0);
 
-    /* Draw to the screen port (the desktop) — no window needed. */
+    /* @cvm-step 3: Actually draw the string. MoveTo positions the
+       pen at screen coordinates (100, 100); DrawString paints our
+       Pascal-string text from kHelloStr there. No window needed —
+       we're drawing straight onto the desktop port. */
     MoveTo(100, 100);
     DrawString(kHelloStr);
 
@@ -89,6 +93,11 @@ int main(void)
      * that satisfies the filter is genuinely new. SystemTask runs via
      * WNE under cooperative multitasking, so the rest of the Mac stays
      * responsive while we wait. */
+    /* @cvm-step 4: Idle waiting for a click. Every classic Mac app's
+       event loop reaches for WaitNextEvent — it lets the OS schedule
+       other apps (cooperative multitasking) while we wait. We filter
+       for mouseDown only so any leftover events from the launch are
+       ignored. */
     {
         EventRecord ev;
         long sleepTicks = 0x7fffffff; /* "wait forever" until an event */

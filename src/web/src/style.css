@@ -1413,6 +1413,22 @@ body.cvm-paused .emulator-canvas {
   padding: 1px 4px;
   color: var(--ink);
 }
+/* Steps / Tour selector — same bar as Routines, distinct accent so
+   first-time visitors notice the "take the tour" affordance on
+   annotated samples without it competing with Routines. */
+.cvm-pg-steps-label {
+  /* Subtle leading divider — visually separates the two jumpers. */
+  padding-left: 6px;
+  border-left: 1px solid var(--shadow);
+  color: var(--ink);
+  font-weight: bold;
+}
+.cvm-pg-steps-select {
+  /* Highlight slightly so it draws the eye on first encounter, even
+     when wedged next to Routines. Faint accent — period-Mac never
+     used loud colour for chrome. */
+  background: #fff8d6;
+}
 
 /* Open Quickly palette (⌘P) — transient centered overlay with
    filename input + filtered file list. Mac OS 8 paper inset, dark
