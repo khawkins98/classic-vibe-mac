@@ -50,6 +50,11 @@
 #include <StandardFile.h>
 #include <Errors.h>
 
+/* Debug Console — log open / save events with file size + name. Open
+ * the Output panel → Console tab to see file I/O activity from this
+ * editor scroll past as you Cmd-O / Cmd-S inside the running Mac. */
+#include <cvm_log.h>
+
 #ifndef FALSE
 # define FALSE 0
 #endif
@@ -531,6 +536,20 @@ static void LoadFromFile(const FSSpec *spec) {
     gHasFile = TRUE;
     InvalRect(&gPreviewRect);
     if (truncated) TEAppendNote("[file truncated at 32K — TextEdit limit]");
+    /* Log to the Debug Console: "open: <pascal-name> <len>B". */
+    {
+        Str255 line; line[0] = 0;
+        const char *p = "open: ";
+        while (*p && line[0] < 254) line[++line[0]] = *p++;
+        for (short i = 1; i <= spec->name[0] && line[0] < 252; i++)
+            line[++line[0]] = spec->name[i];
+        if (line[0] < 252) { line[++line[0]] = ' '; }
+        unsigned char tmp[16];
+        NumToString(readLen, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 253; i++) line[++line[0]] = tmp[i];
+        if (line[0] < 254) line[++line[0]] = 'B';
+        cvm_log_p(line);
+    }
 }
 
 /* Write TextEdit's buffer into the FSSpec, converting CR → LF. */
@@ -568,6 +587,20 @@ static void WriteToFile(const FSSpec *spec) {
 
     gFile = *spec;
     gHasFile = TRUE;
+    /* Log to the Debug Console: "save: <pascal-name> <len>B". */
+    {
+        Str255 line; line[0] = 0;
+        const char *p = "save: ";
+        while (*p && line[0] < 254) line[++line[0]] = *p++;
+        for (short i = 1; i <= spec->name[0] && line[0] < 252; i++)
+            line[++line[0]] = spec->name[i];
+        if (line[0] < 252) { line[++line[0]] = ' '; }
+        unsigned char tmp[16];
+        NumToString(len, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 253; i++) line[++line[0]] = tmp[i];
+        if (line[0] < 254) line[++line[0]] = 'B';
+        cvm_log_p(line);
+    }
 }
 
 static void DoFileOpen(void) {
@@ -665,6 +698,9 @@ int main(void) {
     TEInit();
     InitDialogs(0);
     InitCursor();
+
+    cvm_log_reset();
+    cvm_log("mdpad: ready -- Cmd-O to open, Cmd-S to save");
 
     Handle mb = GetNewMBar(128);
     if (mb) {

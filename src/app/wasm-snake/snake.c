@@ -40,6 +40,11 @@
 #include <Memory.h>
 #include <OSUtils.h>
 
+/* Debug Console (Output panel → Console tab). Score-on-apple +
+ * game-over land here so you can replay a run from the log even after
+ * the window is closed. */
+#include <cvm_log.h>
+
 /* ── Grid + window geometry ──────────────────────────────────────── */
 
 /* ← try changing CELL_PX or GRID_W / GRID_H to resize the playfield!
@@ -78,6 +83,23 @@ typedef struct {
     long next_move_tick;    /* TickCount when the snake next advances */
     unsigned long rng;      /* xorshift state */
 } Game;
+
+/* ── Pascal-string helpers for cvm_log_p ─────────────────────────────
+ * cvm_log() takes a C string; we want "Score: 70" formatting which
+ * needs sprintf or manual digit conversion. Pascal-string append is
+ * one line shorter than sprintf-into-stack and keeps us off stdio.
+ * Same shape as the wasm-bounce sample's helpers. */
+static void AppendPInt_(Str255 s, long v) {
+    char digits[12]; int n = 0; Boolean neg = (v < 0);
+    if (neg) v = -v;
+    if (v == 0) digits[n++] = '0';
+    while (v > 0 && n < 12) { digits[n++] = '0' + (v % 10); v /= 10; }
+    if (neg && s[0] < 254) s[++s[0]] = '-';
+    while (n > 0 && s[0] < 254) s[++s[0]] = digits[--n];
+}
+static void AppendPStr_(Str255 s, const char *c) {
+    while (*c && s[0] < 254) s[++s[0]] = *c++;
+}
 
 static Game game;
 static WindowPtr win;
@@ -158,6 +180,12 @@ static void advance_snake(void) {
     /* Wall collision. */
     if (new_head.x < 0 || new_head.x >= GRID_W ||
         new_head.y < 0 || new_head.y >= GRID_H) {
+        Str255 line; line[0] = 0;
+        AppendPStr_(line, "snake: wall hit -- final score ");
+        AppendPInt_(line, game.score);
+        AppendPStr_(line, ", length ");
+        AppendPInt_(line, game.len);
+        cvm_log_p(line);
         game.alive = false;
         return;
     }
@@ -165,6 +193,12 @@ static void advance_snake(void) {
     /* Self collision (skip the tail — it will move out of the way). */
     for (i = 0; i < game.len - 1; i++) {
         if (game.body[i].x == new_head.x && game.body[i].y == new_head.y) {
+            Str255 line; line[0] = 0;
+            AppendPStr_(line, "snake: bit self -- final score ");
+            AppendPInt_(line, game.score);
+            AppendPStr_(line, ", length ");
+            AppendPInt_(line, game.len);
+            cvm_log_p(line);
             game.alive = false;
             return;
         }
@@ -185,6 +219,12 @@ static void advance_snake(void) {
             game.len++;
         }
         game.score += 10;
+        {
+            Str255 line; line[0] = 0;
+            AppendPStr_(line, "snake: ate apple -- score ");
+            AppendPInt_(line, game.score);
+            cvm_log_p(line);
+        }
         place_apple();
     }
     game.body[0] = new_head;
@@ -341,8 +381,13 @@ int main(void) {
     FlushEvents(everyEvent, 0);
     InitCursor();
 
+    /* Clean slate per run so the Console pane shows just this session. */
+    cvm_log_reset();
+    cvm_log("snake: starting up -- use arrow keys, click to restart");
+
     win = GetNewWindow(WINDOW_ID, NULL, (WindowPtr)(-1));
     if (!win) {
+        cvm_log("snake: GetNewWindow failed");
         SysBeep(10);
         return 1;
     }

@@ -34,6 +34,11 @@
 #include <Events.h>
 #include <Memory.h>
 
+/* Debug Console — every = press logs "a OP b = result". Open the
+ * Output panel → Console tab to watch a session's worth of arithmetic
+ * scroll past as you click. */
+#include <cvm_log.h>
+
 #define kWindowID 128
 
 #define BTN_W 45
@@ -142,12 +147,30 @@ static void OnOperator(char op) {
 }
 
 static void OnEquals(void) {
+    /* Snapshot the operands *before* EvalPending mutates gAcc so we
+     * can log them as "a OP b = result". NumToString-into-Pascal
+     * keeps us off stdio; the Console tab decodes MacRoman → UTF-8. */
+    long lhs = gAcc, rhs = gCur;
+    char op = gOp ? gOp : '=';
     if (gEntering) {
         EvalPending();
         gEntering = false;
     }
     gJustEvaluated = true;
     gOp = 0;
+    {
+        Str255 line; line[0] = 0;
+        unsigned char tmp[16];
+        NumToString(lhs, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 254; i++) line[++line[0]] = tmp[i];
+        if (line[0] < 252) { line[++line[0]] = ' '; line[++line[0]] = (unsigned char)op; line[++line[0]] = ' '; }
+        NumToString(rhs, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 254; i++) line[++line[0]] = tmp[i];
+        if (line[0] < 252) { line[++line[0]] = ' '; line[++line[0]] = '='; line[++line[0]] = ' '; }
+        NumToString(gAcc, tmp);
+        for (short i = 1; i <= tmp[0] && line[0] < 254; i++) line[++line[0]] = tmp[i];
+        cvm_log_p(line);
+    }
 }
 
 static void OnClear(void) {
@@ -185,6 +208,10 @@ int main(void) {
     TEInit();
     InitDialogs(0);
     InitCursor();
+
+    /* Clean slate per run for the Console tab. */
+    cvm_log_reset();
+    cvm_log("calc: ready -- press buttons to compute, = logs the result");
 
     gWin = GetNewWindow(kWindowID, NULL, (WindowPtr)(-1));
     if (!gWin) { SysBeep(10); return 1; }
