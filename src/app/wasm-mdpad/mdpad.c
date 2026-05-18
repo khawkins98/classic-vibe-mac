@@ -46,6 +46,9 @@
 #include <Dialogs.h>
 #include <Events.h>
 #include <Memory.h>
+#include <Files.h>
+#include <StandardFile.h>
+#include <Errors.h>
 
 #ifndef FALSE
 # define FALSE 0
@@ -62,12 +65,29 @@
 #define kMenuEdit   130
 
 #define kAppleAbout 1
-#define kFileNew    1
-#define kFileQuit   3
+/* File menu items — must stay in lockstep with mdpad.r's MENU 129. */
+#define kFileNew     1
+#define kFileOpen    2
+/* item 3 is the separator */
+#define kFileSave    4
+#define kFileSaveAs  5
+/* item 6 is the separator */
+#define kFileQuit    7
 #define kEditCut    3
 #define kEditCopy   4
 #define kEditPaste  5
 #define kEditClear  6
+
+/* TextEdit's documented per-record cap. Files larger than this are
+ * truncated on Open with a status note appended into the buffer. */
+#define kMaxFileBytes  32000L
+
+/* File metadata for files we save.
+ *   'TEXT'  — universally readable as a text file
+ *   'CVMD'  — our app's signature, so the Finder reopens .md in this
+ *             app on double-click (BNDL ties it together in mdpad.r) */
+#define kFileType      'TEXT'
+#define kFileCreator   'CVMD'
 
 /* Pane gutter between source/preview, in pixels. Wide enough to read
  * as a visual divider, narrow enough not to waste pixels. */
@@ -96,6 +116,12 @@ static Boolean   gDone      = FALSE;
 /* Cached pane rects, recomputed on resize/update. */
 static Rect      gSourceRect;
 static Rect      gPreviewRect;
+
+/* "Current file" — set after a successful Open or Save As. Plain
+ * Save (Cmd-S) writes back to this FSSpec without re-prompting;
+ * Save As always prompts. */
+static FSSpec    gFile;
+static Boolean   gHasFile = FALSE;
 
 /* Starter doc — Pascal-string layout: first byte is the length-1 of
  * the rest. Keeps the buffer flat and avoids strlen at runtime. */
@@ -416,6 +442,177 @@ static void RenderMarkdown(void) {
 }
 
 /* ──────────────────────────────────────────────────────────────────
+ * File I/O — Open / Save / Save As
+ *
+ * Mac classic stores text with CR (0x0D) line endings; modern .md
+ * consumers expect LF (0x0A). We translate at the boundary:
+ *   - Open  : LF → CR, CRLF → CR (the latter for files written on
+ *             Windows-friendly editors). TextEdit sees only CR.
+ *   - Save  : CR → LF, so the .md file dropped on the host filesystem
+ *             reads naturally in VS Code / any modern Markdown tool.
+ *
+ * File type/creator pair is TEXT/CVMD — the universal "this is a text
+ * file" type plus our own creator so double-clicking a saved .md in
+ * the Finder relaunches us. (Drop creator to 'ttxt' if you want
+ * SimpleText to take over instead.)
+ * ────────────────────────────────────────────────────────────────── */
+
+/* Append a one-line status note to the editor buffer. Used to surface
+ * I/O failures without popping a modal dialog — the user can read the
+ * message in-place and delete it. */
+static void TEAppendNote(const char *s) {
+    if (!gTE) return;
+    long n = 0;
+    while (s[n]) n++;
+    long end = (**gTE).teLength;
+    TESetSelect(end, end, gTE);
+    /* Leading CR so the note lands on its own line. */
+    TEKey(13, gTE);
+    TEInsert((Ptr)s, n, gTE);
+    InvalRect(&gPreviewRect);
+}
+
+/* Read the FSSpec's data fork into TextEdit, converting LF → CR. */
+static void LoadFromFile(const FSSpec *spec) {
+    short refNum;
+    OSErr err = FSpOpenDF(spec, fsRdPerm, &refNum);
+    if (err != noErr) { TEAppendNote("[open failed]"); return; }
+
+    long len;
+    err = GetEOF(refNum, &len);
+    if (err != noErr) { FSClose(refNum); TEAppendNote("[stat failed]"); return; }
+    if (len == 0) {
+        TESetText("", 0, gTE);
+        FSClose(refNum);
+        gFile = *spec;
+        gHasFile = TRUE;
+        InvalRect(&gPreviewRect);
+        return;
+    }
+
+    Boolean truncated = FALSE;
+    long readLen = len;
+    if (readLen > kMaxFileBytes) { readLen = kMaxFileBytes; truncated = TRUE; }
+
+    Ptr raw = NewPtr(readLen);
+    if (!raw) { FSClose(refNum); TEAppendNote("[NewPtr failed]"); return; }
+    err = FSRead(refNum, &readLen, raw);
+    FSClose(refNum);
+    if (err != noErr && err != eofErr) {
+        DisposePtr(raw);
+        TEAppendNote("[read failed]");
+        return;
+    }
+
+    /* Convert line endings into the buffer we hand to TextEdit. Output
+     * is at most the same length as input (CRLF→CR shrinks by one per
+     * pair; everything else is 1:1). */
+    Ptr out = NewPtr(readLen);
+    if (!out) { DisposePtr(raw); TEAppendNote("[NewPtr failed]"); return; }
+    long outLen = 0;
+    for (long i = 0; i < readLen; i++) {
+        unsigned char c = (unsigned char)raw[i];
+        if (c == 13) {                              /* CR (lone or in CRLF) */
+            out[outLen++] = 13;
+            if (i + 1 < readLen && (unsigned char)raw[i + 1] == 10) i++;
+        } else if (c == 10) {                       /* LF → CR */
+            out[outLen++] = 13;
+        } else {
+            out[outLen++] = (char)c;
+        }
+    }
+    DisposePtr(raw);
+
+    TESetText(out, outLen, gTE);
+    DisposePtr(out);
+    TESetSelect(0, 0, gTE);
+
+    gFile = *spec;
+    gHasFile = TRUE;
+    InvalRect(&gPreviewRect);
+    if (truncated) TEAppendNote("[file truncated at 32K — TextEdit limit]");
+}
+
+/* Write TextEdit's buffer into the FSSpec, converting CR → LF. */
+static void WriteToFile(const FSSpec *spec) {
+    /* Best-effort create. dupFNErr is fine (we'll just overwrite). */
+    OSErr err = FSpCreate(spec, kFileCreator, kFileType, smRoman);
+    if (err != noErr && err != dupFNErr) {
+        TEAppendNote("[create failed]");
+        return;
+    }
+
+    short refNum;
+    err = FSpOpenDF(spec, fsWrPerm, &refNum);
+    if (err != noErr) { TEAppendNote("[open-for-write failed]"); return; }
+
+    long len = (**gTE).teLength;
+    CharsHandle text = TEGetText(gTE);
+    HLock((Handle)text);
+    /* CR → LF copy. Output is exactly `len` bytes (1:1 substitution). */
+    Ptr out = NewPtr(len);
+    if (!out) { HUnlock((Handle)text); FSClose(refNum); TEAppendNote("[NewPtr failed]"); return; }
+    const char *src = *text;
+    for (long i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)src[i];
+        out[i] = (c == 13) ? 10 : (char)c;
+    }
+    HUnlock((Handle)text);
+
+    err = FSWrite(refNum, &len, out);
+    DisposePtr(out);
+    SetEOF(refNum, len);                            /* shrink if the prior file was longer */
+    FSClose(refNum);
+
+    if (err != noErr) { TEAppendNote("[write failed]"); return; }
+
+    gFile = *spec;
+    gHasFile = TRUE;
+}
+
+static void DoFileOpen(void) {
+    StandardFileReply reply;
+    SFTypeList types;
+    types[0] = 'TEXT';
+    StandardGetFile(NULL, 1, types, &reply);
+    if (!reply.sfGood) return;
+    LoadFromFile(&reply.sfFile);
+}
+
+/* Save As: always prompts. Default filename suggests .md so the file
+ * picks up Markdown highlighting / preview on the host filesystem
+ * if saved to :Shared: (the host-mounted volume) or any disk a
+ * modern macOS user later inspects. */
+static void DoFileSaveAs(void) {
+    StandardFileReply reply;
+    /* Pascal strings — first byte is length. Kept ASCII-only so the
+     * source compiles to identical bytes regardless of editor encoding
+     * (cv-mac #297 / #291: UTF-8 ellipses round-trip badly through Rez). */
+    unsigned char prompt[] = { 18,
+        'S','a','v','e',' ','a','s',' ','M','a','r','k','d','o','w','n','.','.','.' };
+    unsigned char dflt[]   = { 11,
+        'U','n','t','i','t','l','e','d','.','m','d' };
+    StandardPutFile(prompt, dflt, &reply);
+    if (!reply.sfGood) return;
+    if (reply.sfReplacing) FSpDelete(&reply.sfFile);
+    WriteToFile(&reply.sfFile);
+}
+
+/* Save: re-uses the current FSSpec if we have one (after a previous
+ * Open or Save As). Otherwise falls through to Save As. */
+static void DoFileSave(void) {
+    if (gHasFile) {
+        /* Truncating before write because the buffer may have shrunk
+         * (WriteToFile calls SetEOF, which handles this — but if the
+         * file was deleted between sessions, FSpOpenDF will fail and
+         * the user sees a status note). */
+        WriteToFile(&gFile);
+    } else {
+        DoFileSaveAs();
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────────
  * Menu / event handlers
  * ────────────────────────────────────────────────────────────────── */
 static void DoAbout(void) {
@@ -423,12 +620,19 @@ static void DoAbout(void) {
 }
 
 static void DoFileMenu(short item) {
-    if (item == kFileNew && gTE) {
-        TESetText("", 0, gTE);
-        TESetSelect(0, 0, gTE);
-        InvalRect(&gPreviewRect);
-    } else if (item == kFileQuit) {
-        gDone = TRUE;
+    switch (item) {
+        case kFileNew:
+            if (gTE) {
+                TESetText("", 0, gTE);
+                TESetSelect(0, 0, gTE);
+                gHasFile = FALSE;            /* untether from previous file */
+                InvalRect(&gPreviewRect);
+            }
+            break;
+        case kFileOpen:   DoFileOpen();   break;
+        case kFileSave:   DoFileSave();   break;
+        case kFileSaveAs: DoFileSaveAs(); break;
+        case kFileQuit:   gDone = TRUE;   break;
     }
 }
 
