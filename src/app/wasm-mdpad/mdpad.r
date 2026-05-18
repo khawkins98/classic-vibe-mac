@@ -40,9 +40,13 @@ resource 'MENU' (128, "Apple") {
 resource 'MENU' (129, "File") {
     129, textMenuProc, allEnabled, enabled, "File",
     {
-        "New",  noIcon, "N",   noMark, plain;
-        "-",    noIcon, noKey, noMark, plain;
-        "Quit", noIcon, "Q",   noMark, plain;
+        "New",         noIcon, "N",   noMark, plain;
+        "Open...",     noIcon, "O",   noMark, plain;
+        "-",           noIcon, noKey, noMark, plain;
+        "Save",        noIcon, "S",   noMark, plain;
+        "Save As...",  noIcon, noKey, noMark, plain;
+        "-",           noIcon, noKey, noMark, plain;
+        "Quit",        noIcon, "Q",   noMark, plain;
     }
 };
 
@@ -97,7 +101,9 @@ resource 'DITL' (128) {
             "Built in your browser by classic-vibe-mac.\n\n"
             "Split-pane editor: type Markdown on the left, see "
             "rendered output on the right. Headings, bold, italic, "
-            "inline code, bullet/numbered lists, fenced code blocks."
+            "inline code, bullet/numbered lists, fenced code blocks. "
+            "Open / Save .md files to disk; line endings are "
+            "translated CR <-> LF at the file boundary."
         };
     }
 };
