@@ -30,10 +30,12 @@ function transpile() {
   const tscPath = join(REPO, "node_modules", ".bin", "tsc");
   // hfs-patcher.ts imports floppy-icon.ts (#244); transpile both so
   // the runtime ESM resolver finds the sibling `.js` at import time.
+  // moduleResolution=bundler matches src/web/tsconfig.json. TS 6
+  // deprecated the legacy "node"/"node10" alias (error TS5107).
   execSync(
     `${tscPath} src/web/src/playground/hfs-patcher.ts ` +
       `src/web/src/playground/floppy-icon.ts ` +
-      `--target ES2020 --module ES2020 --moduleResolution node ` +
+      `--target ES2020 --module ES2020 --moduleResolution bundler ` +
       `--esModuleInterop --skipLibCheck --strict ` +
       `--outDir ${out}`,
     { cwd: REPO, stdio: ["ignore", "ignore", "inherit"] },

@@ -32,9 +32,13 @@ function transpilePlayground() {
   const tscPath = join(REPO, "node_modules", ".bin", "tsc");
   // Compile only the files we actually need so we don't pull in the
   // editor.ts → CodeMirror chain.
+  // moduleResolution=bundler matches src/web/tsconfig.json. The
+  // previous "node" alias resolves to "node10" in TS6 and that mode
+  // is deprecated (error TS5107). "bundler" is the modern equivalent
+  // for our vite-bundled workflow and works in TS 5+ as well.
   execSync(
     `${tscPath} src/web/src/playground/preprocessor.ts ` +
-      `--target ES2020 --module ES2020 --moduleResolution node ` +
+      `--target ES2020 --module ES2020 --moduleResolution bundler ` +
       `--esModuleInterop --skipLibCheck --strict ` +
       `--outDir ${out}`,
     { cwd: REPO, stdio: ["ignore", "ignore", "inherit"] },
