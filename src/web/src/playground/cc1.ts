@@ -24,6 +24,7 @@
  */
 import type { Diagnostic } from "./preprocessor";
 import { timeFetch } from "./fetchStats";
+import { fetchWasmBinary } from "./wasmFetch";
 // Shared cc1/as/ld/Elf2Mac argv builders — also imported by the
 // Node-side audit (scripts/audit-wasm-samples.mjs), so a flag bump
 // in either path can't drift away from the other (#267 family).
@@ -66,6 +67,10 @@ type Cc1Factory = (opts: {
   print?: (s: string) => void;
   printErr?: (s: string) => void;
   locateFile?: (path: string, scriptDir: string) => string;
+  /** Pre-fetched .wasm bytes. When set, Emscripten skips its own network
+   *  fetch entirely (no instantiateStreaming, no ArrayBuffer fallback). We
+   *  fetch with retry in wasmFetch.ts and pass the bytes here. */
+  wasmBinary?: Uint8Array;
 }) => Promise<Cc1Module>;
 
 interface SysrootIndexEntry {
@@ -172,8 +177,18 @@ async function loadModule(baseUrl: string): Promise<Cc1Module> {
     );
   }
 
+  // Fetch the wasm bytes ourselves (retry + backoff, session-cached) and hand
+  // them to Emscripten via `wasmBinary` so the runtime does no fetching of its
+  // own — no `instantiateStreaming` MIME path, no fallback double-fetch. See
+  // wasmFetch.ts for the full rationale.
+  const wasmBinary = await fetchWasmBinary(
+    `${baseUrl}wasm-cc1/cc1.wasm`,
+    "cc1.wasm",
+  );
+
   const Module = await factory({
     noInitialRun: true,
+    wasmBinary,
     // Capture both stdout (cc1 normally has none) and stderr (where
     // diagnostics live) in one buffer — parsing is the same either way.
     print: (s) => {
@@ -182,14 +197,9 @@ async function loadModule(baseUrl: string): Promise<Cc1Module> {
     printErr: (s) => {
       stderrBuffer += s + "\n";
     },
-    // Tell Emscripten to fetch cc1.wasm from the same public/ folder.
-    // Emscripten's default behaviour using import.meta.url works in
-    // practice, but being explicit means we survive any URL-resolution
-    // quirks across build modes (dev vs prod, base path).
-    locateFile: (path) => {
-      if (path === "cc1.wasm") return `${baseUrl}wasm-cc1/cc1.wasm`;
-      return `${baseUrl}wasm-cc1/${path}`;
-    },
+    // Belt-and-suspenders for any non-wasm asset Emscripten might resolve;
+    // the .wasm itself comes from `wasmBinary` above.
+    locateFile: (path) => `${baseUrl}wasm-cc1/${path}`,
   });
 
   await mountSysroot(Module, await loadHeadersBlob(baseUrl), "headers");
@@ -551,11 +561,22 @@ async function loadToolModule(
       `wasm-cc1/${mjsName}: expected default export to be a factory function`,
     );
   }
+  // Fetch the tool's .wasm bytes ourselves (retry + backoff, session-cached)
+  // and pass them via `wasmBinary` so Emscripten performs no fetch of its own.
+  // See wasmFetch.ts for why this is more robust than letting the runtime fetch.
+  const wasmName = mjsName.replace(/\.mjs$/, ".wasm");
+  const wasmBinary = await fetchWasmBinary(
+    `${baseUrl}wasm-cc1/${wasmName}`,
+    wasmName,
+  );
+
   const stderr: string[] = [];
   const Module = await factory({
     noInitialRun: true,
+    wasmBinary,
     print: (s) => stderr.push(s),
     printErr: (s) => stderr.push(s),
+    // Belt-and-suspenders for non-wasm assets; the .wasm comes from wasmBinary.
     locateFile: (path) => `${baseUrl}wasm-cc1/${path}`,
   });
 
