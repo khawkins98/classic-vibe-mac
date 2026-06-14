@@ -1,5 +1,15 @@
 version: 2
 
+# Supply-chain hardening: a 14-day cooldown on every ecosystem. Dependabot
+# will not open a PR for a release until it is at least two weeks old. Recent
+# npm compromises (malicious versions published to popular packages) are
+# typically detected and unpublished within days, so waiting out a cooldown
+# means we never auto-adopt a version during its most dangerous window.
+# Nothing here is cutting-edge, so the lag costs us nothing. `default-days`
+# applies to major/minor/patch alike (we intentionally don't set the
+# semver-specific overrides). This only gates Dependabot's automated PRs — a
+# human can still bump a dep manually if a genuine security fix needs it sooner.
+
 updates:
   - package-ecosystem: npm
     directory: /
@@ -7,6 +17,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
     groups:
       dev-deps:
         dependency-type: development
@@ -17,6 +29,16 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
+    groups:
+      # Collapse routine minor/patch bumps (CodeMirror, vite, etc.) into a
+      # single PR instead of one per package. Majors still open individually
+      # so a potentially breaking upgrade gets its own review.
+      web-deps:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
@@ -24,6 +46,8 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
     groups:
       actions:
         patterns:
@@ -35,3 +59,5 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
