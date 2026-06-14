@@ -37,7 +37,7 @@ jobs:
       image: ghcr.io/autc04/retro68:latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
 
       # Install hfsutils into the Retro68 container so scripts/build-disk-image.sh
       # can produce our custom app.dsk. The Retro68 image is Debian-based and runs
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
