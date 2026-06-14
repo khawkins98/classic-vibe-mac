@@ -22,5 +22,26 @@ To refresh: in the wasm-retro-cc repo, run
 `node scripts/build-show-asm-bundle.mjs`, then back here run
 `node scripts/vendor-wasm-cc1.mjs` and commit the result.
 
+## Why `cc1.wasm` is ~12 MB and stays one monolithic file
+
+This is a known, investigated constraint — not an oversight. Don't try to
+shrink or split it from cv-mac (see `LEARNINGS.md`, 2026-06-13):
+
+- The ~11 MB is GCC's `code` section. The build is **already stripped**
+  (no debug/name sections), so `wasm-opt`/`wasm-strip` have nothing to
+  remove. Real shrinking means rebuilding the GCC source in wasm-retro-cc
+  with different flags — cv-mac only vendors the finished blob and never
+  runs emsdk.
+- It **cannot be split** for parallel download: GitHub Pages serves HTTP
+  Range over the *gzip* representation, and a partial gzip slice can't be
+  decoded standalone (`fetch()` always auto-decompresses). Ranging the
+  raw bytes would triple the wire cost (12 MB vs ~4.7 MB gzip).
+- The wire cost is already fine: GH Pages auto-gzips to ~4.7 MB, and the
+  playground fetches it **once with retry** then caches the bytes
+  (`src/web/src/playground/wasmFetch.ts`).
+
+If the goal is a faster page load, the only lever is the wasm-retro-cc
+GCC build, not this vendor step.
+
 See cv-mac issue #64 and wasm-retro-cc issue #17 for the cross-repo
 contract and the Show Assembly feature spec.
