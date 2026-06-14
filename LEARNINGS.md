@@ -1904,6 +1904,52 @@ Now every fatal exit emits the exact message string (e.g. "A Graphic Couldn't Be
 
 **Pattern to remember:** Any vendored app you onboard will have its own error funnel — `RedAlert`, `Fatal`, `AbortApp`, `Die`, whatever the original author named it. The first thing to do after the app compiles but before debugging *runtime* problems is **find that funnel and wire it into `cvm_log`** — one minimal touch that turns every future fatal into a visible, attributable line. Treats vendored source like a black box but with one diagnostic poke at the boundary. Generalises to any port: Mac, microcontroller, embedded, whatever — the choke point for fatals is almost always one or two functions that you can instrument once and reap for the rest of the port's life.
 
+### 2026-06-13 — toolchain wasm fetch resilience: the "size" symptom hid a service-worker + double-fetch root cause
+
+**Symptom:** On GitHub Pages, Build & Run intermittently aborted with Emscripten's
+`Aborted(both async and sync fetching of the wasm failed)` after ~60s — "wasn't an
+issue before, happening a lot now." Easy to misread as "cc1.wasm is too big, shrink it."
+
+**Investigation (evidence beat the hypothesis):**
+  - `curl` of the live `cc1.wasm` took **69s** — but only because curl sends no
+    `Accept-Encoding`, so GH Pages returned the raw **12 MB**. A browser sends
+    `gzip` and gets **4.7 MB**. So raw size wasn't the wire cost.
+  - Headers showed `x-cache: MISS`. The repo deploys often; **every Pages deploy
+    invalidates the Fastly edge** (new etags), so the next visitor pays a cold-origin
+    fetch. High deploy cadence kept the edge cold → "happening a lot now."
+  - `coi-serviceworker`'s fetch handler ended in `.catch(e=>console.error(e))`, so any
+    failed/slow fetch resolved `respondWith()` to **`undefined`** — a hard network error.
+  - Emscripten left to fetch its own `.wasm` tries `instantiateStreaming` first; behind
+    the SW the reconstructed response can lose `application/wasm`, so streaming throws and
+    Emscripten falls back to a **second** full ArrayBuffer fetch. Two sequential cold
+    multi-MB fetches, either of which becoming `undefined` → the opaque abort.
+
+**Can we actually "shrink" it?** No — section dump shows 11 MB is the GCC `code`
+section with **no debug/name custom sections** (already stripped). The artifact is
+irreducible without rebuilding upstream GCC (needs emsdk + source we don't vendor).
+gzip already halves the wire size. **HTTP Range parallelism is a dead end here:** GH
+Pages serves Range over the *gzip* representation when the client sends `Accept-Encoding:
+gzip` (`Content-Range` total == the gzip size), and a partial slice of a gzip stream
+can't be decoded standalone — `fetch()` always auto-decompresses Content-Encoding, so
+ranged chunks come back garbage. Disabling gzip to range raw bytes triples the wire cost.
+
+**Fix (two parts, both verified):**
+  1. **Take fetching away from Emscripten.** `wasmFetch.ts:fetchWasmBinary()` fetches each
+     `.wasm` once with retry + backoff, caches the bytes in module scope, and passes them to
+     the factory via `Module.wasmBinary`. With `wasmBinary` set Emscripten never touches the
+     network — no streaming-MIME path, no double-fetch. Verified: exactly **1** GET per
+     `.wasm` in the network panel (a double-fetch would show 2) and a valid `.bin` out.
+  2. **Stop the SW swallowing errors.** Patched the vendored `coi-serviceworker.min.js`
+     `.catch(e=>console.error(e))` → `.catch(()=>fetch(s))`: on failure it re-fetches the
+     original request (a built-in retry) and, on success, returns the real response (sans the
+     injected COEP headers, which only the navigation document needs). If re-fetch also throws
+     the promise rejects — identical to having no SW, not an opaque `undefined`. **Re-apply
+     this patch after any upstream re-vendor** (noted in the file header).
+
+**Pattern to remember:** the loudest number (12 MB) was not the lever. The lever was a
+swallowed error × a redundant fetch × a cold edge. Pull the live headers and count the
+actual requests before optimizing the thing that looks expensive.
+
 ### 2026-05-17 — "N independent copies of one thing" is the bug — the audit lied while production failed
 **Context:** I added `cvm_log.h` as a system header (#263) by patching `cc1.ts:loadModule` — the sysroot-mount function used by the Show-ASM path. The Node-side CI audit had its *own* mount function (`scripts/audit-wasm-samples.mjs:mountSysroot`), so I patched that too. Audit went green; every sample compiled.
 
