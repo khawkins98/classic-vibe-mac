@@ -39,27 +39,51 @@ export interface FetchWasmOptions {
   retries?: number;
   /** Base backoff in ms; attempt N waits baseDelayMs * 2^(N-1). Default 500. */
   baseDelayMs?: number;
+  /** Per-attempt deadline in ms. A connection that opens but then stalls
+   *  mid-body (the cold-edge failure mode this whole module targets) never
+   *  resolves or rejects on its own — without a deadline the retry loop would
+   *  never fire. We abort the attempt and let the next retry start fresh.
+   *  Default 60_000: generous enough for a legit slow ~4.7 MB gzip download
+   *  while still bounding an indefinite hang. */
+  timeoutMs?: number;
 }
 
 /** Module-scoped cache of the fetched bytes, keyed by absolute URL. The four
  *  tool Modules are re-created per compile (cc1 et al. are not re-entrant — see
  *  cc1.ts), but the wasm bytes are immutable, so we keep them in JS rather than
  *  re-paying even a warm HTTP-cache round-trip on every Build. A rejected fetch
- *  clears its slot so a later Build can retry from scratch. */
+ *  clears its slot so a later Build can retry from scratch.
+ *
+ *  Memory note: this deliberately retains the decoded bytes for the whole
+ *  session — ~15 MB total (cc1 ~12.7 + as ~0.8 + ld ~1.0 + Elf2Mac ~0.3). That
+ *  trade (RAM for never re-fetching) is the point; if it ever matters, evicting
+ *  after a Build completes is the lever. */
 const binaryCache = new Map<string, Promise<Uint8Array>>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function fetchOnce(url: string): Promise<Uint8Array> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-  const buf = await res.arrayBuffer();
-  // A 0-byte body almost always means a truncated/aborted transfer that still
-  // returned 200 — treat it as a failure so the retry loop gets another go.
-  if (buf.byteLength === 0) throw new Error(`${url}: empty body`);
-  return new Uint8Array(buf);
+async function fetchOnce(url: string, timeoutMs: number): Promise<Uint8Array> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ac.signal });
+    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    // A 0-byte body almost always means a truncated/aborted transfer that still
+    // returned 200 — treat it as a failure so the retry loop gets another go.
+    if (buf.byteLength === 0) throw new Error(`${url}: empty body`);
+    return new Uint8Array(buf);
+  } catch (err) {
+    // Normalize the abort into a clearer, retryable error.
+    if (ac.signal.aborted) {
+      throw new Error(`${url}: timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -80,12 +104,13 @@ export function fetchWasmBinary(
 
   const retries = Math.max(1, opts.retries ?? 3);
   const baseDelayMs = opts.baseDelayMs ?? 500;
+  const timeoutMs = opts.timeoutMs ?? 60_000;
 
   const promise = timeFetch(`wasm:${label}`, async () => {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        return await fetchOnce(url);
+        return await fetchOnce(url, timeoutMs);
       } catch (err) {
         lastErr = err;
         if (attempt < retries) {
