@@ -31,6 +31,14 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    groups:
+      # Collapse routine minor/patch bumps (CodeMirror, vite, etc.) into a
+      # single PR instead of one per package. Majors still open individually
+      # so a potentially breaking upgrade gets its own review.
+      web-deps:
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: github-actions
     directory: /
