@@ -37,7 +37,7 @@ jobs:
       image: ghcr.io/autc04/retro68:latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
 
       # Install hfsutils into the Retro68 container so scripts/build-disk-image.sh
       # can produce our custom app.dsk. The Retro68 image is Debian-based and runs
@@ -88,7 +88,7 @@ jobs:
       # archive.org on every push; the cache key is the BOOT_DISK_URL pin
       # (effectively constant within a SHA pin in the script).
       - name: Cache upstream System 7.5.5 image
-        uses: actions/cache@v5
+        uses: actions/cache@v5.0.5
         with:
           path: .cache/boot-disk
           key: boot-disk-system755-v1
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
