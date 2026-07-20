@@ -10,8 +10,8 @@ jobs:
     name: unit (host C + JS preprocessor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -32,8 +32,8 @@ jobs:
     # toolchain in src/web/public/wasm-cc1/. Cheap (~5s wall on
     # GH runners) — runs every PR.
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -46,8 +46,8 @@ jobs:
     name: e2e (playwright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6.4.0
         with:
           node-version: "20"
           cache: "npm"
@@ -72,8 +72,8 @@ jobs:
     # without access will see this job skipped, not failed.
     if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6.4.0
         with:
           node-version: "20"
           cache: "npm"
