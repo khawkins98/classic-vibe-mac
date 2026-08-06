@@ -142,7 +142,7 @@ Boolean EngineTick(Game *g, long now) {
         /* Reflect vertical; tilt horizontal by paddle-hit position. */
         short hit_centre = (g->ball_x + BALL_SIZE / 2) - g->paddle_x;
         short tilt = (hit_centre - PADDLE_W / 2) / 8;  /* -3..+3 */
-        g->ball_vy = -BALL_INIT_VY;
+        g->ball_vy = BALL_INIT_VY;
         g->ball_vx = BALL_INIT_VX + (g->ball_vx < 0 ? -tilt : tilt);
         if (g->ball_vx == 0) g->ball_vx = (tilt >= 0) ? 1 : -1;
         if (g->ball_vx >  6) g->ball_vx =  6;
