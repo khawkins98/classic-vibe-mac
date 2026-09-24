@@ -20,7 +20,7 @@
  *   - PaintRect with the current foreground colour
  *   - ForeColor(blackColor) to reset to monochrome
  *
- * Pairs with color.r (WIND 128 + SIZE -1 + signature 'CVCR').
+ * Pairs with color.r (WIND 128 + SIZE -1 + signature 'CVCL').
  */
 
 #include <Types.h>
