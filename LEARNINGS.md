@@ -757,7 +757,7 @@ variadic macros, `#x` stringification, or `##` token-paste — none of
 which our existing apps use.
 
 ### 2026-05-08 — `.code.bin` is misnamed: it's resource-fork-heavy, not data-fork-only
-*(Historical — the `.code.bin` splice ("Path C") was removed in #130; `Reader.bin` is gone with #277. The two-fork merge in `build.ts` described here still exists — see the 2026-09-24 entry on its opposite-precedence twin in `resourceForkMerger.mjs`.)*
+*(Historical — the `.code.bin` splice ("Path C") was removed in #130; `Reader.bin` is gone with #277. The two-fork merge described here now lives in `resourceForkMerger.mjs` (`mergeResourceForks(…, { onConflict: "last" })`); `build.ts`'s private copy was removed — see the 2026-09-24 "two mergers" entry.)*
 **Context:** Phase 2 spec for Issue #30 Track 7 said "splice the
 freshly-WASM-Rez-compiled resource fork onto the precompiled `.code.bin`
 (the data-fork-only intermediate)". I trusted the description and built
