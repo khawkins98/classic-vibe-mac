@@ -12,7 +12,7 @@
     "build": "npm run build --workspace=src/web",
     "fetch:emulator": "bash scripts/fetch-emulator.sh",
     "preview": "npm run preview --workspace=src/web",
-    "typecheck": "tsc --noEmit -p src/web",
+    "typecheck": "tsc --noEmit -p src/web && tsc --noEmit -p tests",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "npm run test:unit:c && npm run test:unit:js",
     "audit:wasm-shelf": "node scripts/audit-wasm-samples.mjs",

@@ -117,12 +117,12 @@ test.describe("sleep-when-hidden", () => {
     }
 
     // Hide the page — should pause.
-    await page.evaluate(FORCE_VISIBILITY, "hidden");
+    await page.evaluate(FORCE_VISIBILITY, "hidden" as const);
     await expect(page.locator("body")).toHaveClass(/cvm-paused/);
     await expect(page.locator("#cvm-pause-status")).toContainText("Paused");
 
     // Reveal — should unpause.
-    await page.evaluate(FORCE_VISIBILITY, "visible");
+    await page.evaluate(FORCE_VISIBILITY, "visible" as const);
     await expect(page.locator("body")).not.toHaveClass(/cvm-paused/);
     await expect(page.locator("#cvm-pause-status")).toHaveText("");
   });
@@ -151,11 +151,11 @@ test.describe("sleep-when-hidden", () => {
       return;
     }
 
-    await page.evaluate(FORCE_VISIBILITY, "hidden");
+    await page.evaluate(FORCE_VISIBILITY, "hidden" as const);
     // Body class should NOT flip even though we went hidden — setting is OFF.
     await page.waitForTimeout(200);
     await expect(page.locator("body")).not.toHaveClass(/cvm-paused/);
 
-    await page.evaluate(FORCE_VISIBILITY, "visible");
+    await page.evaluate(FORCE_VISIBILITY, "visible" as const);
   });
 });

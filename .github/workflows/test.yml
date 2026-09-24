@@ -23,7 +23,7 @@ jobs:
       # surface here. tsc exits non-zero on any error (including the
       # noUnusedLocals/noUnusedParameters ones src/web/tsconfig.json
       # enables), which fails the job.
-      - name: Typecheck src/web
+      - name: Typecheck src/web + tests
         run: npm run typecheck
       - name: Run host-compiled C unit tests + JS preprocessor tests
         run: npm run test:unit
