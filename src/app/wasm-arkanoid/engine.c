@@ -89,16 +89,16 @@ static Boolean HitBricks(Game *g) {
             bry2 = bry + BRICK_H - 1;
             if (bx >= brx2 || bx2 <= brx) continue;
             if (by >= bry2 || by2 <= bry) continue;
-            /* Overlap detected. Reflect whichever axis the centre is
-             * closer to the brick's perpendicular edge on. */
+            /* Overlap detected. Reflect on the axis with the shallower
+             * overlap: that's the edge the ball just crossed. (Comparing
+             * centre distances instead gets it wrong because bricks are
+             * much wider than tall: an off-centre hit on the underside
+             * would read as a side hit and the ball would keep rising
+             * through the row.) */
             {
-                short cx = bx + BALL_SIZE / 2;
-                short cy = by + BALL_SIZE / 2;
-                short brcx = (brx + brx2) / 2;
-                short brcy = (bry + bry2) / 2;
-                short dx = cx - brcx; if (dx < 0) dx = -dx;
-                short dy = cy - brcy; if (dy < 0) dy = -dy;
-                if (dx > dy) hit_h = true;
+                short ox = (bx2 < brx2 ? bx2 : brx2) - (bx > brx ? bx : brx);
+                short oy = (by2 < bry2 ? by2 : bry2) - (by > bry ? by : bry);
+                if (ox < oy) hit_h = true;
                 else         hit_v = true;
             }
             g->bricks[r][c] = 0;
@@ -141,9 +141,12 @@ Boolean EngineTick(Game *g, long now) {
         g->ball_x < g->paddle_x + PADDLE_W) {
         /* Reflect vertical; tilt horizontal by paddle-hit position. */
         short hit_centre = (g->ball_x + BALL_SIZE / 2) - g->paddle_x;
-        short tilt = (hit_centre - PADDLE_W / 2) / 8;  /* -3..+3 */
+        short tilt = (hit_centre - PADDLE_W / 2) / 8;  /* -4..+4 */
+        /* BALL_INIT_VY is negative (y grows downward), so this is up. */
         g->ball_vy = BALL_INIT_VY;
-        g->ball_vx = BALL_INIT_VX + (g->ball_vx < 0 ? -tilt : tilt);
+        /* Keep the incoming direction, then let the hit position steer:
+         * an edge hit can push the ball back the way it came. */
+        g->ball_vx = (g->ball_vx < 0 ? -BALL_INIT_VX : BALL_INIT_VX) + tilt;
         if (g->ball_vx == 0) g->ball_vx = (tilt >= 0) ? 1 : -1;
         if (g->ball_vx >  6) g->ball_vx =  6;
         if (g->ball_vx < -6) g->ball_vx = -6;

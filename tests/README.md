@@ -48,11 +48,14 @@ npm run test:unit            # runs make -C tests/unit run
 make -C tests/unit clean     # clean up binaries
 ```
 
-The host C suite (`tests/unit/Makefile` + `tests/unit/*.c`) is small
-scaffolding for any future pure-C unit a wasm-* sample might want.
-It used to carry `html_parse.c` + `weather_parse.c` for the Reader
-and MacWeather apps; both apps retired in #276 and the tests went
-with them.
+The host C suite (`tests/unit/Makefile` + `tests/unit/*.c`) is small.
+Today it covers `wasm-arkanoid/engine.c` (`test_arkanoid_engine.c`):
+paddle/brick bounce directions plus a "perfect paddle never loses a
+life" simulation. Mac headers a pure-logic file includes for types
+(`<Types.h>`, `<Quickdraw.h>`, `<Events.h>`) are stubbed in
+`tests/unit/stubs/`; add to those stubs rather than pulling in real
+Toolbox code. (It used to carry `html_parse.c` + `weather_parse.c`
+for the Reader and MacWeather apps; both retired in #276.)
 
 The Node-side suite (`npm run test:unit:js`) is where most of the
 real coverage lives now:

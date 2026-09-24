@@ -36,7 +36,7 @@
 
 #define BALL_SIZE      10
 #define BALL_INIT_VX   3
-#define BALL_INIT_VY   -3
+#define BALL_INIT_VY   -3           /* negative = up: QuickDraw y grows downward */
 
 #define BRICK_COLS     10
 #define BRICK_ROWS     5
