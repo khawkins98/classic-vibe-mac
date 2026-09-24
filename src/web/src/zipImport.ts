@@ -23,7 +23,13 @@
  * silently merged.
  */
 
-import JSZip from "jszip";
+import type JSZip from "jszip";
+
+// JSZip (~96 KB) is only needed when the user actually imports a zip,
+// so it's loaded on demand rather than on the initial page load.
+async function loadJSZip(): Promise<typeof JSZip> {
+  return (await import("jszip")).default;
+}
 import { SAMPLE_PROJECTS, type SampleProject } from "./playground/types";
 import { writeFile } from "./playground/persistence";
 
@@ -57,7 +63,7 @@ export async function chooseAndImportZip(): Promise<ImportResult> {
  *  with the current editor buffer's content. */
 export async function peekZipTarget(file: Blob): Promise<string | null> {
   try {
-    const zip = await JSZip.loadAsync(file);
+    const zip = await (await loadJSZip()).loadAsync(file);
     for (const [path, entry] of Object.entries(zip.files)) {
       if (entry.dir) continue;
       const slash = path.indexOf("/");
@@ -86,7 +92,7 @@ export async function importZipFile(file: Blob): Promise<ImportResult> {
 
   let zip: JSZip;
   try {
-    zip = await JSZip.loadAsync(file);
+    zip = await (await loadJSZip()).loadAsync(file);
   } catch (e) {
     result.errors.push(`Could not read .zip — ${(e as Error).message ?? e}`);
     return result;

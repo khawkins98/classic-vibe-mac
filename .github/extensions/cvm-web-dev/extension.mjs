@@ -32,15 +32,16 @@ const WEB_DEV_SYSTEM = `You are a senior TypeScript/Vite/CodeMirror 6 developer 
 \`\`\`
 IDB (user edits) ──► preprocessor.ts ──► flat Rez source
 flat Rez source ──► rez.ts (WASM-Rez) ──► resource fork bytes
-resource fork + /precompiled/<id>.code.bin ──► build.ts ──► merged MacBinary
+user .c ──► cc1 → as → ld → Elf2Mac (in-browser) ──► in-memory MacBinary (CODE in rsrc fork)
+resource fork + in-memory MacBinary ──► build.ts ──► merged MacBinary
 merged MacBinary + empty-secondary.dsk template ──► hfs-patcher.ts ──► patched HFS disk
-patched HFS disk ──► emulator-loader.ts reboot() ──► Mac boots with user's app
+patched HFS disk ──► emulator-loader.ts boot() ──► Mac boots with user's app
 \`\`\`
 
 ## Key gotchas
-- The precompiled .code.bin is NOT code-only: it's a MacBinary with a code-heavy RESOURCE fork (CODE, cfrg, SIZE from toolchain). The data fork is ~20 bytes.
+- The Elf2Mac output is a MacBinary whose code lives in the RESOURCE fork (CODE, RELA, SIZE from the toolchain); the data fork is tiny. build.ts merges the user's Rez fork over it (user wins on collision).
 - Type/Creator is locked per Issue #31: the \`data '<creator>' (0, "Owner signature")\` declaration must remain intact or the build refuses.
-- Only .r files compile in-browser today. .c/.h save to IDB + ride in Download .zip, but do NOT affect the running binary (see Issue #57 for TinyCC feasibility).
+- Both .c and .r compile in-browser: C goes through the WASM cc1/as/ld/Elf2Mac toolchain (cc1.ts / compilePipeline), .r through WASM-Rez; build.ts splices the two.
 - The status line uses \`role="status" aria-live="polite"\` for accessible feedback.
 - Cursor position is saved to IDB on a 1s debounce and restored on file switch.
 

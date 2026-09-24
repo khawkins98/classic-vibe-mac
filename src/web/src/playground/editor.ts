@@ -54,7 +54,18 @@ import {
   openToolboxReference,
   isToolboxIdentifier,
 } from "./toolbox-reference-window";
-import JSZip from "jszip";
+
+// Build pipeline (cc1 driver, Rez, HFS patcher, fork splicers) is only
+// needed once the user builds, so it lives in its own lazily-loaded
+// chunk. The module loader memoises the import; repeat calls are cheap.
+// If the tab outlived a redeploy, the old hashed chunk 404s; say so
+// plainly instead of surfacing "Failed to fetch dynamically imported module".
+const loadBuildPipeline = () =>
+  import("./buildPipeline").catch((err) => {
+    throw new Error(
+      `Couldn't load the build tools — the playground may have been updated since this tab opened. Reload the page and try again. (${err instanceof Error ? err.message : String(err)})`,
+    );
+  });
 
 import {
   SAMPLE_PROJECTS,
@@ -76,23 +87,12 @@ import {
   getUserFilenames,
   addUserFilename,
 } from "./persistence";
-import { preprocess } from "./preprocessor";
-import { createVfs } from "./vfs";
-import { compile } from "./rez";
 import { consumeFetchMs } from "./fetchStats";
 import { dispatchBuildPhase } from "./buildProgressWindow";
 import { showTryThisNext } from "./tryThisNextCard";
 import { parseShareUrl, buildShareUrl } from "../shareLink";
-import {
-  spliceResourceFork,
-  triggerDownload,
-  makeRetro68DefaultSizeFork,
-} from "./build";
-import { mergeResourceForks } from "./resourceForkMerger.mjs";
-import { compileToAsm } from "./cc1";
-import { getToolchain, DEFAULT_TOOLCHAIN_ID } from "./toolchain";
 import { getOptLevel, onOptLevelChange } from "../settings";
-import { patchEmptyVolumeWithBinary, type ExtraFile } from "./hfs-patcher";
+import type { ExtraFile } from "./hfs-patcher";
 import {
   showBuildExplainer,
   showBuildExplainerIfFirstTime,
@@ -160,7 +160,7 @@ interface PlaygroundContext {
  */
 /** Callback the playground invokes after a successful Build & Run to swap
  *  the secondary disk and reboot the Mac. main.ts wires this to the
- *  EmulatorHandle's `reboot` method. Returning a Promise lets the
+ *  EmulatorHandle's `boot` method. Returning a Promise lets the
  *  playground show a spinner until the new boot is fully ready. */
 export type HotLoadCallback = (opts: {
   bytes: Uint8Array;
@@ -685,6 +685,7 @@ export async function mountPlayground(
 
     let result;
     try {
+      const { compileToAsm } = await loadBuildPipeline();
       result = await compileToAsm(baseUrl, source, fname, {
         siblings,
         optLevel: getOptLevel(),
@@ -1328,13 +1329,38 @@ export async function mountPlayground(
     });
   }
 
+  // Single shared in-flight guard for Build and Build & Run. It must be
+  // claimed synchronously at the top of each handler, before the first
+  // `await flushSave()`: otherwise a fast double-click (or Build followed
+  // by Build & Run) starts two builds concurrently, because the buttons
+  // were only disabled after that await. Overlapping builds race on the
+  // shared wasm toolchain / emulator reboot, and the first build's
+  // `finally` re-enabled the buttons while the second was still running.
+  let buildInFlight = false;
+
   buildBtn.addEventListener("click", async () => {
+    if (buildInFlight) return;
+    buildInFlight = true;
+    buildBtn.disabled = true;
+    buildRunBtn.disabled = true;
+    try {
+      await runBuildOnly();
+    } catch (e) {
+      // flushSave() (IDB write) can reject before runBuildOnly's own try.
+      setStatus(statusEl, `Build error: ${(e as Error).message}`, "err");
+    } finally {
+      buildInFlight = false;
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+    }
+  });
+
+  async function runBuildOnly(): Promise<void> {
     await flushSave();
     const projectId = current.project;
     const proj = findProject(projectId);
     if (!proj) return;
 
-    buildBtn.disabled = true;
     setStatus(statusEl, "Compiling…", "info");
     dispatchBuildPhase({
       phase: "preparing",
@@ -1352,7 +1378,7 @@ export async function mountPlayground(
           `Built ${stampedName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
           "ok",
         );
-        triggerDownload(result.bytes!, stampedName);
+        (await loadBuildPipeline()).triggerDownload(result.bytes!, stampedName);
         dispatchBuildPhase({ phase: "done" });
       } else {
         const first = result.diagnostics[0];
@@ -1366,14 +1392,12 @@ export async function mountPlayground(
       const msg = (e as Error).message;
       setStatus(statusEl, `Build error: ${msg}`, "err");
       dispatchBuildPhase({ phase: "error", message: msg });
-    } finally {
-      buildBtn.disabled = false;
     }
-  });
+  }
 
   // Build & Run: same Phase 2 build pipeline, but instead of a download,
   // we patch the empty HFS template with the freshly-compiled MacBinary
-  // and hand it to the emulator's reboot() path.
+  // and hand it to the emulator's boot() path.
   buildRunBtn.addEventListener("click", async () => {
     if (!hotLoad) {
       setStatus(
@@ -1383,16 +1407,32 @@ export async function mountPlayground(
       );
       return;
     }
-    await flushSave();
-    const proj = findProject(current.project);
-    if (!proj) return;
-
-    // Disable BOTH build buttons while a reboot is in progress; re-enable
-    // in the finally. Quick double-clicks otherwise queue resets that
-    // race with worker spawning.
+    if (buildInFlight) return;
+    // Claim the lock and disable BOTH build buttons synchronously, before
+    // the first await; re-enable in the finally. Quick double-clicks
+    // otherwise queue resets that race with worker spawning.
+    buildInFlight = true;
     buildBtn.disabled = true;
     buildRunBtn.disabled = true;
     rootEl.setAttribute("data-rebooting", "");
+    const releaseBuildLock = () => {
+      buildInFlight = false;
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+      rootEl.removeAttribute("data-rebooting");
+    };
+    try {
+      await flushSave();
+    } catch (e) {
+      releaseBuildLock();
+      setStatus(statusEl, `Build & Run error: ${(e as Error).message}`, "err");
+      return;
+    }
+    const proj = findProject(current.project);
+    if (!proj) {
+      releaseBuildLock();
+      return;
+    }
     const tStart = performance.now();
     setStatus(statusEl, "Compiling…", "info");
     dispatchBuildPhase({
@@ -1483,6 +1523,7 @@ export async function mountPlayground(
       // is acceptable; the feature payoff is the whole point of
       // the 6-star tier.
       const installIcon = extraFiles.length === 0;
+      const { patchEmptyVolumeWithBinary } = await loadBuildPipeline();
       const patched = patchEmptyVolumeWithBinary({
         templateBytes: tmplBytes,
         macBinary: result.bytes!,
@@ -1511,7 +1552,13 @@ export async function mountPlayground(
                 await switchTo(current.project, targetFile);
               }
               if (line && Number.isFinite(line) && line > 0) {
-                const ln = view.state.doc.line(line);
+                // doc.line() throws RangeError past the last line (e.g. a
+                // curated tryNext line number after the user trimmed the
+                // file); clamp so the jump lands on the last line instead
+                // of an unhandled rejection from the voided promise.
+                const ln = view.state.doc.line(
+                  Math.min(Math.floor(line), view.state.doc.lines),
+                );
                 view.dispatch({
                   selection: { anchor: ln.from, head: ln.from },
                   scrollIntoView: true,
@@ -1564,9 +1611,7 @@ export async function mountPlayground(
       setStatus(statusEl, `Build & Run error: ${msg}`, "err");
       dispatchBuildPhase({ phase: "error", message: msg });
     } finally {
-      buildBtn.disabled = false;
-      buildRunBtn.disabled = false;
-      rootEl.removeAttribute("data-rebooting");
+      releaseBuildLock();
     }
   });
 
@@ -1733,6 +1778,7 @@ async function downloadProjectAsZip(
   baseUrl: string,
   project: SampleProject,
 ): Promise<void> {
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   for (const filename of project.files) {
     const content = await readOrSeedFile(baseUrl, project.id, filename);
@@ -1871,6 +1917,8 @@ async function runBuildMixedCAndR(
     return cResult; // unreachable: caller guards rezFile !== null
   }
   const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
+  const { createVfs, preprocess, compile, spliceResourceFork } =
+    await loadBuildPipeline();
   const vfs = createVfs(baseUrl, proj.id);
   await vfs.prefetch(proj.id, proj.files);
   const pp = preprocess(topSource, proj.rezFile, vfs, {
@@ -1962,6 +2010,7 @@ async function mergeUserForkWithPrecompiledAssets(
   }
   // First-fork wins: userFork (.r-compiled) overrides; prebuilt forks
   // fill in the rest.
+  const { mergeResourceForks } = await loadBuildPipeline();
   return mergeResourceForks([userFork, ...prebuilt]);
 }
 
@@ -2055,6 +2104,12 @@ async function runBuildInBrowserC(
   // other-target backends register additional entries in toolchain.ts
   // and the IDE picks one via the project's preferred id (or the
   // default). No call-site change needed when adding backends.
+  const {
+    getToolchain,
+    DEFAULT_TOOLCHAIN_ID,
+    makeRetro68DefaultSizeFork,
+    spliceResourceFork,
+  } = await loadBuildPipeline();
   const toolchain = getToolchain(DEFAULT_TOOLCHAIN_ID, baseUrl);
   const r = await toolchain.compile({
     sources,

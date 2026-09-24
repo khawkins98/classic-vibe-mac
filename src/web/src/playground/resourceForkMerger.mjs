@@ -119,9 +119,13 @@ export function decodeResourceFork(fork) {
   }
   const typeListOffInMap = dv.getUint16(mapOff + 24, false);
   const nameListOffInMap = dv.getUint16(mapOff + 26, false);
-  const numTypesMinus1 = dv.getUint16(mapOff + 28, false);
-  const numTypes = numTypesMinus1 === 0xffff ? 0 : numTypesMinus1 + 1;
   const typeListStart = mapOff + typeListOffInMap;
+  // The numTypes-1 word is the first field OF the type list, so read it
+  // at typeListStart (not a hard-coded map+28): forks whose type list
+  // offset isn't the canonical 28 would otherwise get a garbage count
+  // while the entries below are (correctly) read relative to typeListStart.
+  const numTypesMinus1 = dv.getUint16(typeListStart, false);
+  const numTypes = numTypesMinus1 === 0xffff ? 0 : numTypesMinus1 + 1;
   const nameListStart = mapOff + nameListOffInMap;
 
   /** @type {DecodedResource[]} */

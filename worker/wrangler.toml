@@ -7,6 +7,15 @@ bindings = [
   { name = "ETHERNET_ZONE", class_name = "EthernetZone" }
 ]
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# Optional: restrict which page origins may open zone WebSockets.
+# Comma-separated; leave unset to allow any origin.
+# [vars]
+# ALLOWED_ORIGINS = "https://khawkins98.github.io,http://localhost:5173"
+
 [[migrations]]
 tag = "v1"
 new_classes = ["EthernetZone"]

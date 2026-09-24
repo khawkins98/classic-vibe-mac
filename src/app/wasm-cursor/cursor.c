@@ -67,7 +67,7 @@ static void DrawWindow(void) {
 
     /* Header / hint. */
     unsigned char hint[] = {
-        24,
+        26,
         'M','o','v','e',' ','m','o','u','s','e',' ','i','n','t','o',
         ' ','a',' ','q','u','a','d','r','a','n','t'
     };

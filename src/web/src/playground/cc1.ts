@@ -34,7 +34,11 @@ import { cc1Args } from "./compileArgs.mjs";
 // adds the browser-only wrapping (diagnostic parsing, wasm-trap
 // promotion, rich result shape). The audit script uses the same
 // runner with a Node-flavoured deps bag.
-import { runCompilePipeline } from "./compilePipeline.mjs";
+import {
+  mkdirP,
+  runCompilePipeline,
+  safeRelativePath,
+} from "./compilePipeline.mjs";
 // cv-mac system headers — inlined at build time via Vite's `?raw`
 // import. Each entry gets dropped into `/sysroot/include/<name>` by
 // `mountSysroot()` so any playground project can `#include <name>`
@@ -109,50 +113,6 @@ interface SysrootIndexEntry {
  * root cause investigation.
  */
 let stderrBuffer = "";
-
-/** Normalize a relative path (possibly containing `/`) into a safe sequence
- *  of MEMFS-friendly segments. Returns null if the path is empty,
- *  absolute, escapes upwards via `..`, or any segment normalizes to empty.
- *  Allowed segment chars: `A-Z a-z 0-9 . _ -`. Anything else (spaces,
- *  unicode, control chars) becomes `_`. */
-function safeRelativePath(rel: string): string | null {
-  if (!rel || rel.startsWith("/")) return null;
-  const parts = rel.split("/").filter((p) => p.length > 0);
-  if (parts.length === 0) return null;
-  const cleaned: string[] = [];
-  for (const part of parts) {
-    if (part === "." || part === "..") return null;
-    const s = part.replace(/[^A-Za-z0-9._-]/g, "_");
-    if (!s) return null;
-    cleaned.push(s);
-  }
-  return cleaned.join("/");
-}
-
-/** mkdir -p the parent directories of `absPath` inside MEMFS. The set
- *  remembers which dirs we already created so re-calls are cheap. The
- *  caller passes `/sysroot` or `/tmp` (or `/`) as the implicit root —
- *  whichever Module.FS.mkdir for has already been called. */
-function mkdirP(
-  Module: Cc1Module,
-  absPath: string,
-  madeDirs: Set<string>,
-): void {
-  const parts = absPath.split("/").filter((p) => p.length > 0);
-  let path = "";
-  for (let i = 0; i < parts.length - 1; i++) {
-    path += "/" + parts[i];
-    if (!madeDirs.has(path)) {
-      try {
-        Module.FS.mkdir(path);
-      } catch {
-        // Race with a parallel mkdir-p (same parent path produced by two
-        // unrelated entries); harmless.
-      }
-      madeDirs.add(path);
-    }
-  }
-}
 
 /**
  * Instantiate a fresh cc1 Module with the headers sysroot mounted at

@@ -49,6 +49,11 @@ QDGlobals qd;
 static WindowPtr gWin = NULL;
 static Rect gButtonRect;
 
+/* The last answer, kept so the update handler can redraw it when the
+ * window is uncovered (e.g. by the dialog we just closed). */
+static Str255 gAnswer;
+static enum { kNoAnswerYet, kAnswered, kCancelled } gAnswerState = kNoAnswerYet;
+
 static void DrawButton(const Rect *r, const unsigned char *labelP) {
     FrameRoundRect(r, 8, 8);
     short txtW = StringWidth(labelP);
@@ -63,14 +68,14 @@ static void DrawIntro(void) {
     intro.right = gWin->portRect.right; intro.bottom = 80;
     EraseRect(&intro);
     unsigned char l1[] = {
-        29,
+        31,
         'M','o','d','a','l',' ','D','i','a','l','o','g',' ','w','i','t','h',
         ' ','a','n',' ','e','d','i','t',' ','f','i','e','l','d'
     };
     MoveTo(12, 16);
     DrawString(l1);
     unsigned char l2[] = {
-        38,
+        34,
         'C','l','i','c','k',' ','t','h','e',' ','b','u','t','t','o','n',' ',
         't','o',' ','o','p','e','n',' ','D','L','O','G',' ','1','2','8','.'
     };
@@ -88,7 +93,7 @@ static void DrawAnswer(const unsigned char *answerPstr, Boolean cancelled) {
     EraseRect(&resultArea);
     MoveTo(12, resultArea.top + 14);
     if (cancelled) {
-        unsigned char none[] = { 8, '(','n','o',' ','n','a','m','e',')' };
+        unsigned char none[] = { 9, '(','n','o',' ','n','a','m','e',')' };
         DrawString(none);
         return;
     }
@@ -100,8 +105,15 @@ static void DrawAnswer(const unsigned char *answerPstr, Boolean cancelled) {
 }
 
 static void ShowGreetDialog(void) {
+    /* Remember the current port. A dialog is a window with its own
+     * GrafPort; after DisposeDialog that port is gone, so we must point
+     * QuickDraw back at our window before drawing the answer. */
+    GrafPtr savePort;
+    GetPort(&savePort);
+
     DialogPtr dlg = GetNewDialog(kDialogID, NULL, (WindowPtr)(-1));
     if (!dlg) { SysBeep(10); return; }
+    SetPort((GrafPtr)dlg);
     /* Make the EditText field own initial focus + select all.
      * The in-browser libInterface.a exposes only the modern Universal
      * Headers name (SelectDialogItemText); the legacy SelIText was
@@ -123,9 +135,14 @@ static void ShowGreetDialog(void) {
         /* Modern Universal Headers name — see SelectDialogItemText note above. */
         GetDialogItemText(hItem, answer);
         DisposeDialog(dlg);
-        DrawAnswer(answer, false);
+        SetPort(savePort);
+        for (short i = 0; i <= answer[0]; i++) gAnswer[i] = answer[i];  /* length byte + chars */
+        gAnswerState = kAnswered;
+        DrawAnswer(gAnswer, false);
     } else {
         DisposeDialog(dlg);
+        SetPort(savePort);
+        gAnswerState = kCancelled;
         DrawAnswer(NULL, true);
     }
 }
@@ -191,6 +208,8 @@ int main(void) {
                     BeginUpdate(gWin);
                     DrawIntro();
                     DrawButton(&gButtonRect, btnLabel);
+                    if (gAnswerState != kNoAnswerYet)
+                        DrawAnswer(gAnswer, gAnswerState == kCancelled);
                     EndUpdate(gWin);
                 }
                 break;

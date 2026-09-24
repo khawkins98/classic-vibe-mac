@@ -13,7 +13,7 @@
 // Side-effect import the WinBox bundle — its main field is broken (see
 // projectPicker.ts for the trail) so we reach for the global at runtime.
 import "winbox/dist/winbox.bundle.min.js";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -41,6 +41,7 @@ export function openHelp(): void {
     },
   });
   enableShade(wb);
+  enableWindowA11y(wb, { dialog: true });
   active = { focus: () => wb.focus(), close: () => wb.close() };
 }
 

@@ -21,7 +21,7 @@
 import "winbox/dist/winbox.bundle.min.js";
 
 import { SAMPLE_PROJECTS, type SampleProject } from "./playground/types";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const WinBox: any = (globalThis as any).WinBox;
@@ -176,6 +176,11 @@ export function openProjectPicker(opts: OpenPickerOptions): { close: () => void 
     class: ["no-min", "no-max", "no-full", "cvm-picker-winbox", "cvm-mac-winbox"],
   });
   enableShade(wb);
+  enableWindowA11y(wb, {
+    dialog: true,
+    modal: true,
+    initialFocus: ".cvm-picker__card--active, .cvm-picker__card",
+  });
 
   // Card click → dispatch picked project.
   content.addEventListener("click", (e) => {
@@ -208,8 +213,8 @@ function renderPickerHtml(currentProjectId: string): string {
     return `
       <button class="cvm-picker__card ${active}"
               type="button"
-              data-project-id="${p.id}">
-        <span class="cvm-picker__icon">${entry.emoji}</span>
+              data-project-id="${p.id}"${p.id === currentProjectId ? ' aria-current="true"' : ""}>
+        <span class="cvm-picker__icon" aria-hidden="true">${entry.emoji}</span>
         <strong class="cvm-picker__name">${escapeHtml(p.label)}</strong>
         <small class="cvm-picker__desc">${escapeHtml(entry.description)}</small>
       </button>

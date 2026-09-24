@@ -81,7 +81,7 @@ static const short kSizeValues[] = { 9, 10, 12, 14, 18, 24 };
 QDGlobals qd;
 
 static const unsigned char STARTER_TEXT[] = {
-    97,
+    87,
     'M','i','n','i',' ','W','o','r','d',' ','P','r','o','c','e','s',
     's','o','r','.',13,
     13,
