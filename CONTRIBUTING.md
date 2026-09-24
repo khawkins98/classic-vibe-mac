@@ -199,7 +199,7 @@ feat(api)!: rename disk image output path
   [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) /
   [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) if the architecture
   or build pipeline changed
-- Add an entry under `[Unreleased]` in `CHANGELOG.md` for
+- Add an entry under `[Unreleased]` in [`CHANGELOG.md`](./CHANGELOG.md) for
   user-visible changes
 - **Update [`docs/HANDBOOK.md`](./docs/HANDBOOK.md) when a user-facing
   thing changes** — a new menu item, a new keyboard shortcut, a new

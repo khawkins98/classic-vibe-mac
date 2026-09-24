@@ -313,7 +313,7 @@ from a separate integration-review pass over the merged
 flagged: the newly lazy-loaded build chunk 404s in any tab that outlives
 a Pages redeploy, and the hardened relay's new 1008 policy close met a
 client that retried every close forever. Both were small fixes once
-seen (`c1f0a72`), and both would have shipped without that pass.
+seen (#358), and both would have shipped without that pass.
 
 The other enabler was headless verification. The samples agent changed
 C in 13 samples without booting BasiliskII once, because
@@ -369,7 +369,7 @@ not bug reports.
 
 ### 2026-09-24 — Hand-counted Pascal-string length bytes drift: 16 were wrong across the samples
 **Context:** Toolbox-correctness sweep over the `wasm-*` teaching samples
-(#358, commit `f95f87e`). Several samples spell Pascal strings as explicit
+(#358). Several samples spell Pascal strings as explicit
 arrays — `unsigned char l1[] = { 29, 'M','o','d','a','l',… };` — instead
 of `"\p…"` literals.
 **Finding:** 16 of those length bytes didn't match the character count.
@@ -389,7 +389,7 @@ past a 9-byte array in wasm-multiwin; `label[label[0]]` is the idiom.
 
 ### 2026-09-24 — HFS catalog dir record: `dirMdDat` is at +14, not +12
 **Context:** `hfs-patcher.ts:bumpRootDirValence` refreshes the root
-directory's modification date after adding a file (#358, `a32cad8`).
+directory's modification date after adding a file (#358).
 **Finding:** In the cdrDirRec data area, `dirCrDat` is +10..13 and
 `dirMdDat` is +14..17. The patcher wrote the new mod date at +12, which
 straddles both fields: it clobbered the low half of the creation date
@@ -403,7 +403,7 @@ offsets against IM:Files (or hfsutils' `libhfs`) rather than by counting
 from the previous field in your head.
 
 ### 2026-09-24 — Resource map: the type count is the first word *of the type list*, not a fixed `map+28`
-**Context:** `resourceForkMerger.mjs:decodeResourceFork` (#358, `9aa9175`).
+**Context:** `resourceForkMerger.mjs:decodeResourceFork` (#358).
 **Finding:** The decoder read `numTypes - 1` from `mapOff + 28` but read
 the type entries relative to `mapOff + typeListOffset`. Those only agree
 when the type-list offset is the canonical 28, which is what Rez and our
@@ -449,7 +449,7 @@ the first suspect.
 
 ### 2026-09-24 — Build / Build & Run: disable the buttons *before* the first `await`
 **Context:** Fast double-click on Build (or Build then Build & Run)
-started two overlapping builds (#358, `cde7db6`).
+started two overlapping builds (#358).
 **Finding:** Both handlers awaited `flushSave()` before disabling their
 buttons, so the second click landed inside that await window. Each
 handler also disabled only its own button, and Build's `finally`
@@ -490,7 +490,7 @@ Then run `npm run audit:wasm-e2e -- wasm-<name>`.
 sample"). A single manifest would remove the drift risk; not done yet.
 
 ### 2026-09-24 — Ethernet relay on Durable Object hibernation: in-memory state doesn't survive
-**Context:** Hardening `worker/ethernet-zone.ts` (#358, `c6cae72`).
+**Context:** Hardening `worker/ethernet-zone.ts` (#358).
 **Finding:** Switching to the WebSocket Hibernation API
 (`ctx.acceptWebSocket(server)` plus the `webSocketMessage` /
 `webSocketClose` handlers) means the DO can be evicted from memory while
