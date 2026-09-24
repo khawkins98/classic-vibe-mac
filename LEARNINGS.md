@@ -432,6 +432,21 @@ over the user's edits.
 which one you're calling and which argument is the user's fork. Folding
 the `build.ts` copy into the `.mjs` one would remove the trap (see the
 "N independent copies of one thing" entry).
+**Update (2026-09-24): consolidated.** `build.ts` now calls
+`resourceForkMerger.mjs` and its private parser/merger is gone.
+Precedence is an explicit option, `mergeResourceForks(forks,
+{ onConflict: "first" | "last" })`, default `"first"` so existing callers
+are unchanged; `spliceResourceFork` passes `[base, user]` with `"last"`.
+The two implementations also differed in layout: `build.ts` sorted IDs
+within a type, copied the fork header into the map header, kept the base
+fork's map attributes, and let a later duplicate `(type, id)` *within one
+fork* win; the `.mjs` did none of these. The shared encoder now uses the
+`build.ts` layout (and `onConflict` also governs in-fork duplicates), so
+the spliced MacBinary of all 24 `wasm-*` samples hashed identically
+before and after. Output of direct `.mjs` callers (`splice-bin.mjs`,
+precompiledForkAssets) changed layout only, not content. One deliberate
+tightening: a 1-15 byte fork now throws instead of silently counting as
+empty (a 0-byte fork is still empty).
 
 ### 2026-09-24 — Node 24's default stack is too small for wasm-rez on Glypha's `.r`
 **Context:** `tests/unit/wasm-rez-stack.test.mjs` passed on Node 20/22

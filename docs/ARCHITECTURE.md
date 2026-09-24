@@ -344,26 +344,32 @@ declare a `precompiledForkAssets` list. The pipeline
 ```
    user .r -> wasm-rez --+
                          +--> mergeUserForkWithPrecompiledAssets
-   precompiledForkAssets +       (resourceForkMerger.mjs,
-   (fetched from                  first fork wins = user wins)
+   precompiledForkAssets +       mergeResourceForks([user, ...prebuilt])
+   (fetched from                  (default onConflict: "first" = user wins)
     sample-projects/)                     |
                                           v
    Elf2Mac MacBinary (in memory) --> spliceResourceFork (build.ts)
-                                     (own private merger; second
-                                      fork = user fork wins)
+                                     mergeResourceForks([base, user],
+                                       { onConflict: "last" } = user wins)
 ```
 
-Two mergers, same outcome. The shared one
-([`src/web/src/playground/resourceForkMerger.mjs`](../src/web/src/playground/resourceForkMerger.mjs),
-#285) takes N forks and treats "first fork wins on (type, id)
-collision" as the contract, so `editor.ts` passes the user's fork
-first. `build.ts`'s `spliceResourceFork` then folds that onto the
-C-built fork with its own two-fork merge where the second argument
-(the user side) wins, which is how libretrocrt's CODE / RELA / SIZE
-survive unless the `.r` overrides them. `resourceForkMerger.mjs` is
-also reused offline by
-[`scripts/splice-bin.mjs`](../scripts/splice-bin.mjs) (#294) for
-inspection; see
+One merger, explicit precedence. Both steps call
+[`src/web/src/playground/resourceForkMerger.mjs`](../src/web/src/playground/resourceForkMerger.mjs)
+(#285), the only resource-fork decoder/encoder/merger in the tree.
+`mergeResourceForks(forks, { onConflict })` takes N forks; `"first"`
+(the default) keeps the earliest fork's copy of a duplicate
+`(type, id)`, `"last"` keeps the latest's. Array order separately
+decides the output type order, which is why `spliceResourceFork`
+passes the C-built fork first (libretrocrt's CODE / RELA / SIZE lead
+the type list, and its map attributes carry through) and asks for
+`"last"` so the `.r` side still wins. The encoder writes one canonical
+layout: data at offset 256, types in first-seen order, IDs ascending
+within a type, fork header copied into the map header. Until 2026-09
+`build.ts` had its own private second-fork-wins merger; the shared
+encoder reproduces its bytes exactly, so consolidating didn't change
+any built app (see LEARNINGS, "Two resource-fork mergers").
+[`scripts/splice-bin.mjs`](../scripts/splice-bin.mjs) (#294) makes the
+same call as `build.ts` for offline inspection; see
 [`docs/DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md)
 Recipe 3.
 
