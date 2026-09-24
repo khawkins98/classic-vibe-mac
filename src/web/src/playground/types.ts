@@ -3,7 +3,7 @@
  *
  * The playground (Phase 1) is a read-only-leaning C/Rez source viewer with
  * single-file edit + IndexedDB persistence + zip download. It does NOT
- * compile anything yet — that's a later milestone. See PRD.md / Issue #21.
+ * compile anything yet — that's a later milestone. See docs/PLAYGROUND.md / Issue #21.
  */
 
 /**

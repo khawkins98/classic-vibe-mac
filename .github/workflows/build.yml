@@ -69,7 +69,7 @@ jobs:
 
       # Bake a bootable System 7.5.5 hard-disk image with our app pre-injected
       # into :System Folder:Startup Items: . This is the path forward for
-      # auto-launch (PRD §Auto-launch) — System 7's Finder only auto-runs
+      # auto-launch — System 7's Finder only auto-runs
       # Startup Items from the boot volume's blessed System Folder, so the
       # only way to make our app launch on boot without hand-driving the
       # emulator is to MAKE the boot volume be ours. See LEARNINGS.md
@@ -106,7 +106,7 @@ jobs:
             dist/system755-vibe.dsk \
             --shared-dir src/web/public/shared || {
             status=$?
-            echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see PRD risks."
+            echo "::warning::build-boot-disk.sh exited non-zero ($status). Continuing — see docs/TROUBLESHOOTING.md."
           }
           if [ -s dist/system755-vibe.dsk ]; then
             ls -la dist/system755-vibe.dsk
@@ -283,14 +283,8 @@ jobs:
       # frontend is expected to ship a service-worker shim (e.g.
       # `coi-serviceworker`) to install the headers client-side. If the
       # emulator fails to boot in production with a SAB error, that's the
-      # likely cause — see PRD.md "GitHub Pages Deployment". Owner of the
+      # likely cause — see docs/TROUBLESHOOTING.md (COOP/COEP row). Owner of the
       # fix is the emulator-integration-engineer; this job just flags it.
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-
-# TODO — remaining pipeline pieces from PRD.md, to be wired up by follow-up PRs:
-#   - Auto-launch: Startup Items on a secondary disk doesn't fire (see
-#     LEARNINGS.md). Either inject the app into the boot disk's System Folder
-#     at emulator-config time, or ship a custom blessed boot disk. (owner:
-#     emulator agent)

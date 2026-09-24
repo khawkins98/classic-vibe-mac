@@ -9,6 +9,11 @@ version: 2
 # applies to major/minor/patch alike (we intentionally don't set the
 # semver-specific overrides). This only gates Dependabot's automated PRs — a
 # human can still bump a dep manually if a genuine security fix needs it sooner.
+#
+# commit-message: every ecosystem titles its PRs `chore(deps): …` (or
+# `chore(deps-dev): …` for dev dependencies) so the squash-merged subject on
+# main follows Conventional Commits (see CONTRIBUTING.md). Without this,
+# Dependabot guesses from history and some PRs land as bare "Bump X from…".
 
 updates:
   - package-ecosystem: npm
@@ -19,6 +24,9 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       dev-deps:
         dependency-type: development
@@ -31,6 +39,9 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       # Collapse routine minor/patch bumps (CodeMirror, vite, etc.) into a
       # single PR instead of one per package. Majors still open individually
@@ -48,6 +59,9 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       actions:
         patterns:
@@ -61,3 +75,6 @@ updates:
     open-pull-requests-limit: 5
     cooldown:
       default-days: 14
+    commit-message:
+      prefix: chore
+      include: scope
