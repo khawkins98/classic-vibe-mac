@@ -153,7 +153,7 @@ interface PlaygroundContext {
  */
 /** Callback the playground invokes after a successful Build & Run to swap
  *  the secondary disk and reboot the Mac. main.ts wires this to the
- *  EmulatorHandle's `reboot` method. Returning a Promise lets the
+ *  EmulatorHandle's `boot` method. Returning a Promise lets the
  *  playground show a spinner until the new boot is fully ready. */
 export type HotLoadCallback = (opts: {
   bytes: Uint8Array;
@@ -1390,7 +1390,7 @@ export async function mountPlayground(
 
   // Build & Run: same Phase 2 build pipeline, but instead of a download,
   // we patch the empty HFS template with the freshly-compiled MacBinary
-  // and hand it to the emulator's reboot() path.
+  // and hand it to the emulator's boot() path.
   buildRunBtn.addEventListener("click", async () => {
     if (!hotLoad) {
       setStatus(

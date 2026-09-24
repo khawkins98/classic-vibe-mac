@@ -452,13 +452,6 @@ export default defineConfig({
         },
       },
     },
-    // TODO (build pipeline): after `vite build`, the CI workflow should copy
-    // the freshly-built `app.dsk` (produced by scripts/build-disk-image.sh)
-    // into `src/web/dist/` so it sits next to index.html and gets served by
-    // GitHub Pages at `/app.dsk`. The emulator config in `src/emulator.ts`
-    // expects to fetch it from that path. We deliberately do NOT use Vite's
-    // `publicDir` for app.dsk because the disk image is generated outside the
-    // web tree — it's a CI artifact, not a source asset.
   },
   server: {
     port: 5173,
