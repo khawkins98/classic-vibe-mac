@@ -193,10 +193,11 @@ For the broader emulator design and boot pipeline, see [ARCHITECTURE.md](./ARCHI
 ## Limitations and considerations
 
 - **Privacy:** zone names are not secret. Anyone who guesses the same zone name can join.
+- **No MAC enumeration:** the relay has no endpoint that lists connected MAC addresses; the only route is `GET /zone/:name/websocket`. (An earlier debug `/zone/:name/list` endpoint was removed.)
 - **No Mac-side internet:** this is only a peer-to-peer layer-2 relay between zone members.
 - **Max frame size:** frames outside 14–1514 bytes are dropped (client and relay). The relay closes sockets that send messages over 8 KB.
 - **Zone capacity:** at most 32 participants per zone; further connections get HTTP 503.
-- **Rate limit:** each socket may relay about 500 frames/s (burst 1000); excess frames are dropped.
+- **Rate limit:** each socket may relay about 500 frames/s (burst 1000); excess frames are dropped. Buckets are keyed by a per-socket UUID stored in the hibernation attachment and freed on close.
 - **Origin allow-list:** set `ALLOWED_ORIGINS` (comma-separated) in `worker/wrangler.toml` `[vars]` to restrict which sites can connect. Unset means any origin.
 - **Hibernation:** the relay uses the WebSocket Hibernation API, so idle zones are not billed for duration.
 - **Ring capacity:** only 16 frames can be queued at once; if the guest falls behind, later frames are dropped.

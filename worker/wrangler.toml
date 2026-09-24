@@ -23,3 +23,4 @@ new_classes = ["EthernetZone"]
 # Deploy with: cd worker && npx wrangler deploy
 # Dev server:  cd worker && npx wrangler dev
 # Then set VITE_ETHERNET_WS_BASE=ws://localhost:8787 in your .env.local
+# Smoke test:  cd worker && node scripts/smoke.mjs ws://localhost:8787  (with wrangler dev running)
