@@ -10,21 +10,19 @@
  *   3. We compile the preprocessed source through wasm-rez (rez.ts), which
  *      yields a MacBinary `*.bin` containing only the user's resource
  *      fork (MENU, WIND, DITL, ALRT, STR#, vers, SIZE, ...).
- *   4. We fetch the precompiled `*.code.bin` from
- *      /precompiled/<id>.code.bin — that's the MacBinary CMake's
- *      Retro68 add_application macro emits as a side artefact alongside
- *      the final `.bin`. Despite the name, .code.bin is RESOURCE-fork
- *      heavy (data fork ≈ 20 bytes of CFM stub; resource fork ≈ 20 KB
- *      of m68k CODE / cfrg / SIZE-from-toolchain / etc.). What's MISSING
- *      from .code.bin is the user-defined resources from `.r` — those
- *      get appended by Retro68's Rez via the `--copy <code.bin>` flag in
- *      the upstream CMake recipe. We do that copy on the JS side here.
- *   5. We do a real Mac resource fork MERGE: parse both forks (the .code.bin's
- *      and the freshly compiled user fork), concatenate the data sections
- *      and the type/ref/name lists with offset patch-ups, write a new
- *      resource fork. Reuse the .code.bin's MacBinary header
- *      (Type/Creator/filename + window/folder bytes), patch the rsrc
- *      length, recompute CRC.
+ *   4. The base MacBinary comes from the in-browser C toolchain: cc1 →
+ *      as → ld → Elf2Mac produce an in-memory MacBinary whose resource
+ *      fork carries the m68k CODE / RELA / SIZE resources (the data fork
+ *      is tiny or empty). What's MISSING from it is the user-defined
+ *      resources from `.r` — upstream, Retro68's Rez adds those via the
+ *      `--copy <code.bin>` flag in the CMake recipe. We do that on the JS
+ *      side here.
+ *   5. We do a real Mac resource fork MERGE: parse both forks (the
+ *      Elf2Mac output's and the freshly compiled user fork), concatenate
+ *      the data sections and the type/ref/name lists with offset
+ *      patch-ups, write a new resource fork. Reuse the Elf2Mac output's
+ *      MacBinary header (Type/Creator/filename + window/folder bytes),
+ *      patch the rsrc length, recompute CRC.
  *
  * Resource fork format reference: Inside Macintosh: More Macintosh Toolbox,
  * "The Resource Manager", section "Format of a Resource Fork". We use
@@ -45,7 +43,7 @@
  *   Map (at mapOffset):
  *     bytes  0..15       reserved (copy of header in MacOS' impl, 0 OK)
  *     bytes 16..21       reserved (handle to next map; offset to file ref)
- *     u16 attrs          resource fork attributes (we preserve from .code.bin)
+ *     u16 attrs          resource fork attributes (we preserve from the base fork)
  *     u16 typeListOff    offset of type list, relative to mapOffset
  *     u16 nameListOff    offset of name list, relative to mapOffset
  *     u16 typeCount-1    count - 1 (or 0xFFFF if zero types)
@@ -78,8 +76,8 @@ function padBytes(len: number): number {
 }
 
 export interface SpliceOptions {
-  /** Precompiled MacBinary with code resources in its resource fork
-   *  (from /precompiled/<id>.code.bin). */
+  /** Base MacBinary with code resources in its resource fork (the
+   *  in-memory Elf2Mac output from the C toolchain). */
   dataForkBin: Uint8Array;
   /** The freshly-compiled user resource fork (MacBinary-stripped, just
    *  the rfork bytes from rez.ts/extractResourceFork). */
@@ -88,14 +86,14 @@ export interface SpliceOptions {
 
 /**
  * Splice the user's freshly-compiled resource fork on top of the
- * precompiled .code.bin. Returns a complete new MacBinary with merged
- * resource fork + the .code.bin's data fork preserved.
+ * base MacBinary (in-memory Elf2Mac output). Returns a complete new
+ * MacBinary with merged resource fork + the base's data fork preserved.
  */
 export function spliceResourceFork(opts: SpliceOptions): Uint8Array {
   const { dataForkBin, resourceFork } = opts;
   if (dataForkBin.length < HEADER_SIZE) {
     throw new Error(
-      `precompiled .code.bin is too small (${dataForkBin.length} B)`,
+      `base MacBinary is too small (${dataForkBin.length} B)`,
     );
   }
 
@@ -108,20 +106,20 @@ export function spliceResourceFork(opts: SpliceOptions): Uint8Array {
   const inDataLen = inDv.getUint32(83, false);
   const inRsrcLen = inDv.getUint32(87, false);
 
-  // Locate the .code.bin's resource fork bytes. MacBinary lays out:
+  // Locate the base MacBinary's resource fork bytes. MacBinary lays out:
   //   header (128) + dataPad(dataLen) + rsrcPad(rsrcLen) + ...
   const dataStart = HEADER_SIZE;
   const rsrcStart = dataStart + padBytes(inDataLen);
   const codeRsrc = dataForkBin.subarray(rsrcStart, rsrcStart + inRsrcLen);
 
-  // Merge. If .code.bin has zero resource fork (unusual but possible
+  // Merge. If the base has zero resource fork (unusual but possible
   // for stripped builds), the merged fork is just the user's.
   const mergedRsrc =
     inRsrcLen === 0
       ? resourceFork
       : mergeResourceForks(codeRsrc, resourceFork);
 
-  // Build output MacBinary: header (clone) + data fork (from .code.bin) +
+  // Build output MacBinary: header (clone) + data fork (from base) +
   // merged resource fork.
   const outDataPadLen = padBytes(inDataLen);
   const outRsrcPadLen = padBytes(mergedRsrc.length);
@@ -154,7 +152,7 @@ export function spliceResourceFork(opts: SpliceOptions): Uint8Array {
 //
 // Approach: parse both inputs into (resources[], dataAreaBytes), then
 // concatenate. We pick fork B (the user's) to override fork A (the
-// .code.bin's) on (type, id) collisions — this matches Rez's --copy
+// Elf2Mac base's) on (type, id) collisions — this matches Rez's --copy
 // semantics: the user's .r definitions win.
 //
 // We don't re-implement attribute / handle preservation in full fidelity;
@@ -241,7 +239,7 @@ function parseResourceFork(rfork: Uint8Array): ParsedFork {
 /**
  * Merge two parsed resource forks into a single fresh resource fork.
  * Resources from `forkB` (the user's freshly compiled .r output) override
- * resources from `forkA` (the .code.bin's CODE etc) on (type, id) collision.
+ * resources from `forkA` (the Elf2Mac base's CODE etc) on (type, id) collision.
  *
  * Output bytes layout — we always emit canonical:
  *   data area starts at offset 256 (Resource Manager's `kResourceForkHeaderSize`)

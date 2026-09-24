@@ -124,6 +124,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
   }
   const overlay = document.createElement("div");
   overlay.className = "cvm-menu-dropdown";
+  overlay.id = "cvm-menu-dropdown";
   overlay.setAttribute("role", "menu");
   overlay.hidden = true;
   document.body.appendChild(overlay);
@@ -133,6 +134,9 @@ export function mountMenubar(actions: MenubarActions): () => void {
   // attribute is set in main.ts's static markup.
   for (const t of document.querySelectorAll<HTMLElement>("[data-menu]")) {
     t.setAttribute("aria-expanded", "false");
+    t.setAttribute("aria-controls", overlay.id);
+    // The dropdown is labelled by its trigger, which needs an id.
+    if (!t.id) t.id = `cvm-menubar-${t.dataset.menu}`;
   }
 
   let openMenuKey: string | null = null;
@@ -185,6 +189,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
         return `<button type="button"
                   class="${cls}"
                   role="menuitem"
+                  tabindex="-1"
                   ${attrs}><span class="cvm-menu-dropdown__label">${escapeHtml(it.label)}</span>${shortcut}</button>`;
       })
       .join("");
@@ -194,6 +199,7 @@ export function mountMenubar(actions: MenubarActions): () => void {
     overlay.hidden = false;
     trigger.classList.add("menubar__item--open");
     trigger.setAttribute("aria-expanded", "true");
+    overlay.setAttribute("aria-labelledby", trigger.id);
     openMenuKey = key;
     openTrigger = trigger;
   }
@@ -292,6 +298,12 @@ export function mountMenubar(actions: MenubarActions): () => void {
   function onKey(e: KeyboardEvent): void {
     if (e.key === "Escape" && openMenuKey) {
       closeDropdown({ restoreFocus: true });
+      return;
+    }
+    // Tab out of an open menu closes it (menus aren't in the Tab
+    // order; items are reached with the arrow keys).
+    if (e.key === "Tab" && openMenuKey) {
+      closeDropdown();
       return;
     }
 

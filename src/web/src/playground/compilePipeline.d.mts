@@ -51,6 +51,19 @@ export interface PipelineResult {
   failedFile?: string;
 }
 
+/** Sanitize a relative path into MEMFS-safe `/`-joined segments
+ *  (chars outside `A-Z a-z 0-9 . _ -` become `_`). Returns null for
+ *  empty / absolute / `.` / `..` input. */
+export function safeRelativePath(rel: string): string | null;
+
+/** mkdir -p the parent directories of `absPath` inside MEMFS, caching
+ *  created dirs in `madeDirs`. */
+export function mkdirP(
+  Module: { FS: { mkdir(path: string): void } },
+  absPath: string,
+  madeDirs: Set<string>,
+): void;
+
 export function runCompilePipeline(
   input: {
     sources: PipelineSource[];

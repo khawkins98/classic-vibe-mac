@@ -79,7 +79,7 @@ static void DrawStripes(void) {
     /* Title line in black. */
     ForeColor(blackColor);
     unsigned char title[] = {
-        29,
+        28,
         'C','o','l','o','r',' ','Q','u','i','c','k','D','r','a','w',' ',
         'R','G','B','F','o','r','e','C','o','l','o','r'
     };

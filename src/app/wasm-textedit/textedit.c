@@ -38,7 +38,7 @@ QDGlobals qd;
  * leading length byte to match the new length) and Build & Run — the
  * new text appears in the editor field on launch. */
 static const unsigned char SAMPLE_PSTR[] = {
-    71,
+    74,
     'T','y','p','e',' ','i','n','t','o',' ','t','h','i','s',' ',
     'w','i','n','d','o','w',' ','-','-',' ','t','h','e',' ','b',
     'r','o','w','s','e','r',' ','c','o','m','p','i','l','e','d',
@@ -48,7 +48,7 @@ static const unsigned char SAMPLE_PSTR[] = {
 };
 
 static const unsigned char SAMPLE_LINE2[] = {
-    14,
+    15,
     'q','u','i','t',' ','t','h','i','s',' ','d','e','m','o','.'
 };
 

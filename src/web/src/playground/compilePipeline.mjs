@@ -50,14 +50,14 @@ import {
 
 /**
  * Sanitize a relative source filename into a MEMFS-safe segment.
- * Mirrors the browser-side rule (cc1.ts:safeRelativePath) so both
+ * Shared with the browser side (cc1.ts imports it) so both
  * runtimes lay sources out under /tmp/ with the same names. Returns
  * `null` on un-sanitisable input (absolute path, .. escape, etc.).
  *
  * Allowed segment chars: A-Z a-z 0-9 . _ -. Anything else becomes `_`.
  * Empty / absolute / dot-segment paths reject.
  */
-function safeRelativePath(rel) {
+export function safeRelativePath(rel) {
   if (!rel || rel.startsWith("/")) return null;
   const parts = rel.split("/").filter((p) => p.length > 0);
   if (parts.length === 0) return null;
@@ -73,7 +73,7 @@ function safeRelativePath(rel) {
 
 /** mkdir -p inside MEMFS, caching the set of dirs we've already made
  *  so re-calls don't throw-and-catch dozens of times. */
-function mkdirP(Module, absPath, madeDirs) {
+export function mkdirP(Module, absPath, madeDirs) {
   const parts = absPath.split("/").filter((p) => p.length > 0);
   let path = "";
   for (let i = 0; i < parts.length - 1; i++) {

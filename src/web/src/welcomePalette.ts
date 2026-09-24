@@ -15,7 +15,7 @@
  * Apple-menu entry opens it on demand regardless of the flag.
  */
 import "winbox/dist/winbox.bundle.min.js";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 import { SAMPLE_PROJECTS, complexityStars, type SampleProject } from "./playground/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,6 +63,7 @@ export function openWelcome(): void {
     },
   });
   enableShade(wb);
+  enableWindowA11y(wb, { dialog: true });
   wireUpInteractions(wb);
   active = { focus: () => wb.focus(), close: () => wb.close() };
 }
