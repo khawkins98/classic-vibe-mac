@@ -1328,13 +1328,38 @@ export async function mountPlayground(
     });
   }
 
+  // Single shared in-flight guard for Build and Build & Run. It must be
+  // claimed synchronously at the top of each handler, before the first
+  // `await flushSave()`: otherwise a fast double-click (or Build followed
+  // by Build & Run) starts two builds concurrently, because the buttons
+  // were only disabled after that await. Overlapping builds race on the
+  // shared wasm toolchain / emulator reboot, and the first build's
+  // `finally` re-enabled the buttons while the second was still running.
+  let buildInFlight = false;
+
   buildBtn.addEventListener("click", async () => {
+    if (buildInFlight) return;
+    buildInFlight = true;
+    buildBtn.disabled = true;
+    buildRunBtn.disabled = true;
+    try {
+      await runBuildOnly();
+    } catch (e) {
+      // flushSave() (IDB write) can reject before runBuildOnly's own try.
+      setStatus(statusEl, `Build error: ${(e as Error).message}`, "err");
+    } finally {
+      buildInFlight = false;
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+    }
+  });
+
+  async function runBuildOnly(): Promise<void> {
     await flushSave();
     const projectId = current.project;
     const proj = findProject(projectId);
     if (!proj) return;
 
-    buildBtn.disabled = true;
     setStatus(statusEl, "Compiling…", "info");
     dispatchBuildPhase({
       phase: "preparing",
@@ -1366,10 +1391,8 @@ export async function mountPlayground(
       const msg = (e as Error).message;
       setStatus(statusEl, `Build error: ${msg}`, "err");
       dispatchBuildPhase({ phase: "error", message: msg });
-    } finally {
-      buildBtn.disabled = false;
     }
-  });
+  }
 
   // Build & Run: same Phase 2 build pipeline, but instead of a download,
   // we patch the empty HFS template with the freshly-compiled MacBinary
@@ -1383,16 +1406,32 @@ export async function mountPlayground(
       );
       return;
     }
-    await flushSave();
-    const proj = findProject(current.project);
-    if (!proj) return;
-
-    // Disable BOTH build buttons while a reboot is in progress; re-enable
-    // in the finally. Quick double-clicks otherwise queue resets that
-    // race with worker spawning.
+    if (buildInFlight) return;
+    // Claim the lock and disable BOTH build buttons synchronously, before
+    // the first await; re-enable in the finally. Quick double-clicks
+    // otherwise queue resets that race with worker spawning.
+    buildInFlight = true;
     buildBtn.disabled = true;
     buildRunBtn.disabled = true;
     rootEl.setAttribute("data-rebooting", "");
+    const releaseBuildLock = () => {
+      buildInFlight = false;
+      buildBtn.disabled = false;
+      buildRunBtn.disabled = false;
+      rootEl.removeAttribute("data-rebooting");
+    };
+    try {
+      await flushSave();
+    } catch (e) {
+      releaseBuildLock();
+      setStatus(statusEl, `Build & Run error: ${(e as Error).message}`, "err");
+      return;
+    }
+    const proj = findProject(current.project);
+    if (!proj) {
+      releaseBuildLock();
+      return;
+    }
     const tStart = performance.now();
     setStatus(statusEl, "Compiling…", "info");
     dispatchBuildPhase({
@@ -1511,7 +1550,13 @@ export async function mountPlayground(
                 await switchTo(current.project, targetFile);
               }
               if (line && Number.isFinite(line) && line > 0) {
-                const ln = view.state.doc.line(line);
+                // doc.line() throws RangeError past the last line (e.g. a
+                // curated tryNext line number after the user trimmed the
+                // file); clamp so the jump lands on the last line instead
+                // of an unhandled rejection from the voided promise.
+                const ln = view.state.doc.line(
+                  Math.min(Math.floor(line), view.state.doc.lines),
+                );
                 view.dispatch({
                   selection: { anchor: ln.from, head: ln.from },
                   scrollIntoView: true,
@@ -1564,9 +1609,7 @@ export async function mountPlayground(
       setStatus(statusEl, `Build & Run error: ${msg}`, "err");
       dispatchBuildPhase({ phase: "error", message: msg });
     } finally {
-      buildBtn.disabled = false;
-      buildRunBtn.disabled = false;
-      rootEl.removeAttribute("data-rebooting");
+      releaseBuildLock();
     }
   });
 

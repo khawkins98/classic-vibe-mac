@@ -189,6 +189,38 @@ test("synthesised APPL: patchEmptyVolumeWithBinary produces expected-size disk i
   assert.equal(patched.length, template.length, "patched disk must be same size as template");
 });
 
+test("patch: root dir dirCrDat preserved, dirMdDat refreshed", () => {
+  // cdrDirRec data: cdrType(1) resrv(1) dirFlags(2) dirVal(2)
+  // dirDirID(4) dirCrDat(4 @ +10) dirMdDat(4 @ +14). The valence bump
+  // used to write the mod date at +12, straddling both date fields.
+  const rootDirDates = (disk) => {
+    const catOff = __test.allocBlockToDiskOffset(
+      __test.TEMPLATE_LAYOUT.catalogFirstAllocBlock,
+    );
+    const rec0 = catOff + 1 * __test.TEMPLATE_LAYOUT.allocBlockSize + 14;
+    const dataOff = rec0 + 1 + disk[rec0];
+    const dv = new DataView(disk.buffer, disk.byteOffset, disk.byteLength);
+    return {
+      crDat: dv.getUint32(dataOff + 10, false),
+      mdDat: dv.getUint32(dataOff + 14, false),
+    };
+  };
+  const before = rootDirDates(template);
+  const patched = patchEmptyVolumeWithBinary({
+    templateBytes: template,
+    macBinary: syntheticAppl,
+    filename: "hello_toolbox",
+    volumeName: "Wasm Hello",
+  });
+  const after = rootDirDates(patched);
+  assert.equal(after.crDat, before.crDat, "dirCrDat must be untouched");
+  const nowMac = Math.floor(Date.now() / 1000) + 2082844800;
+  assert.ok(
+    Math.abs(after.mdDat - nowMac) < 60,
+    `dirMdDat should be ~now (${nowMac}), got ${after.mdDat}`,
+  );
+});
+
 // ── Patch + hfsutils round-trip ─────────────────────────────────────────
 
 function which(cmd) {

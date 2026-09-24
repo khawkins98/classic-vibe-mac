@@ -159,3 +159,30 @@ test("decode: handles multi-type fork (CODE/DATA/RELA pattern)", () => {
 test("decode rejects truncated fork", () => {
   assert.throws(() => decodeResourceFork(new Uint8Array(4)), /too short/);
 });
+
+test("decode: honours a non-canonical type list offset", () => {
+  // Take a canonical fork (type list at map+28) and splice two padding
+  // bytes in front of the type list, bumping typeListOff / nameListOff /
+  // mapLen accordingly. Ref-list offsets are relative to the type list so
+  // they stay valid. The decoder used to read numTypes-1 from map+28
+  // regardless of typeListOff.
+  const input = [r("PICT", 128, "a", "nm"), r("snd ", 1, "bb")];
+  const canon = encodeResourceFork(input);
+  const dv0 = new DataView(canon.buffer, canon.byteOffset, canon.byteLength);
+  const mapOff = dv0.getUint32(4, false);
+  assert.equal(dv0.getUint16(mapOff + 24, false), 28);
+  const shifted = new Uint8Array(canon.length + 2);
+  shifted.set(canon.subarray(0, mapOff + 28), 0);
+  shifted[mapOff + 28] = 0xff; // garbage where the old code looked
+  shifted[mapOff + 29] = 0xff;
+  shifted.set(canon.subarray(mapOff + 28), mapOff + 30);
+  const dv = new DataView(shifted.buffer);
+  dv.setUint32(12, dv.getUint32(12, false) + 2, false);
+  dv.setUint16(mapOff + 24, 30, false);
+  dv.setUint16(mapOff + 26, dv.getUint16(mapOff + 26, false) + 2, false);
+  const decoded = decodeResourceFork(shifted);
+  assert.equal(decoded.length, 2);
+  const pict = decoded.find((x) => x.type === "PICT");
+  assert.equal(pict.id, 128);
+  assert.equal(pict.name, "nm");
+});

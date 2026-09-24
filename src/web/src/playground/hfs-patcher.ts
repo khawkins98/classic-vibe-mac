@@ -697,8 +697,10 @@ function bumpRootDirValence(disk: Uint8Array, catalogDiskOffset: number): void {
   const dataOff = rec0 + 1 + keyLength;
   const dirVal = dv.getUint16(dataOff + 4, false);
   dv.setUint16(dataOff + 4, dirVal + 1, false);
-  // dirMdDat refresh.
-  dv.setUint32(dataOff + 12, macEpochSeconds(), false);
+  // dirMdDat refresh. dirMdDat is at dataOff+14 (dirCrDat occupies
+  // dataOff+10..13). Writing at +12 straddled both fields, clobbering
+  // the low half of the creation date and the high half of the mod date.
+  dv.setUint32(dataOff + 14, macEpochSeconds(), false);
 }
 
 // ── Top-level API ──────────────────────────────────────────────────────
