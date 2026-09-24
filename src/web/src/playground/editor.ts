@@ -83,10 +83,13 @@ import {
   writeFile,
   readUiState,
   writeUiState,
-  clearProjectFiles,
+  resetProjectToBundled,
+  onStorageReadError,
+  isUnreadable,
   getUserFilenames,
   addUserFilename,
 } from "./persistence";
+import { resolveResetSource } from "./persistenceCore";
 import { consumeFetchMs } from "./fetchStats";
 import { dispatchBuildPhase } from "./buildProgressWindow";
 import { showTryThisNext } from "./tryThisNextCard";
@@ -140,13 +143,6 @@ const UI_CURSOR = "cursor"; // { project, filename, pos }
 /** Save debounce window. 1 second per the spec. */
 const SAVE_DEBOUNCE_MS = 1000;
 
-interface PlaygroundContext {
-  rootEl: HTMLElement;
-  baseUrl: string;
-  /** True iff IDB is backing storage. */
-  persistent: boolean;
-}
-
 /**
  * Build the playground DOM inside `rootEl`. Idempotent on a single mount —
  * call once. Returns a small handle exposing show/hide so the settings
@@ -174,7 +170,6 @@ export async function mountPlayground(
   hotLoad?: HotLoadCallback,
 ): Promise<void> {
   const { persistent, preservedCount } = await initPersistence(baseUrl);
-  const ctx: PlaygroundContext = { rootEl, baseUrl, persistent };
 
   rootEl.innerHTML = renderShell(persistent, preservedCount);
 
@@ -214,6 +209,42 @@ export async function mountPlayground(
     "#cvm-pg-whatjusthappened",
   )!;
   const statusEl = rootEl.querySelector<HTMLSpanElement>("#cvm-pg-status")!;
+  // Reset button state (handler wired further down). Declared up here
+  // so switchTo() can refresh it without a TDZ hazard.
+  const resetBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-reset");
+  const RESET_TITLE = resetBtn?.title ?? "";
+  let resetting = false;
+  function updateResetButton(): void {
+    if (!resetBtn) return;
+    const proj = findProject(current.project);
+    const source = proj ? resolveResetSource(proj, SAMPLE_PROJECTS) : undefined;
+    resetBtn.disabled = resetting || source === undefined;
+    if (source === undefined) {
+      resetBtn.title =
+        "Reset isn't available for this project: it was duplicated before " +
+        "the playground recorded which sample it came from, so there are " +
+        "no bundled defaults to restore.";
+    } else if (source !== current.project) {
+      const src = findProject(source);
+      resetBtn.title =
+        `Discard your edits and restore this project's starter files from ` +
+        `the bundled ${src?.label ?? source} sample`;
+    } else {
+      resetBtn.title = RESET_TITLE;
+    }
+  }
+  // A stored file we couldn't read (after one retry) is shown from the
+  // bundled copy but NOT saved over the stored one — tell the user why
+  // their edits look missing and that edits to it won't persist.
+  onStorageReadError((_project, file) => {
+    setStatus(
+      statusEl,
+      `Couldn't read your saved copy of ${file} from browser storage — ` +
+        `showing the bundled version instead. Your saved copy is untouched; ` +
+        `edits to ${file} won't be saved this session. Reload to try again.`,
+      "err",
+    );
+  });
   const editorMount = rootEl.querySelector<HTMLDivElement>(
     "#cvm-pg-editor-mount",
   )!;
@@ -304,6 +335,12 @@ export async function mountPlayground(
     updateTabBar();
   }
 
+  // Files ("project/file") a Reset is currently overwriting. Saves to
+  // them are dropped while the reset runs: the user just chose to
+  // discard those edits, and a debounced save landing mid-reset would
+  // write the pre-reset buffer over the restored copy.
+  const resetBlockedKeys = new Set<string>();
+
   // Central save point — wraps writeFile() with version-aware dirty clearing.
   async function saveFile(
     projectId: string,
@@ -311,12 +348,24 @@ export async function mountPlayground(
     content: string,
   ): Promise<void> {
     const key = fileKey(projectId, file);
+    if (resetBlockedKeys.has(key)) return;
     const versionAtSave = dirtyVersions.get(key) ?? 0;
     try {
-      await writeFile(projectId, file, content);
-      // Clear dirty only if no new edits arrived during the async write.
-      if ((dirtyVersions.get(key) ?? 0) === versionAtSave) {
-        dirtyVersions.delete(key);
+      const persisted = await writeFile(projectId, file, content);
+      if (persisted) {
+        // Clear dirty only if no new edits arrived during the async write.
+        if ((dirtyVersions.get(key) ?? 0) === versionAtSave) {
+          dirtyVersions.delete(key);
+        }
+      } else if (!isUnreadable(projectId, file)) {
+        // Unreadable files already got their "won't be saved this
+        // session" message from onStorageReadError; a failed put is new.
+        setStatus(
+          statusEl,
+          `Couldn't save ${file} to browser storage — your edits are kept ` +
+            `in this tab only for now.`,
+          "err",
+        );
       }
     } catch {
       // IDB write failed; keep dirty so the user knows the save didn't land.
@@ -785,6 +834,7 @@ export async function mountPlayground(
     if (seq !== switchSeq) return;
     current.project = projectId;
     current.filename = nextFile;
+    updateResetButton();
     loadingFile = true;
     try {
       view.dispatch({
@@ -1255,76 +1305,136 @@ export async function mountPlayground(
     });
   }
 
-  // Reset to bundled defaults — wipes IDB for the current project and
-  // re-seeds every file from `public/sample-projects/`. Useful when the
-  // sample sources have been updated server-side and the user wants
-  // the new defaults instead of their stale in-browser copies.
-  const resetBtn = rootEl.querySelector<HTMLButtonElement>("#cvm-pg-reset");
+  // Reset to bundled defaults — overwrites the current project's starter
+  // files with the bundled copies from `public/sample-projects/`. Useful
+  // when the sample sources have been updated server-side and the user
+  // wants the new defaults instead of their stale in-browser copies.
+  //
+  // User projects (File → "Duplicate as new project…") reset from the
+  // shipped sample they were duplicated from (`sourceProjectId`, or a
+  // unique metadata match for legacy duplicates — resolveResetSource).
+  // If that can't be determined the button is disabled with a tooltip.
   if (resetBtn) {
+    updateResetButton();
+    window.addEventListener("cvm:user-projects-changed", updateResetButton);
     resetBtn.addEventListener("click", async () => {
       const projectId = current.project;
       const proj = findProject(projectId);
       if (!proj) return;
+      const sourceId = resolveResetSource(proj, SAMPLE_PROJECTS);
+      if (sourceId === undefined) {
+        updateResetButton();
+        return;
+      }
+      const fromSample = sourceId !== projectId;
+      const sourceLabel = findProject(sourceId)?.label ?? sourceId;
       const ok = window.confirm(
-        `Discard your edits to ${proj.label} and reload from the bundled ` +
-          `defaults?\n\nThis affects every file in this project. Your other ` +
-          `projects' edits are kept.`,
+        fromSample
+          ? `Discard your edits to ${proj.label} and restore its starter ` +
+              `files from the bundled ${sourceLabel} sample?\n\nThis replaces ` +
+              `every file the project started with. Files you added with ` +
+              `New file are kept, and your other projects' edits are kept.`
+          : `Discard your edits to ${proj.label} and reload from the bundled ` +
+              `defaults?\n\nThis affects every file in this project. Your other ` +
+              `projects' edits are kept.`,
       );
       if (!ok) return;
-      resetBtn.disabled = true;
+      // Pending debounced save: if it's for a file being reset, drop it
+      // (those edits are being discarded on purpose — letting it fire
+      // mid-reset would write the old buffer over the restored copy);
+      // otherwise (a user-added file, which Reset keeps) flush it now.
+      const resetFiles = [...proj.files];
+      if (saveTimer) {
+        if (current.project === projectId && resetFiles.includes(current.filename)) {
+          clearTimeout(saveTimer);
+          saveTimer = null;
+        } else {
+          await flushSave();
+        }
+      }
+      for (const f of resetFiles) resetBlockedKeys.add(fileKey(projectId, f));
+      // Invalidate any in-flight switchTo(): it may be awaiting a
+      // pre-reset read and would dispatch stale content.
+      switchSeq++;
+      resetting = true;
+      updateResetButton();
       setStatus(statusEl, "Resetting to bundled defaults…", "info");
       try {
-        // Drop the per-project IDB entries first so readOrSeedFile
-        // falls through to the bundled fetch on every file.
-        await clearProjectFiles(projectId);
-        // Walk every file in the project, re-fetch from bundle, and
-        // load each one back into IDB. Doing the whole set ensures
-        // multi-file projects (snake / textedit / notepad / etc.) get
-        // a fully consistent reset.
-        for (const f of proj.files) {
-          // readOrSeedFile fetches + persists when IDB is empty.
-          await readOrSeedFile(baseUrl, projectId, f);
-        }
-        // Refresh the editor with whatever is now in the active file.
-        const fresh = await readOrSeedFile(
+        // Fetches every starter file first, then overwrites IDB — a
+        // failed fetch throws before anything is written. Files the
+        // bundle no longer has (404) are skipped and left as they are.
+        const { restored: fresh, missing, unsaved } = await resetProjectToBundled(
           baseUrl,
           projectId,
-          current.filename,
+          sourceId,
+          resetFiles,
         );
-        loadingFile = true;
-        try {
-          view.dispatch({
-            changes: {
-              from: 0,
-              to: view.state.doc.length,
-              insert: fresh,
-            },
-            selection: { anchor: 0, head: 0 },
-            scrollIntoView: true,
-          });
-        } finally {
-          loadingFile = false;
+        // A switchTo() started while the reset ran may have read a
+        // pre-reset copy — invalidate it too.
+        switchSeq++;
+        // Refresh the editor if the active file was one of those reset
+        // (a user-added file stays as it is).
+        const activeFresh =
+          current.project === projectId
+            ? fresh.get(current.filename)
+            : undefined;
+        if (activeFresh !== undefined) {
+          loadingFile = true;
+          try {
+            view.dispatch({
+              changes: {
+                from: 0,
+                to: view.state.doc.length,
+                insert: activeFresh,
+              },
+              selection: { anchor: 0, head: 0 },
+              scrollIntoView: true,
+            });
+          } finally {
+            loadingFile = false;
+          }
         }
-        // Clear dirty markers for every file in the project — they
-        // now match the bundled source.
-        for (const f of proj.files) {
-          dirtyVersions.delete(fileKey(projectId, f));
+        // Clear dirty markers for every reset file — they now match the
+        // bundled source (unless the write didn't persist).
+        for (const f of fresh.keys()) {
+          if (!unsaved.includes(f)) dirtyVersions.delete(fileKey(projectId, f));
         }
         updateTabBar();
+        const n = fresh.size;
+        let msg =
+          `${proj.label} reset to bundled defaults` +
+          (fromSample ? ` from ${sourceLabel}` : "") +
+          ` (${n} file${n === 1 ? "" : "s"} reloaded).`;
+        if (missing.length > 0) {
+          msg +=
+            ` Kept your copy of ${missing.join(", ")} — no longer in the ` +
+            `bundled sample.`;
+        }
+        if (unsaved.length > 0) {
+          msg +=
+            ` Couldn't save ${unsaved.join(", ")} to browser storage ` +
+            `(restored in this tab only).`;
+        }
         setStatus(
           statusEl,
-          `${proj.label} reset to bundled defaults (${proj.files.length} ` +
-            `file${proj.files.length === 1 ? "" : "s"} reloaded).`,
-          "ok",
+          msg,
+          unsaved.length > 0 ? "err" : missing.length > 0 ? "info" : "ok",
         );
       } catch (err) {
         setStatus(
           statusEl,
-          `Reset failed: ${(err as Error).message}`,
+          `Reset failed: ${(err as Error).message}. Your files were not changed.`,
           "err",
         );
       } finally {
-        resetBtn.disabled = false;
+        for (const f of resetFiles) resetBlockedKeys.delete(fileKey(projectId, f));
+        // Edits typed while the reset ran had their save dropped; if the
+        // active file is still dirty (e.g. the reset failed), re-queue it.
+        if (!saveTimer && isDirty(current.project, current.filename)) {
+          scheduleSave();
+        }
+        resetting = false;
+        updateResetButton();
       }
     });
   }

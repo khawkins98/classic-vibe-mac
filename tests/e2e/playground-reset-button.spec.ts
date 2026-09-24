@@ -5,7 +5,7 @@
  * re-fetches every file for the active project from the bundled
  * defaults. Easy to break:
  *   - changing the file-state lifecycle (IDB schema, fileKey shape)
- *   - changing the persistence module's clearProjectFiles export
+ *   - changing the persistence module's resetProjectToBundled export
  *   - changing the editor's confirm dialog flow
  *
  * What we verify:

@@ -17,7 +17,7 @@ System 7.5.5.
 ```text
   src/app/wasm-<name>/*.c, *.r
             |
-            |  vite.config.ts SEED_FILES copies sources into
+            |  vite.config.ts auto-discovers + copies sources into
             |  public/sample-projects/ at dev/build time
             v
   +------------------------ browser tab -------------------------+
@@ -181,24 +181,25 @@ work see [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md).
 
 ### Add a new sample to the shelf
 
-A sample needs four registrations. Miss one and it either doesn't
-appear, appears with no files, or shows a generic blurb in the
-picker.
+A sample needs a source directory plus two registrations. Skip
+`SAMPLE_PROJECTS` and it doesn't appear; skip `PICKER_ENTRIES` and the
+picker shows a generic blurb (the label and file list).
 
 1. **Source.** Create `src/app/wasm-<name>/<name>.c` (plus an
    optional `<name>.r`, and any extra `.c`/`.h` files). Start by
-   copying the closest existing sample.
-2. **`SEED_FILES`** in [`src/web/vite.config.ts`](../src/web/vite.config.ts)
-   — list every file so Vite copies them into
-   `public/sample-projects/wasm-<name>/` at dev/build time. Restart
-   `npm run dev` after editing the config.
-3. **`SAMPLE_PROJECTS`** in
+   copying the closest existing sample. Seeding is automatic:
+   [`src/web/vite.config.ts`](../src/web/vite.config.ts) copies every
+   `.c`, `.h`, `.r` and `.rsrc.bin` file in each `src/app/wasm-*/`
+   directory into `public/sample-projects/wasm-<name>/` at dev/build
+   time. Other files (READMEs, licences) are skipped; to skip a
+   matching file, add it to `SEED_EXCLUDES` in the same file.
+2. **`SAMPLE_PROJECTS`** in
    [`src/web/src/playground/types.ts`](../src/web/src/playground/types.ts)
    — `id` (`wasm-<name>`), `label`, `files`, `rezFile` (your `.r`, or
    `null`), `outputName`, `appType`/`appCreator` (a 4-char creator
    code), `complexity` (1-6 stars), and optionally `tryNext` prompts
    for the post-build "Try this next" cards.
-4. **`PICKER_ENTRIES`** in
+3. **`PICKER_ENTRIES`** in
    [`src/web/src/projectPicker.ts`](../src/web/src/projectPicker.ts)
    — emoji + one-line description for the Open Project picker.
 
@@ -325,8 +326,11 @@ Almost always one of:
 - The browser is still using its IndexedDB copy of the project. Your
   edits in `src/app/wasm-<name>/` are only the seed; click **Reset**
   in the Playground toolbar to discard the browser copy and re-seed.
-- You added or renamed a file but didn't update `SEED_FILES` in
-  `src/web/vite.config.ts` (and restart `npm run dev`).
+- You added or renamed a file but didn't update `files` in the
+  project's `SAMPLE_PROJECTS` entry (`src/web/src/playground/types.ts`),
+  or the file's extension isn't one the seeder picks up (`.c`, `.h`,
+  `.r`, `.rsrc.bin`; see `SEED_FILE_PATTERN` in
+  `src/web/vite.config.ts`).
 - The browser cached the chunked manifest aggressively. Open devtools,
   check the network tab for 304s on `system755-vibe.dsk.json` and the
   chunks under `system755-vibe-chunks/`. Disable cache (devtools →

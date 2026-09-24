@@ -92,8 +92,8 @@ spawns its child process with that flag, so there's nothing to set).
    the same workflow deploys from your fork's `main`.)
 
 Adding a *new* sample (rather than editing an existing one) takes
-four registrations: the source under `src/app/wasm-<name>/`, a
-`SEED_FILES` entry in `src/web/vite.config.ts`, a `SAMPLE_PROJECTS`
+three steps: the source under `src/app/wasm-<name>/` (picked up
+automatically by `src/web/vite.config.ts`), a `SAMPLE_PROJECTS`
 entry in `src/web/src/playground/types.ts`, and a `PICKER_ENTRIES`
 blurb in `src/web/src/projectPicker.ts`. The step-by-step is in
 [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md#add-a-new-sample-to-the-shelf);
@@ -129,11 +129,15 @@ Commit subjects on `main` follow the
 [Conventional Commits](https://www.conventionalcommits.org/) spec.
 Because every PR is squash-merged, **the PR title becomes the commit
 subject on `main`** — so the title is the thing to get right; commits
-on your branch can be as messy as you like. Nothing enforces this
-automatically, and a stretch of history from May 2026 drifted to
+on your branch can be as messy as you like. CI checks the PR title
+([`.github/workflows/pr-title.yml`](./.github/workflows/pr-title.yml))
+and fails the PR if it isn't a valid Conventional Commit subject with
+one of the types below; edit the title and the check re-runs. Before
+that check existed, a stretch of history from May 2026 drifted to
 `area: summary` subjects (`playground: …`, `wasm-glypha3: …`) or
 bare sentences (`Add …`). Please don't copy those; use a type, and
-put the area in the scope instead: `feat(playground): …`.
+put the area in the scope instead: `feat(playground): …`. Scopes are
+optional.
 
 ```
 <type>(<optional scope>): <short summary>
@@ -153,6 +157,11 @@ Common types:
 - `test` — adding or fixing tests
 - `ci` — CI/CD pipeline changes
 - `build` — build system or external dependency changes
+- `perf` — a performance improvement
+- `style` — formatting only, no code change
+- `revert` — reverts an earlier commit
+
+These are the only types the PR-title check accepts.
 
 `test` is singular — `tests: …` doesn't parse as a type. Common
 scopes: `playground`, `samples`, `wasm-<name>`, `deps`, `ci`.
@@ -195,6 +204,9 @@ feat(api)!: rename disk image output path
   — the combined `.c` + `.r` audit catches most regressions in
   seconds. Run `npm run test:unit` for anything touching the host C
   or the JS pipeline modules
+- Run `npm run typecheck` (`tsc --noEmit -p src/web`) if you touched
+  any TypeScript. CI runs it in the `unit` job, and unused locals or
+  parameters count as errors
 - Update `README.md` if behavior changed, and
   [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) /
   [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) if the architecture

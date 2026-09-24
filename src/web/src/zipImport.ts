@@ -150,7 +150,9 @@ export async function importZipFile(file: Blob): Promise<ImportResult> {
       }
       try {
         const content = await entry.async("string");
-        await writeFile(project.id, filename, content);
+        if (!(await writeFile(project.id, filename, content))) {
+          throw new Error("couldn't save to browser storage");
+        }
         result.filesImported.push(`${project.id}/${filename}`);
       } catch (e) {
         result.errors.push(

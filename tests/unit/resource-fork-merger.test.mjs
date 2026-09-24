@@ -2,13 +2,15 @@
  * Tests for resourceForkMerger.mjs (#280 Path B Phase 2A).
  *
  * Validates: decode → re-encode round-trip preserves resources; merge
- * with conflict resolution (first-fork wins); empty-fork edge cases.
+ * with conflict resolution (onConflict "first" default / "last");
+ * canonical encoder layout; empty-fork edge cases.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   mergeResourceForks,
   decodeResourceFork,
+  decodeResourceForkMap,
   encodeResourceFork,
 } from "../../src/web/src/playground/resourceForkMerger.mjs";
 
@@ -185,4 +187,171 @@ test("decode: honours a non-canonical type list offset", () => {
   const pict = decoded.find((x) => x.type === "PICT");
   assert.equal(pict.id, 128);
   assert.equal(pict.name, "nm");
+});
+
+// ── Explicit precedence (onConflict) ─────────────────────────────────
+// build.ts's spliceResourceFork calls mergeResourceForks([base, user],
+// { onConflict: "last" }); editor.ts relies on the default "first".
+// These pin both so nobody can flip precedence by accident.
+
+const text = (u8) => new TextDecoder().decode(u8);
+const pick = (decoded, type, id) =>
+  decoded.find((x) => x.type === type && x.id === id);
+
+test("merge: onConflict defaults to 'first'", () => {
+  const a = encodeResourceFork([r("STR ", 1, "A")]);
+  const b = encodeResourceFork([r("STR ", 1, "B")]);
+  const dflt = mergeResourceForks([a, b]);
+  const explicit = mergeResourceForks([a, b], { onConflict: "first" });
+  assert.deepEqual([...dflt], [...explicit]);
+  assert.equal(text(decodeResourceFork(dflt)[0].data), "A");
+});
+
+test("merge: onConflict 'last' lets the later fork win, across N forks", () => {
+  const f1 = encodeResourceFork([r("STR ", 1, "A1"), r("STR ", 2, "A2")]);
+  const f2 = encodeResourceFork([r("STR ", 1, "B1"), r("STR ", 3, "B3")]);
+  const f3 = encodeResourceFork([r("STR ", 2, "C2"), r("STR ", 3, "C3"), r("STR ", 4, "C4")]);
+  const decoded = decodeResourceFork(
+    mergeResourceForks([f1, f2, f3], { onConflict: "last" }),
+  );
+  const byId = new Map(decoded.map((d) => [d.id, text(d.data)]));
+  assert.equal(byId.get(1), "B1");
+  assert.equal(byId.get(2), "C2");
+  assert.equal(byId.get(3), "C3");
+  assert.equal(byId.get(4), "C4");
+  assert.equal(decoded.length, 4);
+});
+
+test("merge: winner carries its own name and attrs", () => {
+  const base = encodeResourceFork([r("MENU", 128, "base", "BaseName", 0x20)]);
+  const user = encodeResourceFork([r("MENU", 128, "user", "UserName", 0x04)]);
+  const last = pick(
+    decodeResourceFork(mergeResourceForks([base, user], { onConflict: "last" })),
+    "MENU", 128,
+  );
+  assert.equal(text(last.data), "user");
+  assert.equal(last.name, "UserName");
+  assert.equal(last.attrs, 0x04);
+  const first = pick(decodeResourceFork(mergeResourceForks([base, user])), "MENU", 128);
+  assert.equal(first.name, "BaseName");
+  assert.equal(first.attrs, 0x20);
+});
+
+test("merge: precedence applies to duplicates inside a single fork too", () => {
+  // encodeResourceFork doesn't dedupe, so this builds a fork with two
+  // STR 5 entries, the shape a hand-assembled or buggy fork can have.
+  const dup = encodeResourceFork([r("STR ", 5, "one"), r("STR ", 5, "two")]);
+  assert.equal(decodeResourceFork(dup).length, 2);
+  const first = decodeResourceFork(mergeResourceForks([dup]));
+  assert.equal(first.length, 1);
+  assert.equal(text(first[0].data), "one");
+  const last = decodeResourceFork(mergeResourceForks([dup], { onConflict: "last" }));
+  assert.equal(last.length, 1);
+  assert.equal(text(last[0].data), "two");
+});
+
+test("merge: rejects an unknown onConflict value", () => {
+  assert.throws(
+    () => mergeResourceForks([], { onConflict: "user" }),
+    /onConflict must be "first" or "last"/,
+  );
+});
+
+test("merge: type order follows array order, not precedence", () => {
+  const base = encodeResourceFork([r("CODE", 0, "c0"), r("SIZE", -1, "s")]);
+  const user = encodeResourceFork([r("MENU", 128, "m"), r("SIZE", -1, "user-s")]);
+  const decoded = decodeResourceFork(
+    mergeResourceForks([base, user], { onConflict: "last" }),
+  );
+  assert.deepEqual(
+    [...new Set(decoded.map((d) => d.type))],
+    ["CODE", "SIZE", "MENU"],
+  );
+  assert.equal(text(pick(decoded, "SIZE", -1).data), "user-s");
+});
+
+test("merge: map attributes come from forks[0]", () => {
+  const withAttrs = encodeResourceFork([r("STR ", 1, "a")], { mapAttrs: 0x0080 });
+  const plain = encodeResourceFork([r("STR ", 2, "b")]);
+  assert.equal(decodeResourceForkMap(withAttrs).mapAttrs, 0x0080);
+  assert.equal(
+    decodeResourceForkMap(
+      mergeResourceForks([withAttrs, plain], { onConflict: "last" }),
+    ).mapAttrs,
+    0x0080,
+  );
+  assert.equal(decodeResourceForkMap(mergeResourceForks([plain, withAttrs])).mapAttrs, 0);
+});
+
+test("merge: a zero-length fork counts as empty", () => {
+  const base = encodeResourceFork([r("CODE", 1, "c1")]);
+  const decoded = decodeResourceFork(
+    mergeResourceForks([base, new Uint8Array(0)], { onConflict: "last" }),
+  );
+  assert.equal(decoded.length, 1);
+  assert.equal(decoded[0].type, "CODE");
+});
+
+// ── Canonical encoder layout ─────────────────────────────────────────
+// build.ts used to carry its own encoder; the shared one reproduces its
+// bytes exactly. Pin the parts of that layout that aren't obvious.
+
+test("encode: IDs sorted within a type; data section follows that order", () => {
+  const fork = encodeResourceFork([
+    r("STR ", 3, "three"),
+    r("CODE", 1, "one"),
+    r("STR ", -2, "minus-two"),
+    r("STR ", 1, "one-str"),
+  ]);
+  const decoded = decodeResourceFork(fork);
+  assert.deepEqual(
+    decoded.map((d) => `${d.type}${d.id}`),
+    ["STR -2", "STR 1", "STR 3", "CODE1"],
+  );
+  const dv = new DataView(fork.buffer);
+  assert.equal(dv.getUint32(0), 256);
+  assert.equal(dv.getUint32(256), "minus-two".length);
+  assert.equal(text(fork.subarray(260, 260 + 9)), "minus-two");
+});
+
+test("encode: map header copies the fork header; typeListOff is 28", () => {
+  const fork = encodeResourceFork([r("STR ", 1, "x", "n")], { mapAttrs: 0x1234 });
+  const dv = new DataView(fork.buffer);
+  const mapOff = dv.getUint32(4);
+  assert.deepEqual([...fork.subarray(mapOff, mapOff + 16)], [...fork.subarray(0, 16)]);
+  assert.deepEqual([...fork.subarray(mapOff + 16, mapOff + 22)], [0, 0, 0, 0, 0, 0]);
+  assert.equal(dv.getUint16(mapOff + 22), 0x1234);
+  assert.equal(dv.getUint16(mapOff + 24), 28);
+  assert.equal(dv.getUint16(mapOff + 26), 28 + 2 + 8 + 12);
+});
+
+test("encode: empty resource list is a valid fork with a 30-byte map", () => {
+  const fork = encodeResourceFork([]);
+  const dv = new DataView(fork.buffer);
+  assert.equal(fork.length, 256 + 30);
+  assert.equal(dv.getUint32(12), 30);
+  assert.equal(dv.getUint16(256 + 26), 30);
+  assert.equal(dv.getUint16(256 + 28), 0xffff);
+  assert.deepEqual([...mergeResourceForks([])], [...fork]);
+});
+
+test("encode: empty-string name is kept distinct from unnamed", () => {
+  const decoded = decodeResourceFork(
+    encodeResourceFork([r("STR ", 1, "a", ""), r("STR ", 2, "b", null)]),
+  );
+  assert.equal(pick(decoded, "STR ", 1).name, "");
+  assert.equal(pick(decoded, "STR ", 2).name, null);
+});
+
+test("decode → encode is byte-identical for a canonical fork", () => {
+  const fork = encodeResourceFork(
+    [
+      r("CODE", 1, "c1", null, 0x20),
+      r("CODE", 0, "c0", "jt", 0x20),
+      r("STR#", 128, "strs", "Strings"),
+    ],
+    { mapAttrs: 0x0080 },
+  );
+  const { mapAttrs, resources } = decodeResourceForkMap(fork);
+  assert.deepEqual([...encodeResourceFork(resources, { mapAttrs })], [...fork]);
 });

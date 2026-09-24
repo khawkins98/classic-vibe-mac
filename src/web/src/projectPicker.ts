@@ -137,10 +137,42 @@ const PICKER_ENTRIES: Record<string, PickerEntry> = {
     description:
       "Color QuickDraw demo: the classic 1990 Macintosh II 6-colour palette painted as labelled stripes (red, yellow, green, cyan, blue, magenta) via RGBColor + RGBForeColor + PaintRect. On a 1-bit display these quantise to black and white, which is Color QuickDraw's documented degradation behaviour.",
   },
+  "wasm-mdpad": {
+    emoji: "📑",
+    description:
+      "Split-pane Markdown editor with live preview. Type Markdown into a TextEdit pane on the left; the right pane re-renders headings, bold, italic, inline code, code blocks, and lists on every keystroke. A modern format in 1990s Geneva-and-Chicago chrome.",
+  },
+  "wasm-debug-console": {
+    emoji: "🪵",
+    description:
+      "printf-style debugging for Mac apps. Each click in the window calls cvm_log(), and the line shows up in the IDE's Output panel Console tab within about a second. The sixth click logs \"exiting\" and quits. Any project can #include <cvm_log.h> the same way.",
+  },
+  "wasm-arkanoid": {
+    emoji: "🧱",
+    description:
+      "Brick-breaker game. Arrow keys move the paddle; the Game menu has New Game and Pause. Split across main.c (Toolbox glue), engine.c (pure game logic), and render.c (QuickDraw), plus an about-box ICN# icon written as hex in the .r file.",
+  },
+  "wasm-icon-gallery": {
+    emoji: "🖼️",
+    description:
+      "Six icons in a 3x2 grid, loaded at runtime from a separate resource file. The app calls OpenResFile(\"Icons\") on icons.rsrc.bin, which ships on the disk next to it, then uses GetResource + PlotIcon. The first sample whose data lives outside its own source.",
+  },
+  "wasm-glypha3": {
+    emoji: "🦅",
+    description:
+      "John Calhoun's 1992 Joust-style arcade game, released under MIT. About 6,600 lines of real period C across nine files plus the full original resource fork, all compiled in your browser. Left/right arrows steer, space bar flaps. High scores aren't saved (Prefs.c is stubbed).",
+  },
 };
 
+/** Fallback for a sample with no PICKER_ENTRIES blurb yet, so a newly
+ *  added project still shows something useful: its file list. */
 function entryFor(p: SampleProject): PickerEntry {
-  return PICKER_ENTRIES[p.id] ?? { emoji: "📄", description: p.label };
+  return (
+    PICKER_ENTRIES[p.id] ?? {
+      emoji: "📄",
+      description: `${p.label}. Files: ${p.files.join(", ")}.`,
+    }
+  );
 }
 
 export interface OpenPickerOptions {

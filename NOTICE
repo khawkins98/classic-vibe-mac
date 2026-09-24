@@ -114,7 +114,7 @@ reconstructed by re-hashing wasm-retro-cc's published binaries.
 hfsutils (GPL-2.0)
 ------------------
 
-`scripts/build-disk-image.sh` and `scripts/build-boot-disk.sh` invoke
+`scripts/build-boot-disk.sh` invokes
 hfsutils (https://www.mars.org/home/rob/proj/hfs/), specifically the
 `hformat`/`hmount`/`humount`/`hcopy`/`hmkdir`/`hattrib`/`hls`
 binaries. hfsutils is GPL-2.0 and is installed in the build container

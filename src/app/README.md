@@ -58,23 +58,23 @@ nothing and none of the samples depend on it. Don't add samples there.
 
 1. **Create the directory.** `src/app/wasm-<name>/` with `<name>.c` and,
    usually, `<name>.r`. Copying `wasm-hello-window/` is the easiest start.
-2. **Seed the files.** Add an entry to `SEED_FILES` in
-   [`src/web/vite.config.ts`](../web/vite.config.ts) listing every file
-   in the project. The list is hand-maintained, not a glob: a file you
-   leave out won't be copied to `public/sample-projects/<name>/` and the
-   playground won't be able to load it.
-3. **Register it.** Add a `SampleProject` to `SAMPLE_PROJECTS` in
+   You don't need to list the files anywhere for seeding:
+   [`src/web/vite.config.ts`](../web/vite.config.ts) globs every
+   `src/app/wasm-*/` directory and copies its `.c`, `.h`, `.r` and
+   `.rsrc.bin` files to `public/sample-projects/<name>/`. Anything else
+   (READMEs, licences, `*.upstream` originals) is ignored. If a matching
+   file shouldn't ship, add `<name>/<file>` to `SEED_EXCLUDES` there.
+2. **Register it.** Add a `SampleProject` to `SAMPLE_PROJECTS` in
    [`src/web/src/playground/types.ts`](../web/src/playground/types.ts):
    `id` (the directory name), `label`, `files` (in the order you want
    them revealed), `rezFile` (the `.r`, or `null` for C only),
    `outputName`, `appType: "APPL"`, a four-character `appCreator`, and
    `complexity`. `tryNext` prompts are optional but worth adding.
-4. **Give it a picker blurb.** Add an emoji and a one-paragraph
+3. **Give it a picker blurb.** Add an emoji and a one-paragraph
    description to `PICKER_ENTRIES` in
    [`src/web/src/projectPicker.ts`](../web/src/projectPicker.ts). Without
-   one the picker falls back to the label (several newer samples
-   currently do this).
-5. **Audit it.** `npm run audit:wasm-e2e -- wasm-<name>` from the repo
+   one the picker falls back to the label and file list.
+4. **Audit it.** `npm run audit:wasm-e2e -- wasm-<name>` from the repo
    root (details below).
 
 ## Conventions
@@ -89,7 +89,7 @@ nothing and none of the samples depend on it. Don't add samples there.
   `data 'CVWW' (0, "Owner signature")`) and a `SIZE -1` resource that sets
   the heap size and the 32-bit-clean flag. See `wasm-hello-window/hello.r`
   for a commented minimal version. Pick a creator code that isn't already
-  in use; `CVSN` and `CVCR` are each already shared by two samples.
+  in use; `scripts/audit-wasm-samples.mjs` fails if two samples share one.
 - **Debug logging.** `#include <cvm_log.h>` and call `cvm_log(...)` to
   print to the Output → Console tab. The header lives in
   `wasm-debug-console/` but the compiler mounts it as a system header for

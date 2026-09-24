@@ -137,6 +137,15 @@ export interface SampleProject {
    * the suggestion without hunting.
    */
   tryNext?: TryNextPrompt[];
+  /**
+   * User-created projects only (File → "Duplicate as new project…"):
+   * id of the shipped SAMPLE_PROJECTS entry this project ultimately
+   * descends from. Reset uses it to restore the starter files from that
+   * sample's bundled defaults. Absent on shipped samples and on
+   * duplicates created before this field existed — see
+   * `resolveResetSource` in persistenceCore.ts for the legacy fallback.
+   */
+  sourceProjectId?: string;
 }
 
 /**
@@ -300,7 +309,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     rezFile: "stickynote.r",
     outputName: "WasmStickyNote.bin",
     appType: "APPL",
-    appCreator: "CVSN",
+    appCreator: "CVSK",
     complexity: 2,
   },
   {
@@ -559,7 +568,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     rezFile: "color.r",
     outputName: "WasmColor.bin",
     appType: "APPL",
-    appCreator: "CVCR",
+    appCreator: "CVCL",
     complexity: 2,
   },
   {

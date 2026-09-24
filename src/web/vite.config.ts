@@ -1,6 +1,14 @@
 import { defineConfig, type Plugin } from "vite";
 import { createHash } from "node:crypto";
-import { readFileSync, mkdirSync, writeFileSync, existsSync } from "node:fs";
+import {
+  readFileSync,
+  readdirSync,
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  rmSync,
+  rmdirSync,
+} from "node:fs";
 import { join, resolve, dirname } from "node:path";
 
 // GitHub Pages serves the site under /<repo-name>/ when using a project page
@@ -43,232 +51,57 @@ interface SeedSpec {
 const REPO_ROOT = resolve(__dirname, "..", "..");
 const PUBLIC_DIR = resolve(__dirname, "public");
 
-const SEED_FILES: SeedSpec[] = [
-  // Legacy splice-path projects (reader / macweather / hello-mac) used
-  // to seed source bundles here so the playground could let users edit
-  // their .r resource forks. Removed 2026-05-15 (cv-mac #100) — the
-  // playground now only seeds projects that build end-to-end in the
-  // browser, so the visible projects are all fully editable. The
-  // source dirs at src/app/{reader,macweather,hello-mac}/ are still
-  // canonical sources for CI's boot-disk build.
-  //
-  // wasm-hello — first project that compiles end-to-end in the
-  // browser (cv-mac #64). Single hello.c, no .r resources, no CMake
-  // / CI build. The playground's Build & Run path uses compileToBin()
-  // to produce the MacBinary directly in the user's browser.
-  ...["hello.c"].map((f) => ({
-    project: "wasm-hello",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello", f),
-  })),
-  // wasm-hello-multi — multi-file in-browser-compile demo (cv-mac #100
-  // Phase A). main.c + greet.c + greet.h; exercises compileToBin's new
-  // multi-source path.
-  ...["main.c", "greet.c", "greet.h"].map((f) => ({
-    project: "wasm-hello-multi",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-multi", f),
-  })),
-  // wasm-hello-window — mixed C + .r in-browser-compile demo (cv-mac
-  // #100 Phase B). .c compiles via wasm-cc1; .r compiles via WASM-Rez;
-  // spliceResourceFork merges the two forks.
-  ...["hello.c", "hello.r"].map((f) => ({
-    project: "wasm-hello-window",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-hello-window", f),
-  })),
-  // wasm-snake — Phase D demo. A playable Snake clone with arrow-key
-  // input, TickCount-driven movement, win/lose/restart state. Uses
-  // the same mixed C + .r path as wasm-hello-window.
-  ...["snake.c", "snake.r"].map((f) => ({
-    project: "wasm-snake",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-snake", f),
-  })),
-  // wasm-textedit — TextEdit demo (#125). Foundation toward a word
-  // processor: window + TEHandle + TEClick/TEKey/TEIdle.
-  ...["textedit.c", "textedit.r"].map((f) => ({
-    project: "wasm-textedit",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-textedit", f),
-  })),
-  // wasm-notepad — TextEdit + real Mac menu bar (#125). Adds MBAR /
-  // MenuSelect / MenuKey dispatch, Apple/File/Edit menus, and an
-  // ALRT-based About dialog on top of the textedit foundation.
-  ...["notepad.c", "notepad.r"].map((f) => ({
-    project: "wasm-notepad",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-notepad", f),
-  })),
-  // wasm-stickynote — small floating sticky-note window (#125). Smaller
-  // than wasm-notepad: no menubar, no scrap. Pale-yellow paper field
-  // and a single TextEdit exercising RGBBackColor / RGBForeColor —
-  // colour QuickDraw is unique to this project in the wasm-* shelf.
-  ...["stickynote.c", "stickynote.r"].map((f) => ({
-    project: "wasm-stickynote",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-stickynote", f),
-  })),
-  // wasm-clock — analog desk clock with digital readout (#125). New
-  // Toolbox slice for the shelf: GetDateTime + SecondsToDate, idle-tick
-  // redraw loop, all QuickDraw drawing, hand-rolled sin/cos table.
-  ...["clock.c", "clock.r"].map((f) => ({
-    project: "wasm-clock",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-clock", f),
-  })),
-  // wasm-multiwin — three windows, one event loop. Every other sample
-  // on the shelf is single-window; this one demonstrates the
-  // front-window dispatch model (SelectWindow on back-window clicks,
-  // refCon-stashed per-window state, last-close exits).
-  ...["multiwin.c", "multiwin.r"].map((f) => ({
-    project: "wasm-multiwin",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-multiwin", f),
-  })),
-  // wasm-cursor — Cursor Manager / region-driven cursor swap.
-  ...["cursor.c", "cursor.r"].map((f) => ({
-    project: "wasm-cursor",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-cursor", f),
-  })),
-  // wasm-files — File I/O via StandardGetFile / StandardPutFile.
-  ...["files.c", "files.r"].map((f) => ({
-    project: "wasm-files",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-files", f),
-  })),
-  // wasm-gworld — modern NewGWorld + LockPixels + CopyBits double-buffer.
-  ...["gworld.c", "gworld.r"].map((f) => ({
-    project: "wasm-gworld",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-gworld", f),
-  })),
-  // wasm-wordpad — Mini word processor (#125). Font / Size / Style
-  // menus driving a monostyle TextEdit; the next ladder rung after
-  // Notepad. The last item in the #125 sprint.
-  ...["wordpad.c", "wordpad.r"].map((f) => ({
-    project: "wasm-wordpad",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-wordpad", f),
-  })),
-  // wasm-mdpad — split-pane Markdown editor with live preview. Modern
-  // format (Markdown post-dates System 7 by a decade), classic chrome.
-  // Source TextEdit on the left, custom-drawn preview on the right;
-  // re-renders on every keystroke. The first business-app sample on
-  // the shelf to lean on a "modern format in classic UI" framing.
-  ...["mdpad.c", "mdpad.r"].map((f) => ({
-    project: "wasm-mdpad",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-mdpad", f),
-  })),
-  // wasm-calculator — 4-function calculator (#125). Different surface
-  // from the TextEdit ladder: hand-drawn buttons + PtInRect hit-testing
-  // + NumToString display. No TextEdit, no scrap.
-  ...["calc.c", "calc.r"].map((f) => ({
-    project: "wasm-calculator",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-calculator", f),
-  })),
-  // wasm-scribble — mouse-tracking draw demo (#125). StillDown /
-  // GetMouse / LineTo loop. Different Toolbox surface from the
-  // TextEdit + Calculator samples.
-  ...["scribble.c", "scribble.r"].map((f) => ({
-    project: "wasm-scribble",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-scribble", f),
-  })),
-  // wasm-scrollwin — Controls / scroll-bar demo (#125). NewControl
-  // (scrollBarProc) + TrackControl + actionProc. Fills the Controls
-  // coverage gap flagged by the post-#144 review.
-  ...["scrollwin.c", "scrollwin.r"].map((f) => ({
-    project: "wasm-scrollwin",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-scrollwin", f),
-  })),
-  // wasm-patterns — QuickDraw 8x8 dither-pattern gallery (#125).
-  // Fills the Bitmaps / Pattern coverage gap. Hand-rolled patterns +
-  // QuickDraw's system globals (gray/ltGray/dkGray/white).
-  ...["patterns.c", "patterns.r"].map((f) => ({
-    project: "wasm-patterns",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-patterns", f),
-  })),
-  // wasm-bounce — offscreen BitMap + CopyBits double-buffer (#125).
-  // Fills the GWorld/CopyBits gap. Bouncing ball, no flicker.
-  ...["bounce.c", "bounce.r"].map((f) => ({
-    project: "wasm-bounce",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-bounce", f),
-  })),
-  // wasm-debug-console — exercises the Output panel's Console tab
-  // via cvm_log() (writes to /Shared/__cvm_console.log; the watcher
-  // surfaces new lines in near-real-time). cvm_log.h is mounted as
-  // a system header by cc1.ts, so it isn't bundled as a project
-  // file.
-  ...["console.c", "console.r"].map((f) => ({
-    project: "wasm-debug-console",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-debug-console", f),
-  })),
-  // wasm-dialog — ModalDialog with EditText (#125). Fills the
-  // "modal dialogs with editable fields" gap.
-  ...["dialog.c", "dialog.r"].map((f) => ({
-    project: "wasm-dialog",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-dialog", f),
-  })),
-  // wasm-sound — Sound Manager SysBeep demo (#125). Fills the
-  // Sound Manager gap with the simplest, always-available trap.
-  ...["sound.c", "sound.r"].map((f) => ({
-    project: "wasm-sound",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-sound", f),
-  })),
-  // wasm-color — Color QuickDraw RGBForeColor demo (#125).
-  ...["color.c", "color.r"].map((f) => ({
-    project: "wasm-color",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-color", f),
-  })),
-  // wasm-arkanoid — first ★★★★★ demo (cv-mac #233 Option A).
-  // Multi-file C (main + engine + render + header) plus a Rez file
-  // with an embedded ICN# 128 — the "binary asset" the top tier
-  // demonstrates.
-  ...["main.c", "engine.c", "engine.h", "render.c", "arkanoid.r"].map((f) => ({
-    project: "wasm-arkanoid",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-arkanoid", f),
-  })),
-  // wasm-icon-gallery — first ★★★★★★ demo (cv-mac #233 6-star tier).
-  // Multi-file C + external binary asset (icons.rsrc.bin) shipped on
-  // the disk alongside the app and loaded at runtime via OpenResFile.
-  // icons.rsrc.bin is generated offline by
-  // scripts/build-icon-gallery-rsrc.mjs and committed as a binary;
-  // the seed plugin copies it to public/sample-projects/ as bytes
-  // (not utf8-round-tripped — see the readSeedContents binary handling).
-  ...["main.c", "gallery.c", "gallery.h", "render.c", "gallery.r", "icons.rsrc.bin"].map((f) => ({
-    project: "wasm-icon-gallery",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-icon-gallery", f),
-  })),
-  // wasm-glypha3 — first real period app onboard (cv-mac #233 Phase 2).
-  // John Calhoun's 1992 side-scroller, source released under MIT.
-  // 9 .c files + 1 shared header = ~6600 LOC + a minimal Rez stub
-  // (the upstream's 2.7 MB resource fork is its own follow-up).
-  // Vendored verbatim from softdorothy/Glypha3 with a small
-  // compatibility shim in Externs.h to bridge Universal-Headers gaps;
-  // see the patch block at the top of Externs.h for details.
-  ...[
-    "Main.c", "Enemy.c", "Graphics.c", "Interface.c",
-    "Play.c", "Prefs.c", "SetUpTakeDown.c", "Sound.c", "Utilities.c",
-    "Externs.h", "glypha3.r",
-  ].map((f) => ({
-    project: "wasm-glypha3",
-    filename: f,
-    sourcePath: join(REPO_ROOT, "src", "app", "wasm-glypha3", f),
-  })),
-];
+// Auto-discovered: every `src/app/wasm-*/` directory is a playground
+// sample, and every file in it whose name matches SEED_FILE_PATTERN is
+// seeded to `/sample-projects/<project>/<filename>`. Adding a sample no
+// longer needs an edit here: drop the directory in and register it in
+// SAMPLE_PROJECTS (src/web/src/playground/types.ts).
+//
+// Inclusion rules (derived from the hand-maintained list this replaced):
+//   - C sources and headers (.c / .h), Rez sources (.r), and binary
+//     resource-fork assets (.rsrc.bin, e.g. wasm-icon-gallery's
+//     icons.rsrc.bin, loaded at runtime via OpenResFile).
+//   - Everything else in the directory is ignored: upstream READMEs /
+//     licences / pre-patch originals (wasm-glypha3's "Glypha III Read
+//     Me.txt", LICENSE.upstream, Prefs.c.upstream), etc.
+//
+// The legacy splice-path projects (reader / macweather / hello-mac)
+// don't match `wasm-*` and stay unseeded (removed 2026-05-15, cv-mac
+// #100); their dirs remain canonical sources for CI's boot-disk build.
+const SEED_FILE_PATTERN = /\.(c|h|r|rsrc\.bin)$/;
+
+/** Files that match SEED_FILE_PATTERN but must NOT be bundled, keyed
+ *  as `<project>/<filename>`. */
+const SEED_EXCLUDES = new Set<string>([
+  // cvm_log.h is mounted as a system header by cc1.ts (so
+  // `#include <cvm_log.h>` works in any project); the copy in
+  // wasm-debug-console is reference only, not a project file.
+  "wasm-debug-console/cvm_log.h",
+]);
+
+const APP_DIR = join(REPO_ROOT, "src", "app");
+
+function discoverSeedFiles(): SeedSpec[] {
+  const specs: SeedSpec[] = [];
+  const projects = readdirSync(APP_DIR, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name.startsWith("wasm-"))
+    .map((d) => d.name)
+    .sort();
+  for (const project of projects) {
+    const dir = join(APP_DIR, project);
+    const files = readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isFile() && SEED_FILE_PATTERN.test(d.name))
+      .map((d) => d.name)
+      .filter((f) => !SEED_EXCLUDES.has(`${project}/${f}`))
+      .sort();
+    for (const filename of files) {
+      specs.push({ project, filename, sourcePath: join(dir, filename) });
+    }
+  }
+  return specs;
+}
+
+let SEED_FILES: SeedSpec[] = discoverSeedFiles();
 
 /** Files with these suffixes are treated as binary blobs (read with
  *  no encoding, hashed by their raw bytes, written verbatim) instead
@@ -366,6 +199,37 @@ function writeSeedToPublic(
     }
     if (needsWrite) writeFileSync(out, body);
   }
+  pruneStaleSeeds(new Set([...contents.keys(), ...binaries.keys()]));
+}
+
+/**
+ * Remove files under `public/sample-projects/` that are no longer in the
+ * seed set (a sample file or whole sample dir deleted/renamed in
+ * src/app), plus any directories left empty. `public/sample-projects/`
+ * is gitignored generated output that `vite build` copies verbatim into
+ * dist, so without this a deleted sample file keeps being served in dev
+ * and keeps shipping from a dirty tree.
+ */
+function pruneStaleSeeds(keep: ReadonlySet<string>): void {
+  const root = join(PUBLIC_DIR, "sample-projects");
+  if (!existsSync(root)) return;
+  const walk = (dir: string, rel: string): void => {
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      const abs = join(dir, d.name);
+      const key = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) {
+        walk(abs, key);
+        try {
+          if (readdirSync(abs).length === 0) rmdirSync(abs);
+        } catch {
+          // best-effort
+        }
+      } else if (!keep.has(key)) {
+        rmSync(abs, { force: true });
+      }
+    }
+  };
+  walk(root, "");
 }
 
 function playgroundSeedPlugin(): Plugin {
@@ -398,16 +262,39 @@ function playgroundSeedPlugin(): Plugin {
           }
         }
       }
+      // Watch src/app too so a file (or whole sample dir) added while
+      // the dev server is running gets discovered without a restart.
+      try {
+        watcher.add(APP_DIR);
+      } catch {
+        // best-effort
+      }
+      const reseed = (): void => {
+        const { contents, binaries, hash } = readSeedContents();
+        bundleHash = hash;
+        writeSeedToPublic(contents, binaries);
+        server.ws.send({ type: "full-reload" });
+      };
       const onChange = (path: string) => {
-        if (SEED_FILES.some((s) => s.sourcePath === path)) {
-          const { contents, binaries, hash } = readSeedContents();
-          bundleHash = hash;
-          writeSeedToPublic(contents, binaries);
-          server.ws.send({ type: "full-reload" });
-        }
+        if (path.startsWith(APP_DIR)) SEED_FILES = discoverSeedFiles();
+        if (SEED_FILES.some((s) => s.sourcePath === path)) reseed();
+      };
+      // A deleted sample file (or whole sample dir): rediscover and, if
+      // it was seeded, re-seed so the stale copy is pruned from
+      // public/sample-projects/ (writeSeedToPublic prunes).
+      const onRemove = (path: string) => {
+        if (!path.startsWith(APP_DIR)) return;
+        const before = SEED_FILES;
+        SEED_FILES = discoverSeedFiles();
+        const removed = before.some(
+          (s) => s.sourcePath === path || s.sourcePath.startsWith(path + "/"),
+        );
+        if (removed) reseed();
       };
       watcher.on("change", onChange);
       watcher.on("add", onChange);
+      watcher.on("unlink", onRemove);
+      watcher.on("unlinkDir", onRemove);
     },
     // Surface the hash in build logs so it's visible to humans.
     closeBundle() {
