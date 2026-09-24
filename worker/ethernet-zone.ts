@@ -6,7 +6,8 @@
  *
  * URL scheme:
  *   GET /zone/:name/websocket  → WebSocket upgrade (zone participant)
- *   GET /zone/:name/list       → JSON array of connected MAC addresses (debug)
+ *
+ * (There is intentionally no endpoint that enumerates connected MACs.)
  *
  * JSON message protocol (all messages are JSON strings over WebSocket):
  *
@@ -74,7 +75,7 @@ const RATE_BURST = 1000;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
-    const m = url.pathname.match(/^\/zone\/([^/]+)\/(websocket|list)$/);
+    const m = url.pathname.match(/^\/zone\/([^/]+)\/websocket$/);
     if (!m) return new Response("Not found", { status: 404 });
 
     let zoneName: string;
@@ -88,14 +89,12 @@ export default {
       return new Response("Invalid zone name", { status: 400 });
     }
 
-    if (m[2] === "websocket") {
-      // Reject early so non-upgrade junk never wakes the Durable Object.
-      if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
-        return new Response("Expected WebSocket upgrade", { status: 426 });
-      }
-      if (!originAllowed(request, env)) {
-        return new Response("Forbidden origin", { status: 403 });
-      }
+    // Reject early so non-upgrade junk never wakes the Durable Object.
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket upgrade", { status: 426 });
+    }
+    if (!originAllowed(request, env)) {
+      return new Response("Forbidden origin", { status: 403 });
     }
 
     const stub = env.ETHERNET_ZONE.get(env.ETHERNET_ZONE.idFromName(zoneName));
@@ -114,6 +113,12 @@ function originAllowed(request: Request, env: Env): boolean {
 
 /** Per-socket state, persisted via serializeAttachment (survives hibernation). */
 type ZoneClient = {
+  /**
+   * Stable per-socket id (crypto.randomUUID() at accept time). Used to key
+   * in-memory state and to identify the sender, so we never depend on the
+   * runtime handing us the same WebSocket object identity across events.
+   */
+  id: string;
   /** Lowercase MAC address string, e.g. "01:23:45:67:89:ab". "" until init. */
   macAddress: string;
 };
@@ -139,23 +144,14 @@ function isValidFrame(a: unknown): a is number[] {
 
 export class EthernetZone extends DurableObject<Env> {
   /**
-   * In-memory token buckets. Lost on hibernation, which is fine: a socket
-   * idle long enough for the DO to hibernate would have a full bucket anyway.
+   * In-memory token buckets keyed by the socket's attachment id. Lost on
+   * hibernation, which is fine: a socket idle long enough for the DO to
+   * hibernate would have a full bucket anyway. Entries are deleted on
+   * close/error.
    */
-  #buckets = new WeakMap<WebSocket, { tokens: number; last: number }>();
+  #buckets = new Map<string, { tokens: number; last: number }>();
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-
-    // Debug: list connected MAC addresses.
-    if (url.pathname.endsWith("/list")) {
-      const macs = this.ctx
-        .getWebSockets()
-        .map((ws) => this.#client(ws)?.macAddress ?? "")
-        .filter(Boolean);
-      return Response.json(macs);
-    }
-
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return new Response("Expected WebSocket upgrade", { status: 426 });
     }
@@ -171,13 +167,17 @@ export class EthernetZone extends DurableObject<Env> {
     // stay open, so idle zones don't accrue duration charges. Per-socket
     // state lives in the attachment so it survives hibernation.
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ macAddress: "" } satisfies ZoneClient);
+    server.serializeAttachment({
+      id: crypto.randomUUID(),
+      macAddress: "",
+    } satisfies ZoneClient);
 
     return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(ws: WebSocket, data: string | ArrayBuffer): Promise<void> {
     if (typeof data !== "string" || data.length > MAX_MESSAGE_BYTES) {
+      this.#forget(ws);
       ws.close(1009, "Message too large or not text");
       return;
     }
@@ -202,6 +202,7 @@ export class EthernetZone extends DurableObject<Env> {
           return;
         }
         ws.serializeAttachment({
+          id: entry.id,
           macAddress: msg.macAddress.toLowerCase(),
         } satisfies ZoneClient);
         break;
@@ -212,18 +213,20 @@ export class EthernetZone extends DurableObject<Env> {
         if (!isValidFrame(msg.packetArray)) return;
         const dest = typeof msg.dest === "string" ? msg.dest : "*";
         if (dest.length > 32) return;
-        if (!this.#takeToken(ws)) return; // rate limited: drop frame
-        this.#route(ws, dest, msg.packetArray);
+        if (!this.#takeToken(entry.id)) return; // rate limited: drop frame
+        this.#route(entry.id, dest, msg.packetArray);
         break;
       }
 
       case "close":
+        this.#forget(ws);
         ws.close(1000, "Client requested close");
         break;
     }
   }
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
+    this.#forget(ws);
     // Reciprocate the close handshake. 1005/1006 are reserved and can't be sent.
     try {
       ws.close(code === 1005 || code === 1006 ? 1000 : code, reason);
@@ -233,6 +236,7 @@ export class EthernetZone extends DurableObject<Env> {
   }
 
   async webSocketError(ws: WebSocket): Promise<void> {
+    this.#forget(ws);
     try {
       ws.close(1011, "WebSocket error");
     } catch {
@@ -241,15 +245,21 @@ export class EthernetZone extends DurableObject<Env> {
   }
 
   #client(ws: WebSocket): ZoneClient | null {
-    return (ws.deserializeAttachment() as ZoneClient | null) ?? null;
+    const a = ws.deserializeAttachment() as ZoneClient | null;
+    return a && typeof a.id === "string" ? a : null;
   }
 
-  #takeToken(ws: WebSocket): boolean {
+  #forget(ws: WebSocket): void {
+    const entry = this.#client(ws);
+    if (entry) this.#buckets.delete(entry.id);
+  }
+
+  #takeToken(id: string): boolean {
     const now = Date.now();
-    let b = this.#buckets.get(ws);
+    let b = this.#buckets.get(id);
     if (!b) {
       b = { tokens: RATE_BURST, last: now };
-      this.#buckets.set(ws, b);
+      this.#buckets.set(id, b);
     }
     b.tokens = Math.min(
       RATE_BURST,
@@ -261,15 +271,15 @@ export class EthernetZone extends DurableObject<Env> {
     return true;
   }
 
-  #route(sender: WebSocket, dest: string, packetArray: number[]): void {
+  #route(senderId: string, dest: string, packetArray: number[]): void {
     const payload = JSON.stringify({ type: "receive", packetArray });
     const destNorm = dest.toLowerCase();
     const isBroadcast = destNorm === "*" || destNorm === "at";
 
     for (const ws of this.ctx.getWebSockets()) {
-      if (ws === sender) continue; // never echo back to sender
       const entry = this.#client(ws);
       if (!entry?.macAddress) continue; // not yet initialised
+      if (entry.id === senderId) continue; // never echo back to sender
       if (isBroadcast || destNorm === entry.macAddress) {
         try {
           ws.send(payload);
