@@ -61,13 +61,16 @@ test("compileToBin produces a MacBinary II APPL", async ({ page }) => {
     const r = await mod.compileToBin("/", {
       sources: [{ filename: "hello.c", content: src }],
     });
+    // `mod` comes from a dynamic import, so `r` is `any`; pin the one
+    // field we reshape so `header` comes out as number[].
+    const bin: Uint8Array | undefined = r.bin;
     // Strip Uint8Array out of return — Playwright's evaluate
     // serializer doesn't deeply serialize them, so we just keep
     // length + header bytes + parsed fields the test asserts on.
     return {
       ok: r.ok,
-      binLen: r.bin?.length ?? 0,
-      header: r.bin ? Array.from(r.bin.subarray(0, 128)) : null,
+      binLen: bin?.length ?? 0,
+      header: bin ? Array.from(bin.subarray(0, 128)) : null,
       asmLen: r.asm?.length ?? 0,
       diagnostics: r.diagnostics,
       rawStderr: r.rawStderr,
