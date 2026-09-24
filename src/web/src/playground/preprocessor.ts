@@ -7,7 +7,8 @@
  * The spike's MiniLexer (vendor/MiniLexer.cc, compiled into wasm-rez.wasm)
  * skips lines starting with `#`. Production needs `#include`, `#define`,
  * `#if`/`#ifdef`/`#else`/`#endif`, and macro substitution to handle real
- * Apple .r files like reader.r and macweather.r.
+ * Apple .r files like the samples' `.r` sources (e.g. the
+ * `#include "Processes.r"` at the top of wasm-hello-window/hello.r).
  *
  * Phase 2 implements this *on the JS side*, BEFORE the source is handed to
  * the WASM. The WASM still only sees the lexer-friendly slice — comments
@@ -126,7 +127,7 @@ interface IncludeFrame {
 
 /**
  * Run the preprocessor. `topName` is the virtual name of the buffer in
- * `topSource` (used in diagnostics; e.g. `reader.r`). `predefined` is the
+ * `topSource` (used in diagnostics; e.g. `snake.r`). `predefined` is the
  * initial macro table — typical use is to pre-seed `Rez=1`, `DeRez=0`,
  * `true=1`, `false=0`, `TRUE=1`, `FALSE=0` (matching the spike's
  * `MiniLexer::addDefine` behaviour).
