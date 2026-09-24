@@ -1,0 +1,10 @@
+#!/bin/sh
+# Strip AI co-author trailers and "Generated with Claude Code" footers from
+# commit messages. Enabled via `git config core.hooksPath .githooks`
+# (run automatically by `npm install` through the "prepare" script).
+msg="$1"
+tmp="$msg.scrub"
+grep -viE '^[[:space:]]*(co-authored-by:.*@anthropic\.com|(🤖[[:space:]]*)?generated with \[?claude code)' "$msg" > "$tmp"
+# Drop trailing blank lines left behind by the removal.
+sed -e ':a' -e '/^[[:space:]]*$/{$d;N;ba' -e '}' "$tmp" > "$msg"
+rm -f "$tmp"
