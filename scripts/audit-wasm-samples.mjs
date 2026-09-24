@@ -28,7 +28,8 @@
  *
  * Exit codes:
  *   0  every audited sample compiled
- *   1  ≥1 sample failed (failures printed at end)
+ *   1  ≥1 sample failed (failures printed at end), or two
+ *      SAMPLE_PROJECTS share an appCreator code
  *   2  toolchain bundle missing / unreadable
  */
 import {
@@ -45,6 +46,50 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(__dirname, "..");
 const APP_DIR = resolve(REPO, "src/app");
 const BUNDLE_DIR = resolve(REPO, "src/web/public/wasm-cc1");
+
+// ── creator-code uniqueness guard ───────────────────────────────────
+// Two SAMPLE_PROJECTS sharing an `appCreator` makes the Finder mis-
+// associate documents and icons (the Desktop DB keys on creator). Parse
+// types.ts textually: each `id: "..."` is paired with the next
+// `appCreator: "...."` before the following `id:`. "????" (no creator)
+// is exempt. Runs before compiling so it's cheap and fails fast.
+{
+  const typesPath = resolve(REPO, "src/web/src/playground/types.ts");
+  const src = readFileSync(typesPath, "utf8");
+  const re = /\bid:\s*["']([^"']+)["']|\bappCreator:\s*["']([^"']*)["']/g;
+  const byCreator = new Map();
+  let currentId = null;
+  let pairs = 0;
+  for (const m of src.matchAll(re)) {
+    if (m[1] !== undefined) {
+      currentId = m[1];
+      continue;
+    }
+    const creator = m[2];
+    if (currentId === null) continue;
+    pairs++;
+    if (creator.length !== 4) {
+      console.error(`error: ${currentId} appCreator "${creator}" is not 4 chars.`);
+      process.exit(1);
+    }
+    if (creator !== "????") {
+      if (!byCreator.has(creator)) byCreator.set(creator, []);
+      byCreator.get(creator).push(currentId);
+    }
+    currentId = null;
+  }
+  if (pairs === 0) {
+    console.error(`error: found no id/appCreator pairs in ${typesPath}; parser out of date?`);
+    process.exit(1);
+  }
+  const dups = [...byCreator].filter(([, ids]) => ids.length > 1);
+  if (dups.length > 0) {
+    console.error("error: duplicate appCreator codes in SAMPLE_PROJECTS:");
+    for (const [c, ids] of dups) console.error(`       '${c}': ${ids.join(", ")}`);
+    process.exit(1);
+  }
+  console.log(`[audit] ${pairs} appCreator codes checked, all unique.`);
+}
 
 if (!existsSync(join(BUNDLE_DIR, "cc1.mjs"))) {
   console.error(`error: bundle missing at ${BUNDLE_DIR}.`);

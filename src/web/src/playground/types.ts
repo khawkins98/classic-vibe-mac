@@ -300,7 +300,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     rezFile: "stickynote.r",
     outputName: "WasmStickyNote.bin",
     appType: "APPL",
-    appCreator: "CVSN",
+    appCreator: "CVSK",
     complexity: 2,
   },
   {
@@ -559,7 +559,7 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
     rezFile: "color.r",
     outputName: "WasmColor.bin",
     appType: "APPL",
-    appCreator: "CVCR",
+    appCreator: "CVCL",
     complexity: 2,
   },
   {

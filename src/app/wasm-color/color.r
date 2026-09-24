@@ -1,7 +1,7 @@
 /*
  * color.r — resources for Wasm Color (cv-mac #125).
  *
- *   - 'CVCR' signature ("Classic Vibe ColoR")
+ *   - 'CVCL' signature ("Classic Vibe ColoR")
  *   - WIND 128         — 300 × 180 window
  *   - SIZE -1          — 256 KB (pure QuickDraw)
  */
@@ -10,8 +10,8 @@
 #include "Windows.r"
 #include "MacTypes.r"
 
-data 'CVCR' (0, "Owner signature") {
-    "CVCR"
+data 'CVCL' (0, "Owner signature") {
+    "CVCL"
 };
 
 resource 'WIND' (128) {

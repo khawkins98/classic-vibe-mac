@@ -89,7 +89,7 @@ nothing and none of the samples depend on it. Don't add samples there.
   `data 'CVWW' (0, "Owner signature")`) and a `SIZE -1` resource that sets
   the heap size and the 32-bit-clean flag. See `wasm-hello-window/hello.r`
   for a commented minimal version. Pick a creator code that isn't already
-  in use; `CVSN` and `CVCR` are each already shared by two samples.
+  in use; `scripts/audit-wasm-samples.mjs` fails if two samples share one.
 - **Debug logging.** `#include <cvm_log.h>` and call `cvm_log(...)` to
   print to the Output → Console tab. The header lives in
   `wasm-debug-console/` but the compiler mounts it as a system header for

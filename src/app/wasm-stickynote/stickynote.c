@@ -17,7 +17,7 @@
  *   - No menus or scrap. wasm-notepad covers that ladder rung.
  *
  * Pairs with stickynote.r (WIND 128 with a borderless dBoxProc-style
- * frame, SIZE -1, signature 'CVSN').
+ * frame, SIZE -1, signature 'CVSK').
  */
 
 #include <Types.h>
