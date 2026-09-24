@@ -11,5 +11,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["e2e/**/*.ts", "visual/**/*.ts"]
+  "include": ["e2e/**/*.ts"]
 }
