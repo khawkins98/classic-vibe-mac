@@ -11,17 +11,24 @@
 # as scaffolding for any future host-native parser test — drop a
 # test_<name>.c here, add a target, point it at ../../src/app/<name>/<file>.c.
 #
-# Today this is a no-op: `make run` succeeds with "All host C unit
-# tests passed." because the TESTS list is empty.
+# stubs/ holds minimal stand-ins for the Mac headers (<Types.h>,
+# <Quickdraw.h>, <Events.h>) that pure-logic files include for types
+# and TickCount(). Put it first on the include path so it shadows any
+# host header with the same name on a case-insensitive filesystem.
 
 CC      ?= cc
 CFLAGS  ?= -std=c99 -Wall -Wextra -O0 -g -DUNIT_TEST
 
-TESTS =
+TESTS = test_arkanoid_engine
+
+ARKANOID = ../../src/app/wasm-arkanoid
 
 .PHONY: all clean run
 
 all: $(TESTS)
+
+test_arkanoid_engine: test_arkanoid_engine.c $(ARKANOID)/engine.c $(ARKANOID)/engine.h
+	$(CC) $(CFLAGS) -Istubs -I$(ARKANOID) -o $@ test_arkanoid_engine.c $(ARKANOID)/engine.c
 
 # Just runs the host-cc C suite. The JS unit tests (preprocessor.test.mjs
 # + hfs-patcher.test.mjs) live under `npm run test:unit:js` so this
