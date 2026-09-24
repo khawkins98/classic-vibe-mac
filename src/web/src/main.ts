@@ -67,6 +67,7 @@ import {
   installOpenQuicklyShortcut,
 } from "./openQuicklyPalette";
 import { installBuildProgressWindow } from "./playground/buildProgressWindow";
+import { explainError } from "./playground/errorExplainer";
 import { installActivePaneTracker } from "./activePane";
 import { installFullscreenMac } from "./fullscreenMac";
 
@@ -226,6 +227,15 @@ function appendBuildLogDiagnostic(
   btn.dataset.cvmJumpColumn = String(column);
   btn.textContent = `${file}:${line}:${column}: ${severity}: ${message}`;
   buildLogEl.append(ts, btn, document.createTextNode("\n"));
+  // Issue #334: plain-English hint under recognised GCC/ld/Rez errors.
+  const explained = severity === "info" ? null : explainError(message);
+  if (explained) {
+    const hint = document.createElement("span");
+    hint.className = "cvm-buildlog__hint";
+    hint.dataset.cvmHintId = explained.id;
+    hint.textContent = `    ? ${explained.hint}\n`;
+    buildLogEl.append(hint);
+  }
   scrollToBottomIfNeeded(wasAtBottom);
 }
 

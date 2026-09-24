@@ -2979,6 +2979,11 @@ body[data-active-pane="editor"]
   color: var(--paper);
   outline: none;
 }
+/* Plain-English hint under a recognised diagnostic (issue #334). */
+.cvm-buildlog__hint {
+  color: #555555;
+  font-style: italic;
+}
 .cvm-output__hint {
   margin: 12px;
   padding: 12px;
