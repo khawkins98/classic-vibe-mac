@@ -53,7 +53,6 @@ Makefile
 
 # Test artifacts
 test-results/
-test-results-visual/
 playwright-report/
 playwright/.cache/
 tests/unit/test_html_parse

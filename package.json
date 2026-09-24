@@ -13,20 +13,18 @@
     "fetch:emulator": "bash scripts/fetch-emulator.sh",
     "preview": "npm run preview --workspace=src/web",
     "typecheck": "tsc --noEmit -p src/web",
-    "test": "npm run test:unit && npm run test:e2e && npm run test:visual",
+    "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "npm run test:unit:c && npm run test:unit:js",
     "audit:wasm-shelf": "node scripts/audit-wasm-samples.mjs",
     "audit:wasm-rez": "node --stack-size=2000 scripts/audit-wasm-rez.mjs",
     "audit:wasm-e2e": "node scripts/audit-wasm-e2e.mjs",
     "test:unit:c": "make -C tests/unit run",
     "test:unit:js": "node tests/unit/preprocessor.test.mjs && node tests/unit/hfs-patcher.test.mjs && node tests/unit/shared-poller.test.mjs && node --test tests/unit/resource-fork-merger.test.mjs && node --test tests/unit/wasm-rez-stack.test.mjs && node --test tests/unit/share-link.test.mjs tests/unit/settings.test.mjs tests/unit/polling-watcher.test.mjs tests/unit/error-explainer.test.mjs tests/unit/persistence-core.test.mjs",
-    "test:e2e": "playwright test --config=playwright.config.ts",
-    "test:visual": "playwright test --config=tests/visual/playwright.config.ts"
+    "test:e2e": "playwright test --config=playwright.config.ts"
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.96.0",
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.0",
-    "typescript": "^6.0.3"
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
   }
 }

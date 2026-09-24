@@ -84,7 +84,7 @@ spawns its child process with that flag, so there's nothing to set).
    The PR template asks for a summary, a type, and a test plan. CI
    runs, in a few minutes: unit tests, the wasm-shelf compile audit,
    Playwright e2e, a markdown link check, and the full site build
-   (boot disk + Vite). The vision-LLM tests are skipped on fork PRs.
+   (boot disk + Vite).
 
 7. **A maintainer squash-merges once CI is green.** The push to
    `main` triggers the deploy job, which publishes to GitHub Pages.

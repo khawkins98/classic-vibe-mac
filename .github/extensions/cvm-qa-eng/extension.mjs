@@ -1,7 +1,7 @@
 // Extension: cvm-qa-eng
 // QA and testing specialist for classic-vibe-mac.
-// Generates test cases, reviews coverage gaps, and knows the three-layer test stack:
-// unit (C + JS), E2E Playwright, and visual AI assertions.
+// Generates test cases, reviews coverage gaps, and knows the two-layer test stack:
+// unit (C + JS) and E2E Playwright.
 
 import { joinSession } from "@github/copilot-sdk/extension";
 import { exec } from "node:child_process";
@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 const execP = promisify(exec);
 const REPO_ROOT = new URL("../../../..", import.meta.url).pathname;
 
-const QA_SYSTEM = `You are the QA engineer for classic-vibe-mac, specialising in its three-layer test architecture.
+const QA_SYSTEM = `You are the QA engineer for classic-vibe-mac, specialising in its two-layer test architecture.
 
 ## Test stack
 
@@ -36,14 +36,8 @@ const QA_SYSTEM = `You are the QA engineer for classic-vibe-mac, specialising in
 **Scope:** Full browser flow — Mac boots, editor loads, Build & Run cycle, disk hot-load.
 **Key hook:** \`window.__cvm_playground\` exposes \`getDoc()\`, \`getCurrent()\`, \`insertAtStart(text)\` for test control without DOM brittle-ness.
 
-### Layer 3: Visual tests (AI vision)
-**Location:** \`tests/visual/\`
-**Runner:** \`npm run test:visual\` — Playwright screenshots + Claude API vision assertions.
-**Gate:** Requires \`ANTHROPIC_API_KEY\`. Runs only in CI with the key set.
-**Scope:** Semantic checks on the Mac canvas ("does the window show weather data?") — replaces pixel-diff brittleness.
-
 ## The Toolbox-shell split means:
-- Toolbox shell (\`<app>.c\`) is NOT unit-testable on the host — only E2E/visual can cover it.
+- Toolbox shell (\`<app>.c\`) is NOT unit-testable on the host — only E2E (and manual checks in the browser) can cover it.
 - Pure-C engine (\`<app>_engine.c/h\`) IS unit-testable — test all branches here first.
 - JS playground modules (preprocessor, hfs-patcher, build, rez) are unit-testable in Node.js.
 
@@ -63,7 +57,7 @@ const session = await joinSession({
             description:
                 "Generate concrete test cases for a feature or module. Returns ready-to-paste " +
                 "test code following the project's test conventions (C assert-style or Node.js " +
-                "ESM with node:assert/strict). Specify the layer: unit-c, unit-js, e2e, or visual.",
+                "ESM with node:assert/strict). Specify the layer: unit-c, unit-js, or e2e.",
             parameters: {
                 type: "object",
                 properties: {
@@ -73,7 +67,7 @@ const session = await joinSession({
                     },
                     layer: {
                         type: "string",
-                        enum: ["unit-c", "unit-js", "e2e", "visual", "all"],
+                        enum: ["unit-c", "unit-js", "e2e", "all"],
                         description: "Which test layer to target. 'all' generates for the appropriate layers.",
                     },
                     code: {

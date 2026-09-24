@@ -70,7 +70,7 @@ git clone https://github.com/<your-fork>/classic-vibe-mac.git
 cd classic-vibe-mac
 npm install
 npm run fetch:emulator                   # vendors BasiliskII.wasm + Quadra-650.rom
-npx playwright install chromium          # only needed for E2E + visual tests
+npx playwright install chromium          # only needed for E2E tests
 ```
 
 CI uses Node 20; any current LTS works locally.
@@ -145,8 +145,7 @@ Two workflows run on every PR:
 
 - **`tests`** (`.github/workflows/test.yml`) — unit tests, the
   wasm-shelf compile audit (`scripts/audit-wasm-samples.mjs`),
-  Playwright e2e, and the vision-LLM tests (skipped on fork PRs and
-  when `ANTHROPIC_API_KEY` isn't set).
+  and Playwright e2e.
 - **`Build`** (`.github/workflows/build.yml`) — builds the vanilla
   boot disk in the Retro68 container (the CMake configure/build step
   there is now a no-op), builds the Vite frontend, and on pushes to
@@ -247,12 +246,6 @@ For silent failures (no bomb, just nothing happening), instrument
 with `cvm_log()` and watch the Output pane's **Console** tab; the
 recipes are in [`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md).
 
-The other tool worth knowing about is the visual test layer
-([`tests/README.md`](../tests/README.md#layer-3-vision-assertions-claude-api)),
-which lets you ask a vision model "is the bomb dialog visible?" or "is
-my app's window showing?" against a screenshot. Useful
-when you're iterating on something that's hard to scrape from the canvas.
-
 ### Iterate on the page chrome
 
 `src/web/src/` — Vite + TypeScript, HMR, normal frontend dev:
@@ -268,11 +261,6 @@ For E2E smoke tests against the dev server:
 ```sh
 npm run test:e2e          # Playwright, chromium-only
 ```
-
-Vision assertions on actual emulator screenshots
-(`tests/visual/vision-assert.ts`) require an
-`ANTHROPIC_API_KEY` env var; without it the vision tests auto-skip (no CI
-failure). See [`tests/README.md`](../tests/README.md) for the cost notes.
 
 ## Common failure modes mapped to fixes
 
@@ -366,8 +354,8 @@ for the root, `hls ":System Folder:"` for a subdirectory. See
 - [`src/app/README.md`](../src/app/README.md) — what runs inside the
   emulated Mac, the Toolbox-shell + pure-C-engine pattern, replacement
   guide.
-- [`tests/README.md`](../tests/README.md) — three-layer testing strategy
-  (unit / E2E / vision) and what each layer is for.
+- [`tests/README.md`](../tests/README.md) — two-layer testing strategy
+  (unit / E2E) and what each layer is for.
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) — Conventional Commits, branch
   naming, squash-merge policy.
 - [`LEARNINGS.md`](../LEARNINGS.md) — running log of gotchas. Worth

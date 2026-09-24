@@ -1,19 +1,18 @@
 # Tests
 
-Three layers of testing for `classic-vibe-mac`. Each layer answers a
+Two layers of testing for `classic-vibe-mac`. Each layer answers a
 different question and runs independently.
 
 | Layer | Lives in | Run with | What it tests |
 |-------|----------|----------|---------------|
 | Unit (host C) | `tests/unit/` | `npm run test:unit` | Pure-C game logic, host-compiled |
 | E2E (Playwright) | `tests/e2e/` | `npm run test:e2e` | Web frontend in a real browser |
-| Vision (Claude) | `tests/visual/` | `npm run test:visual` | Semantic checks on emulator screenshots |
 
-`npm test` runs all three in order.
+`npm test` runs both in order.
 
 ---
 
-## Why three layers?
+## Why two layers?
 
 The app runs inside an emulated 68k Mac (BasiliskII WASM) which renders to a
 `<canvas>`. Once the emulator boots, normal DOM-based tools can't see what's
@@ -27,10 +26,13 @@ Each layer is the right tool for a different scope:
 - **E2E:** the web shell that hosts the emulator (page loads, COOP/COEP
   headers, WASM bootstraps, the canvas mounts) is testable with Playwright
   the normal way.
-- **Vision:** "is the app actually running and showing the right thing?"
-  needs to read pixels from the canvas. We send screenshots to a vision LLM
-  and ask in natural language. Pixel-diff snapshots are the obvious wrong
-  answer here — emulator timing variance flakes them.
+
+Neither layer reads pixels inside the running emulator. What an app draws
+is checked by hand in the browser; pixel-diff snapshots are deliberately
+avoided because emulator timing variance (cursor blink, boot animation,
+scheduler jitter) flakes them. (An LLM-vision layer, `tests/visual/`,
+existed until #364; it was removed because CI never had an API key, so
+it only ever reported skipped.)
 
 ---
 
@@ -97,8 +99,8 @@ screenshot. As the emulator integration lands, this should grow to:
 - wait for SharedArrayBuffer / COOP+COEP to be in place
 - exercise basic keyboard/mouse routing into the canvas
 
-For anything that needs to verify what's *inside* the canvas, escalate to
-Layer 3.
+What's *inside* the canvas is out of scope for this layer — keep app
+logic in pure-C engines so Layer 1 can cover it.
 
 **Chromium only on purpose.** The emulator needs `SharedArrayBuffer`
 (cross-origin isolation) and behaves most consistently in chromium. Cross-
@@ -109,55 +111,13 @@ browser parity is not a POC concern.
 
 ---
 
-## Layer 3: Vision assertions (Claude API)
-
-```bash
-ANTHROPIC_API_KEY=sk-... npm run test:visual
-```
-
-The novel layer. `tests/visual/vision-assert.ts` exposes a single helper:
-
-```ts
-import { visionAssert } from "./vision-assert";
-
-const result = await visionAssert(
-  "test-results/boot.png",
-  "a System 7 desktop is visible with a window titled 'Reader'",
-);
-expect(result.pass, result.reasoning).toBe(true);
-```
-
-It sends the screenshot + the natural-language assertion to
-`claude-haiku-4-5-20251001` (chosen for speed/cost) and parses a strict JSON
-verdict out of the response.
-
-**Why not pixel-diff?** The emulator's frame timing varies run-to-run (cursor
-blink, boot animation, scheduler jitter). Pixel-diff baselines flake.
-Semantic vision checks are robust to those — they ask "does this look right
-to a human?" instead of "are these bytes identical?".
-
-**Auto-skip when no key is set.** Tests use
-`test.skip(!hasVisionApiKey(), ...)`, so CI runs without the key won't fail —
-they just report skipped. Set `ANTHROPIC_API_KEY` in repo secrets to enable.
-
-**Cost note.** Haiku is cheap (~fractions of a cent per assertion) but it's
-not free. Don't put the vision layer on a per-commit watch loop — run it on
-PRs and on demand.
-
-**Requires:** `@anthropic-ai/sdk` (declared in root `package.json`) and an
-`ANTHROPIC_API_KEY` env var.
-
----
-
 ## CI
 
-`.github/workflows/test.yml` runs unit + e2e on every PR. Vision is gated on
-`secrets.ANTHROPIC_API_KEY` being present in the repo.
+`.github/workflows/test.yml` runs unit + e2e on every PR.
 
 ## Output
 
 - `test-results/` — Playwright traces, screenshots from failed runs
 - `playwright-report/` — HTML reports (open with `npx playwright show-report`)
-- `test-results-visual/` — vision-layer outputs (model reasoning attachments)
 
-All three are gitignored.
+Both are gitignored.

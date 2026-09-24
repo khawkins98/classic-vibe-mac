@@ -20,7 +20,7 @@ in ~820ms. No backend. No relay. No auth. Everything runs in the visitor's tab.
   - \`playground/\`        — Build & Run pipeline (preprocessor→Rez→patcher)
 - \`tools/wasm-rez/\`   — WASM-compiled Rez binary (vendored)
 - \`scripts/\`          — boot-disk builder, CI helpers
-- \`tests/\`            — unit (C + JS) + e2e (Playwright) + visual
+- \`tests/\`            — unit (C + JS) + e2e (Playwright)
 - \`docs/\`             — ARCHITECTURE.md, PLAYGROUND.md, AGENT-PROCESS.md, DEVELOPMENT.md
 
 ### Mac app architecture (the split)
@@ -41,7 +41,6 @@ npm run dev            # Vite dev server (localhost:5173, SAB headers set)
 npm run build          # Production web build
 npm run test:unit      # C unit tests + JS unit tests
 npm run test:e2e       # Playwright end-to-end
-npm run test:visual    # Playwright visual regression
 npm run fetch:emulator # Download BasiliskII.wasm + ROM
 \`\`\`
 
