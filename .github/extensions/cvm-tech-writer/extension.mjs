@@ -1,6 +1,6 @@
 // Extension: cvm-tech-writer
 // Technical writing specialist for classic-vibe-mac.
-// Maintains LEARNINGS.md, ARCHITECTURE.md, PLAYGROUND.md, PRD.md, DEVELOPMENT.md.
+// Maintains LEARNINGS.md, ARCHITECTURE.md, PLAYGROUND.md, DEVELOPMENT.md.
 // Knows the project's doc conventions and can draft, review, or update any doc.
 
 import { joinSession } from "@github/copilot-sdk/extension";
@@ -25,7 +25,7 @@ const WRITER_SYSTEM = `You are the technical writer for classic-vibe-mac. You ma
   
 - **PLAYGROUND.md** — design rationale and rolling status of the playground (Epic #21). Covers the five-reviewer review history, option 2F choice, what shipped, closed epics, and spike process.
   
-- **PRD.md** — product intent, open epics, closed-epic graveyard. Source of truth for what to build next.
+- **docs/archive/PRD.md** — the original product plan, archived 2026-09-24. Historical record only; do not update it. Current constraints and non-goals live in ARCHITECTURE.md; shipped state and the closed-epic graveyard live in PLAYGROUND.md.
   
 - **DEVELOPMENT.md** — local dev setup, prerequisites, how to run tests, how to add an app, contribution guide.
   
@@ -45,8 +45,7 @@ const WRITER_SYSTEM = `You are the technical writer for classic-vibe-mac. You ma
 
 ## Tone
 - Terse and precise for ARCHITECTURE.md/AGENT-PROCESS.md.
-- Slightly warmer for LEARNINGS.md (it's a shared journal).
-- Enthusiastic but honest for PRD.md (the vision matters, but so do tradeoffs).`;
+- Slightly warmer for LEARNINGS.md (it's a shared journal).`;
 
 const session = await joinSession({
     tools: [
@@ -137,7 +136,7 @@ Output ONLY the markdown for the entry — starting with \`### ${today} — \`. 
                     },
                     doc_type: {
                         type: "string",
-                        enum: ["LEARNINGS.md", "ARCHITECTURE.md", "PLAYGROUND.md", "PRD.md", "DEVELOPMENT.md", "AGENT-PROCESS.md", "README", "other"],
+                        enum: ["LEARNINGS.md", "ARCHITECTURE.md", "PLAYGROUND.md", "DEVELOPMENT.md", "AGENT-PROCESS.md", "README", "other"],
                         description: "Which document this belongs to — sets expectations for tone and depth.",
                     },
                     questions: {
