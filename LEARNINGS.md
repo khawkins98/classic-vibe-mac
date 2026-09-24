@@ -488,6 +488,13 @@ places. Miss one and it fails quietly rather than loudly:
 Then run `npm run audit:wasm-e2e -- wasm-<name>`.
 **Action:** Documented as a checklist in `src/app/README.md` ("Adding a
 sample"). A single manifest would remove the drift risk; not done yet.
+**Update (2026-09-24):** Step 2 is gone. `vite.config.ts` now
+auto-discovers seed files: every `src/app/wasm-*/` file ending in `.c`,
+`.h`, `.r` or `.rsrc.bin` is seeded, minus an explicit `SEED_EXCLUDES`
+set (currently just `wasm-debug-console/cvm_log.h`). The output file set
+was diffed before and after the change and matched byte for byte. A
+missing `PICKER_ENTRIES` blurb now falls back to the label plus the file
+list, and every current sample has a blurb.
 
 ### 2026-09-24 — Ethernet relay on Durable Object hibernation: in-memory state doesn't survive
 **Context:** Hardening `worker/ethernet-zone.ts` (#358).
@@ -1550,7 +1557,7 @@ guaranteed, the next step is to vendor a GPL-clean Chicago `.woff2` under
 later.
 
 ### 2026-05-08 — Installing hfsutils inside the Retro68 container
-*(The hfsutils-vs-hfsprogs lesson holds; `dist/app.dsk` and the Minesweeper build are historical — `app.dsk` was retired with Reader in #276.)*
+*(The hfsutils-vs-hfsprogs lesson holds; `dist/app.dsk` and the Minesweeper build are historical — `app.dsk` was retired with Reader in #276, and `scripts/build-disk-image.sh` has since been deleted.)*
 **Context:** Wiring `scripts/build-disk-image.sh` into `.github/workflows/build.yml`
 as a follow-on step to the CMake build. The script needs `hformat`/`hmount`/
 `hcopy` from the `hfsutils` Debian package, which is not preinstalled in
@@ -1617,7 +1624,7 @@ The Finder scans exactly that one folder at login and launches its contents.
 A `Startup Items` folder on a secondary mounted disk has no special meaning —
 it's just a regular folder. So the current architecture (boot from CDN disk +
 mount our secondary `app.dsk`) will not auto-launch by itself.
-**Action:** `scripts/build-disk-image.sh` still places the binary in a
+**Action:** `scripts/build-disk-image.sh` (since deleted) placed the binary in a
 `Startup Items` folder on the secondary disk (so the structure is right for
 future work), but we need one of these to actually trigger auto-launch:
   1. Inject the app into the boot disk's System Folder/Startup Items at
