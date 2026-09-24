@@ -54,7 +54,11 @@ import {
   openToolboxReference,
   isToolboxIdentifier,
 } from "./toolbox-reference-window";
-import JSZip from "jszip";
+
+// Build pipeline (cc1 driver, Rez, HFS patcher, fork splicers) is only
+// needed once the user builds, so it lives in its own lazily-loaded
+// chunk. The module loader memoises the import; repeat calls are cheap.
+const loadBuildPipeline = () => import("./buildPipeline");
 
 import {
   SAMPLE_PROJECTS,
@@ -76,23 +80,12 @@ import {
   getUserFilenames,
   addUserFilename,
 } from "./persistence";
-import { preprocess } from "./preprocessor";
-import { createVfs } from "./vfs";
-import { compile } from "./rez";
 import { consumeFetchMs } from "./fetchStats";
 import { dispatchBuildPhase } from "./buildProgressWindow";
 import { showTryThisNext } from "./tryThisNextCard";
 import { parseShareUrl, buildShareUrl } from "../shareLink";
-import {
-  spliceResourceFork,
-  triggerDownload,
-  makeRetro68DefaultSizeFork,
-} from "./build";
-import { mergeResourceForks } from "./resourceForkMerger.mjs";
-import { compileToAsm } from "./cc1";
-import { getToolchain, DEFAULT_TOOLCHAIN_ID } from "./toolchain";
 import { getOptLevel, onOptLevelChange } from "../settings";
-import { patchEmptyVolumeWithBinary, type ExtraFile } from "./hfs-patcher";
+import type { ExtraFile } from "./hfs-patcher";
 import {
   showBuildExplainer,
   showBuildExplainerIfFirstTime,
@@ -685,6 +678,7 @@ export async function mountPlayground(
 
     let result;
     try {
+      const { compileToAsm } = await loadBuildPipeline();
       result = await compileToAsm(baseUrl, source, fname, {
         siblings,
         optLevel: getOptLevel(),
@@ -1352,7 +1346,7 @@ export async function mountPlayground(
           `Built ${stampedName} (${formatBytes(result.bytes!.length)}) in ${result.totalMs.toFixed(0)}ms — downloading.`,
           "ok",
         );
-        triggerDownload(result.bytes!, stampedName);
+        (await loadBuildPipeline()).triggerDownload(result.bytes!, stampedName);
         dispatchBuildPhase({ phase: "done" });
       } else {
         const first = result.diagnostics[0];
@@ -1483,6 +1477,7 @@ export async function mountPlayground(
       // is acceptable; the feature payoff is the whole point of
       // the 6-star tier.
       const installIcon = extraFiles.length === 0;
+      const { patchEmptyVolumeWithBinary } = await loadBuildPipeline();
       const patched = patchEmptyVolumeWithBinary({
         templateBytes: tmplBytes,
         macBinary: result.bytes!,
@@ -1733,6 +1728,7 @@ async function downloadProjectAsZip(
   baseUrl: string,
   project: SampleProject,
 ): Promise<void> {
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   for (const filename of project.files) {
     const content = await readOrSeedFile(baseUrl, project.id, filename);
@@ -1871,6 +1867,8 @@ async function runBuildMixedCAndR(
     return cResult; // unreachable: caller guards rezFile !== null
   }
   const topSource = await readOrSeedFile(baseUrl, proj.id, proj.rezFile);
+  const { createVfs, preprocess, compile, spliceResourceFork } =
+    await loadBuildPipeline();
   const vfs = createVfs(baseUrl, proj.id);
   await vfs.prefetch(proj.id, proj.files);
   const pp = preprocess(topSource, proj.rezFile, vfs, {
@@ -1962,6 +1960,7 @@ async function mergeUserForkWithPrecompiledAssets(
   }
   // First-fork wins: userFork (.r-compiled) overrides; prebuilt forks
   // fill in the rest.
+  const { mergeResourceForks } = await loadBuildPipeline();
   return mergeResourceForks([userFork, ...prebuilt]);
 }
 
@@ -2055,6 +2054,12 @@ async function runBuildInBrowserC(
   // other-target backends register additional entries in toolchain.ts
   // and the IDE picks one via the project's preferred id (or the
   // default). No call-site change needed when adding backends.
+  const {
+    getToolchain,
+    DEFAULT_TOOLCHAIN_ID,
+    makeRetro68DefaultSizeFork,
+    spliceResourceFork,
+  } = await loadBuildPipeline();
   const toolchain = getToolchain(DEFAULT_TOOLCHAIN_ID, baseUrl);
   const r = await toolchain.compile({
     sources,
