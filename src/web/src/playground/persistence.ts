@@ -30,6 +30,12 @@ import {
   SAMPLE_PROJECTS,
   type SampleProject,
 } from "./types";
+import {
+  runInTransaction,
+  readWithRetry,
+  seedActionFor,
+  type ReadResult,
+} from "./persistenceCore";
 
 const DB_NAME = "cvm-playground";
 const DB_VERSION = 1;
@@ -112,59 +118,103 @@ export function isPersistent(): boolean {
 
 /**
  * Tiny request → promise helper. IDB's request objects fire `onsuccess` /
- * `onerror`; we rewrap as a Promise<T>. We resolve with `undefined` on
- * error rather than rejecting because every caller treats "no value" the
- * same as "value not present" — there's nothing useful to do with a
- * failed read except fall through to defaults.
+ * `onerror`; we rewrap as a Promise<T> that REJECTS on error. Callers
+ * that want "failure = no value" semantics (UI-state reads) catch it
+ * themselves; file reads need to tell "not found" apart from "couldn't
+ * read" so they don't seed the bundled default over a stored copy.
  */
-function reqToPromise<T>(req: IDBRequest<T>): Promise<T | undefined> {
-  return new Promise((resolve) => {
+function reqToPromise<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(undefined);
+    req.onerror = () =>
+      reject(req.error ?? new Error("IndexedDB request failed"));
   });
 }
 
+/**
+ * Run `fn` in a transaction on `storeName`. Resolves `undefined` when
+ * IDB is unavailable (in-memory fallback); otherwise defers to
+ * `runInTransaction`, which rejects on any failure — including `fn`
+ * throwing synchronously (e.g. DataCloneError from `put`).
+ */
 async function withStore<T>(
   storeName: string,
   mode: IDBTransactionMode,
-  fn: (s: IDBObjectStore) => Promise<T>,
+  fn: (s: IDBObjectStore) => Promise<T> | T,
 ): Promise<T | undefined> {
   const db = await openDb();
   if (!db) return undefined;
-  return new Promise<T | undefined>((resolve) => {
-    let result: T | undefined;
-    let tx: IDBTransaction;
-    try {
-      tx = db.transaction(storeName, mode);
-    } catch {
-      resolve(undefined);
-      return;
-    }
-    const store = tx.objectStore(storeName);
-    fn(store).then((r) => {
-      result = r;
-    });
-    tx.oncomplete = () => resolve(result);
-    tx.onerror = () => resolve(undefined);
-    tx.onabort = () => resolve(undefined);
-  });
+  return runInTransaction(db, storeName, mode, fn);
 }
 
-/** Read one file's stored content, or `undefined` if absent. */
+/**
+ * Keys whose stored copy we failed to read this session. We showed the
+ * bundled default for them without persisting it; writes to these keys
+ * stay in memory so an edit on top of that fallback can't overwrite the
+ * user's real (unreadable-right-now) copy in IDB. Cleared by Reset,
+ * which is an explicit "overwrite with bundled" request. A reload
+ * retries the read from scratch.
+ */
+const unreadableKeys = new Set<string>();
+
+type ReadErrorListener = (
+  project: string,
+  filename: string,
+  error: unknown,
+) => void;
+const readErrorListeners = new Set<ReadErrorListener>();
+
+/** Subscribe to "couldn't read a stored file" notifications (the editor
+ *  surfaces them in its status line). Returns an unsubscribe function. */
+export function onStorageReadError(listener: ReadErrorListener): () => void {
+  readErrorListeners.add(listener);
+  return () => readErrorListeners.delete(listener);
+}
+
+/**
+ * Read one file, distinguishing a genuine not-found (`absent`) from a
+ * failed read (`error`). The in-memory fallback never errors.
+ */
+export async function readFileResult(
+  project: string,
+  filename: string,
+): Promise<ReadResult> {
+  const k = fileKey(project, filename);
+  const fromMem = (): ReadResult => {
+    const v = memFiles.get(k);
+    return v === undefined
+      ? { status: "absent" }
+      : { status: "found", content: v };
+  };
+  if (!persistent) return fromMem();
+  let fromIdb: { content: string } | undefined;
+  try {
+    fromIdb = await withStore(STORE_FILES, "readonly", (s) =>
+      reqToPromise<{ content: string } | undefined>(s.get(k)),
+    );
+  } catch (error) {
+    return { status: "error", error };
+  }
+  if (!persistent) return fromMem(); // racy fallback flip during open
+  return typeof fromIdb?.content === "string"
+    ? { status: "found", content: fromIdb.content }
+    : { status: "absent" };
+}
+
+/** Read one file's stored content, or `undefined` if absent OR the read
+ *  failed. Callers that would write a default on `undefined` must use
+ *  `readFileResult` (or `readOrSeedFile`) instead. */
 export async function readFile(
   project: string,
   filename: string,
 ): Promise<string | undefined> {
-  const k = fileKey(project, filename);
-  if (!persistent) return memFiles.get(k);
-  const fromIdb = await withStore(STORE_FILES, "readonly", (s) =>
-    reqToPromise<{ content: string } | undefined>(s.get(k)),
-  );
-  if (!persistent) return memFiles.get(k); // racy fallback flip during open
-  return fromIdb?.content;
+  const r = await readFileResult(project, filename);
+  return r.status === "found" ? r.content : undefined;
 }
 
-/** Write one file's content. Idempotent. */
+/** Write one file's content. Idempotent. IDB failures are logged, not
+ *  thrown (pre-existing contract: callers treat persistence as best-
+ *  effort and the in-memory copy keeps the session working). */
 export async function writeFile(
   project: string,
   filename: string,
@@ -173,38 +223,14 @@ export async function writeFile(
   const k = fileKey(project, filename);
   memFiles.set(k, content);
   if (!persistent) return;
-  await withStore(STORE_FILES, "readwrite", async (s) => {
-    s.put({ content }, k);
-    return undefined;
-  });
-}
-
-/** Wipe ALL stored files. Called on bundleVersion change. */
-async function clearAllFiles(): Promise<void> {
-  memFiles.clear();
-  if (!persistent) return;
-  await withStore(STORE_FILES, "readwrite", async (s) => {
-    s.clear();
-    return undefined;
-  });
-}
-
-/** Drop every stored file for a single project. Used by the toolbar's
- *  "Reset" affordance — paired with re-seeding from the bundled
- *  sources, this gives the user a one-click "pull latest from the
- *  server" path that discards their local IDB edits. */
-export async function clearProjectFiles(projectId: string): Promise<void> {
-  const proj = SAMPLE_PROJECTS.find((p) => p.id === projectId);
-  if (!proj) return;
-  for (const filename of proj.files) {
-    const k = fileKey(projectId, filename);
-    memFiles.delete(k);
-    if (persistent) {
-      await withStore(STORE_FILES, "readwrite", async (s) => {
-        s.delete(k);
-        return undefined;
-      });
-    }
+  if (unreadableKeys.has(k)) return; // see unreadableKeys
+  try {
+    await withStore(STORE_FILES, "readwrite", (s) => {
+      s.put({ content }, k);
+      return undefined;
+    });
+  } catch (err) {
+    console.warn(`[cvm] persistence: failed to save ${k}`, err);
   }
 }
 
@@ -213,20 +239,29 @@ export async function readUiState<T = unknown>(
   key: string,
 ): Promise<T | undefined> {
   if (!persistent) return memUi.get(key) as T | undefined;
-  const v = await withStore(STORE_UI, "readonly", (s) =>
-    reqToPromise<T>(s.get(key)),
-  );
-  return v;
+  try {
+    return await withStore(STORE_UI, "readonly", (s) =>
+      reqToPromise<T | undefined>(s.get(key)),
+    );
+  } catch {
+    // UI state is cosmetic (last project, cursor, …): a failed read
+    // just means "use the default".
+    return undefined;
+  }
 }
 
 /** Write a UI-state value. */
 export async function writeUiState(key: string, value: unknown): Promise<void> {
   memUi.set(key, value);
   if (!persistent) return;
-  await withStore(STORE_UI, "readwrite", async (s) => {
-    s.put(value, key);
-    return undefined;
-  });
+  try {
+    await withStore(STORE_UI, "readwrite", (s) => {
+      s.put(value, key);
+      return undefined;
+    });
+  } catch (err) {
+    console.warn(`[cvm] persistence: failed to save UI state ${key}`, err);
+  }
 }
 
 // ── User-added files per project ───────────────────────────────────
@@ -403,20 +438,83 @@ export async function fetchBundledFile(
  * Read a file, falling back to the bundled copy if IDB has nothing yet.
  * On first load this is what populates the editor for every file the
  * user opens for the first time.
+ *
+ * Only a genuine not-found seeds IDB. A failed read is retried once;
+ * if it still fails we return the bundled content for display WITHOUT
+ * writing it (and mark the key so later autosaves stay in memory), then
+ * notify `onStorageReadError` listeners. That keeps whatever the user
+ * has stored intact — a transient IDB hiccup must never turn into
+ * "your edits were replaced by the sample". Reloading retries.
  */
 export async function readOrSeedFile(
   baseUrl: string,
   project: string,
   filename: string,
 ): Promise<string> {
-  const stored = await readFile(project, filename);
-  if (stored !== undefined) return stored;
+  const k = fileKey(project, filename);
+  // Already fell back this session: keep serving the in-memory copy
+  // (bundled default plus any in-session edits) rather than flipping
+  // between it and a now-readable stored copy mid-session.
+  if (unreadableKeys.has(k) && memFiles.has(k)) return memFiles.get(k)!;
+  const result = await readWithRetry(() => readFileResult(project, filename));
+  if (result.status === "found") return result.content;
   const bundled = await fetchBundledFile(baseUrl, project, filename);
-  // Seed IDB so subsequent reads are local. Record the seed hash so we
-  // can later detect whether the user has edited this file.
+  if (seedActionFor(result) === "bundled-unsaved") {
+    const error = result.status === "error" ? result.error : undefined;
+    console.warn(
+      `[cvm] persistence: couldn't read ${k}; showing bundled copy, not saving`,
+      error,
+    );
+    unreadableKeys.add(k);
+    memFiles.set(k, bundled);
+    for (const l of readErrorListeners) {
+      try {
+        l(project, filename, error);
+      } catch {
+        // A broken listener mustn't break loading the file.
+      }
+    }
+    return bundled;
+  }
+  // Genuine not-found: seed IDB so subsequent reads are local. Record
+  // the seed hash so we can later detect whether the user has edited it.
   if (bundled) {
     await writeFile(project, filename, bundled);
     await recordSeedHash(project, filename, bundled);
   }
   return bundled;
+}
+
+/**
+ * Reset: overwrite `projectId`'s starter files (`files`) with the
+ * bundled defaults of shipped sample `sourceId` — the project itself for
+ * a shipped sample, or the sample it was duplicated from for a user
+ * project. Every file is fetched BEFORE anything is written, so a
+ * network failure leaves the user's copies untouched instead of
+ * half-resetting to empty buffers. User-added files (#319) aren't in
+ * `files` and are kept.
+ *
+ * Returns the restored contents keyed by filename.
+ */
+export async function resetProjectToBundled(
+  baseUrl: string,
+  projectId: string,
+  sourceId: string,
+  files: readonly string[],
+): Promise<Map<string, string>> {
+  const fetched = new Map<string, string>();
+  for (const filename of files) {
+    const content = await fetchBundledFile(baseUrl, sourceId, filename);
+    if (!content) {
+      throw new Error(`couldn't fetch the bundled copy of ${filename}`);
+    }
+    fetched.set(filename, content);
+  }
+  for (const [filename, content] of fetched) {
+    // Explicit overwrite: lift the unreadable-key guard for this file.
+    unreadableKeys.delete(fileKey(projectId, filename));
+    await writeFile(projectId, filename, content);
+    await recordSeedHash(projectId, filename, content);
+  }
+  return fetched;
 }

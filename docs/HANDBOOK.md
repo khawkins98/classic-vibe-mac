@@ -192,6 +192,10 @@ Three buttons in the playground toolbar:
   `.zip` for off-line keeping.
 - **Reset** — discards your IDB edits and re-seeds the project from
   the bundled defaults. One-click "pull latest from the server."
+  For a project you made with File → Duplicate as new project…, the
+  starter files are restored from the sample it was duplicated from
+  (files you added with New file are kept). Very old duplicates whose
+  source sample can't be traced show Reset disabled, with a tooltip.
 - **Show ASM** — opens a draggable palette with the m68k assembly
   of the active `.c` file, recompiled on edit.
 

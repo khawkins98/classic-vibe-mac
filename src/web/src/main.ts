@@ -48,6 +48,7 @@ console.info(
   `[cvm] build bundleVersion=${BUNDLE_VERSION} toolchainVersion=${TOOLCHAIN_VERSION} builtAt=${BUILT_AT} loaded=${new Date().toISOString()}`,
 );
 import { mountPlayground } from "./playground/editor";
+import { resolveResetSource } from "./playground/persistenceCore";
 import { mountIdePanes } from "./idePanes";
 import { openProjectPicker } from "./projectPicker";
 import {
@@ -859,6 +860,11 @@ async function handleDuplicateProject(): Promise<void> {
     // Clone the files list so subsequent mutations to the source don't
     // leak into the duplicate.
     files: [...src.files],
+    // Root shipped sample this project descends from (follows a chain
+    // of duplicates back to the sample). Reset restores the starter
+    // files from that sample's bundled defaults; undefined only when a
+    // legacy source can't be traced, in which case Reset is disabled.
+    sourceProjectId: resolveResetSource(src, SAMPLE_PROJECTS),
   };
   const list = await getUserProjects();
   list.push(newProject);
