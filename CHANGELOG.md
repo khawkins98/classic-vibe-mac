@@ -16,11 +16,17 @@ new dated section.
 
 ### Added
 
+- Reset now works on duplicated projects, restoring from the sample they came from (#PR).
+- CI checks PR titles for Conventional Commits and typechecks `src/web` (#PR).
+- Picker blurbs for the five samples that lacked one (glypha3, arkanoid, mdpad, icon-gallery, debug-console) (#PR).
 - Plain-English hints under common compiler and linker errors in the build log ([#334](https://github.com/khawkins98/classic-vibe-mac/issues/334), [#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 - `CHANGELOG.md`; the original PRD is archived at `docs/archive/PRD.md` ([#359](https://github.com/khawkins98/classic-vibe-mac/pull/359)).
 
 ### Changed
 
+- Sample source files are discovered automatically from `src/app/wasm-*/`; `SEED_FILES` is gone (#PR).
+- One resource-fork merger with explicit precedence replaces the two that disagreed (#PR).
+- Ethernet relay: the public `/list` endpoint is removed; rate limits keyed by a stable per-socket id (#PR).
 - Build tools and the zip library now load on first use; the entry chunk is ~15% smaller ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 - Ethernet relay hardened: frame/size/rate limits, per-zone socket cap, MAC validation, Durable Object hibernation, client backoff ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 - Accessibility: palettes behave as dialogs (focus, Escape, focus return), keyboard-operable window controls, labelled menus, focus rings, AA-contrast muted text ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
@@ -28,6 +34,9 @@ new dated section.
 
 ### Fixed
 
+- A failed browser-storage read no longer lets the bundled copy overwrite your saved file, at startup or on open (#PR).
+- Reset can no longer be undone by an autosave that was already pending (#PR).
+- Sticky Note and Color had creator codes shared with Snake and Cursor; the sample audit now rejects duplicates (#PR).
 - Wrong length bytes in 16 hand-written Pascal strings across the samples, plus an out-of-bounds write in wasm-multiwin and a disposed-port draw in wasm-dialog ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 - Double-clicking Build / Build & Run could start overlapping builds ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 - The disk patcher corrupted the root folder's dates; the resource-fork decoder misread forks with a non-standard type-list offset ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
