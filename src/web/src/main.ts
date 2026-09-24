@@ -410,7 +410,7 @@ window.addEventListener("cvm:paused-change", (ev) => {
 // element from this point on (progress UI, then canvas). If anything goes
 // wrong it switches to its own error/stub state — main.ts does not need
 // to handle failures. We retain the handle so the playground's "Build &
-// Run" button can call `reboot()` to swap the secondary disk.
+// Run" button can call `boot()` to swap the secondary disk.
 const emulatorMount = document.getElementById("emulator-canvas-mount");
 type EmulatorHandle = ReturnType<typeof startEmulator>;
 let emulatorHandle: EmulatorHandle | null = null;

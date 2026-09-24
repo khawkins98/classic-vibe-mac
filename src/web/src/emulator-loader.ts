@@ -106,7 +106,7 @@ interface ActiveSession {
   audioContext: AudioContext | undefined;
   /** AudioWorkletNode that receives PCM chunks forwarded from the worker. */
   audioWorkletNode: AudioWorkletNode | undefined;
-  /** Resolves on `emulator_ready`. Tracking this lets reboot() await it. */
+  /** Resolves on `emulator_ready`. Tracking this lets boot() await it. */
   readyPromise: Promise<void>;
   resolveReady: () => void;
   rejectReady: (err: Error) => void;
@@ -154,7 +154,7 @@ function disposeSession(s: ActiveSession): void {
   // a dead queue after the worker has been terminated.
   s.audioContext?.close().catch(() => {});
   // If readyPromise is still pending (dispose during boot), reject it so
-  // any outstanding reboot() awaits don't dangle forever.
+  // any outstanding boot() awaits don't dangle forever.
   s.rejectReady(new Error("emulator session disposed"));
 }
 
@@ -164,7 +164,7 @@ export function startEmulator(
 ): EmulatorHandle {
   let handles = renderShell(mount);
   let session = makeSession();
-  // List of in-memory disks added via reboot(). Survives across reboots
+  // List of in-memory disks added via boot(). Survives across reboots
   // so multiple build cycles keep stacking new disks (though v1 only
   // ever passes ONE — v2 may permit reader + macweather coexisting).
   let extraDisks: EmulatorInMemoryDiskSpec[] = [];
@@ -518,7 +518,7 @@ async function boot(
         // the worker stuck on Atomics.wait inside a code path that
         // hasn't yet finished bringing the emulator up.
         visibility.enable();
-        // Notify reboot() awaiters.
+        // Notify boot() awaiters.
         session.resolveReady();
         break;
 
@@ -654,7 +654,7 @@ async function boot(
   }
 
   // Fire off the start message. Boot disk first (always chunked), then
-  // any in-memory secondary disks added via reboot() — passed verbatim,
+  // any in-memory secondary disks added via boot() — passed verbatim,
   // the worker discriminates by `spec.kind`.
   const startMsg: EmulatorWorkerStartMessage = {
     type: "start",
