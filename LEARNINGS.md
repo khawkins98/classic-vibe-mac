@@ -297,6 +297,32 @@ Distilling-the-recipe doesn't mean writing a 1000-line framework;
 it means promoting the script you already wrote and the recipe you
 already followed into named, findable artefacts.
 
+### 12. Parallel sweeps need an integration pass — and a way to verify without the emulator
+
+The 2026-09 cleanup ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358))
+ran nine agents in parallel, each on its own branch in an isolated
+git worktree: sample fixes, HFS / resource-fork bugfixes, worker
+hardening, a11y, lazy-loading, dead-code removal, docs. Isolation meant
+no agent could trample another's working tree, and each branch stayed
+small enough to review on its own.
+
+What isolation can't give you is a view of how the branches interact,
+or of failure modes that only show up in the deployed system. Those came
+from a separate integration-review pass over the merged
+`agent/integration` branch. It caught two things no per-branch review
+flagged: the newly lazy-loaded build chunk 404s in any tab that outlives
+a Pages redeploy, and the hardened relay's new 1008 policy close met a
+client that retried every close forever. Both were small fixes once
+seen (`c1f0a72`), and both would have shipped without that pass.
+
+The other enabler was headless verification. The samples agent changed
+C in 13 samples without booting BasiliskII once, because
+`scripts/audit-wasm-samples.mjs` (and `audit-wasm-e2e.mjs`) run the real
+in-browser toolchain from Node in seconds. **General rule:** fan-out
+work only scales if each agent can check its own output locally (build
+that check first, as in Key Story #1), and if someone reviews the
+merged result as a whole, not just each branch.
+
 ---
 
 ## How to use this file
@@ -331,7 +357,157 @@ not bug reports.
 
 ## Entries
 
+> **Reading older entries:** the earliest entries (2026-05-07 → 05-09)
+> describe the pre-playground architecture — the CI-built Reader,
+> MacWeather and HelloMac apps, the secondary `app.dsk`, the weather
+> poller, and the "Path C" precompiled `.code.bin` splice. All of those
+> are gone (Path C in #130, the apps and `app.dsk` in #277 / #276).
+> Those entries carry a *Historical* note where the file or feature they
+> point at no longer exists; the underlying Toolbox / HFS / browser
+> lessons mostly still hold. "PRD" in older entries means the original
+> product doc, now at [`docs/archive/PRD.md`](docs/archive/PRD.md).
+
+### 2026-09-24 — Hand-counted Pascal-string length bytes drift: 16 were wrong across the samples
+**Context:** Toolbox-correctness sweep over the `wasm-*` teaching samples
+(#358, commit `f95f87e`). Several samples spell Pascal strings as explicit
+arrays — `unsigned char l1[] = { 29, 'M','o','d','a','l',… };` — instead
+of `"\p…"` literals.
+**Finding:** 16 of those length bytes didn't match the character count.
+Both directions bite, and neither produces a compiler warning:
+  - **Too large** (dialog `l2` said 38 for 34 chars, plus notepad/wordpad
+    starter text and the color sample's title): `DrawString` / `TESetText`
+    read past the end of the array and draw whatever stack bytes follow.
+  - **Too small** (cursor hint said 24 for 26 chars): text silently
+    truncated.
+The arrays drift because someone edits the characters and forgets the
+count, and nobody reviews a 29 against a list of 31 quoted letters.
+**Action:** Fixed all 16. For new code, prefer `"\p…"` literals (the
+compiler counts). Where an array is unavoidable (e.g. a file-scope
+`Str63`), count mechanically — `strlen` in a scratch script or `sizeof
+arr - 1` — never by eye. The same sweep found `label[9]` writing one byte
+past a 9-byte array in wasm-multiwin; `label[label[0]]` is the idiom.
+
+### 2026-09-24 — HFS catalog dir record: `dirMdDat` is at +14, not +12
+**Context:** `hfs-patcher.ts:bumpRootDirValence` refreshes the root
+directory's modification date after adding a file (#358, `a32cad8`).
+**Finding:** In the cdrDirRec data area, `dirCrDat` is +10..13 and
+`dirMdDat` is +14..17. The patcher wrote the new mod date at +12, which
+straddles both fields: it clobbered the low half of the creation date
+and the high half of the modification date. The disk still mounted and
+`hls` was happy, so nothing flagged it. Same family as the
+`dataOff = rec0 + 12` bug in the "HFS volume name lives in three places"
+entry below — a hardcoded offset that looked plausible.
+**Action:** Write at `dataOff + 14`; a unit test in
+`tests/unit/hfs-patcher.test.mjs` now pins both date fields. Check field
+offsets against IM:Files (or hfsutils' `libhfs`) rather than by counting
+from the previous field in your head.
+
+### 2026-09-24 — Resource map: the type count is the first word *of the type list*, not a fixed `map+28`
+**Context:** `resourceForkMerger.mjs:decodeResourceFork` (#358, `9aa9175`).
+**Finding:** The decoder read `numTypes - 1` from `mapOff + 28` but read
+the type entries relative to `mapOff + typeListOffset`. Those only agree
+when the type-list offset is the canonical 28, which is what Rez and our
+own encoders emit, so every test fork passed. Per IM: More Macintosh
+Toolbox, the count is the first field *of* the type list. A fork with a
+non-canonical type-list offset (e.g. one written by another tool) decoded
+with a garbage type count.
+**Action:** Read the count at `typeListStart`. Regression test added in
+`tests/unit/resource-fork-merger.test.mjs` with a deliberately
+non-canonical fork. General point: when a format stores an offset to a
+structure, read *everything* in that structure through the offset, even
+fields that "always" sit at the same place.
+
+### 2026-09-24 — Two resource-fork mergers, same name, opposite precedence
+**Context:** Reading both merge paths during the #358 sweep.
+**Finding:** There are two functions called `mergeResourceForks`:
+  - `build.ts` (private, two-arg, from the Path C era): **second fork
+    wins** on `(type, id)` collision — `forkB` is the user's `.r` output.
+  - `resourceForkMerger.mjs` (exported, N-ary, #285): **first fork
+    wins** — callers pass the user's fork first.
+Both implement "user wins", but through opposite argument orders. Anyone
+who swaps one for the other, or passes arguments in the order the other
+one expects, silently inverts precedence and ships upstream resources
+over the user's edits.
+**Action:** None in code yet; flagged here. If you touch either, check
+which one you're calling and which argument is the user's fork. Folding
+the `build.ts` copy into the `.mjs` one would remove the trap (see the
+"N independent copies of one thing" entry).
+
+### 2026-09-24 — Node 24's default stack is too small for wasm-rez on Glypha's `.r`
+**Context:** `tests/unit/wasm-rez-stack.test.mjs` passed on Node 20/22
+and failed on Node 24 (#358).
+**Finding:** The wasm-rez fix in #287 raised the *Emscripten* stack to
+8 MB, but wasm frames also count against the *host* (V8) stack. Node
+24's default V8 limit (~984 KB) is exhausted by the recursive evaluator
+on Glypha's 2.7 MB `.r`. So there are two stack ceilings, and fixing the
+inner one doesn't lift the outer.
+**Action:** The test spawns `process.execPath --stack-size=2000` (2 MB,
+well under the 8 MB OS main-thread stack). Browsers have their own V8
+stack limit that we don't control; if a very large vendored `.r` fails
+in-browser with a stack overflow while the Node audit passes, this is
+the first suspect.
+
+### 2026-09-24 — Build / Build & Run: disable the buttons *before* the first `await`
+**Context:** Fast double-click on Build (or Build then Build & Run)
+started two overlapping builds (#358, `cde7db6`).
+**Finding:** Both handlers awaited `flushSave()` before disabling their
+buttons, so the second click landed inside that await window. Each
+handler also disabled only its own button, and Build's `finally`
+re-enabled everything while a Build & Run was still running.
+**Action:** A shared in-flight flag, claimed synchronously, and both
+buttons disabled before the first `await`. General rule for any async
+click handler: the guard has to be set on the same tick as the click;
+anything after an `await` is already too late.
+
+### 2026-09-24 — Lazy-loaded Vite chunks 404 in tabs that outlive a Pages deploy
+**Context:** #358 moved the build pipeline (cc1 driver, Rez, HFS
+patcher, fork splicers) and JSZip into lazily-imported chunks to shrink
+the entry bundle.
+**Finding:** Chunk filenames are content-hashed. A tab opened before a
+GitHub Pages redeploy still holds the old entry bundle, which asks for
+the old chunk hash. That file no longer exists, so the first Build after
+a deploy fails with the unhelpful "Failed to fetch dynamically imported
+module". This deploys often, so it isn't an edge case.
+**Action:** `loadBuildPipeline()` in `editor.ts` catches the import
+failure and rethrows "the playground may have been updated since this
+tab opened — reload". Any new dynamic `import()` on a user-triggered
+path needs the same wrapper.
+
+### 2026-09-24 — Adding a sample means four registrations, not one
+**Context:** Rewriting `src/app/README.md` for the wasm-only shelf (#358).
+**Finding:** A new sample has to be registered in four hand-maintained
+places. Miss one and it fails quietly rather than loudly:
+  1. `src/app/wasm-<name>/` — the source directory.
+  2. `SEED_FILES` in `src/web/vite.config.ts` — not a glob; an unlisted
+     file isn't copied to `public/sample-projects/` and the playground
+     can't load it.
+  3. `SAMPLE_PROJECTS` in `src/web/src/playground/types.ts` — without it
+     the project doesn't exist in the IDE.
+  4. `PICKER_ENTRIES` in `src/web/src/projectPicker.ts` — without it the
+     picker falls back to the bare label (several samples currently do).
+Then run `npm run audit:wasm-e2e -- wasm-<name>`.
+**Action:** Documented as a checklist in `src/app/README.md` ("Adding a
+sample"). A single manifest would remove the drift risk; not done yet.
+
+### 2026-09-24 — Ethernet relay on Durable Object hibernation: in-memory state doesn't survive
+**Context:** Hardening `worker/ethernet-zone.ts` (#358, `c6cae72`).
+**Finding:** Switching to the WebSocket Hibernation API
+(`ctx.acceptWebSocket(server)` plus the `webSocketMessage` /
+`webSocketClose` handlers) means the DO can be evicted from memory while
+sockets stay open, so idle zones stop billing for duration. Anything
+kept in instance fields is gone after a wake-up. Per-socket state that
+must persist (the MAC address) goes in `ws.serializeAttachment()` and is
+read back with `deserializeAttachment()`. The per-socket rate-limit
+token buckets are deliberately in-memory: they reset on hibernation,
+which is harmless because a socket idle long enough to hibernate would
+have a full bucket anyway.
+**Action:** Documented inline and in `docs/NETWORKING.md`. Related
+client fix: the relay closes with code **1008** on a bad MAC, and the
+client used to retry that forever. `ethernet-provider.ts` now stops
+reconnecting on 1008 (retrying a policy rejection can't succeed).
+
 ### 2026-05-09 — Reader URL bar: `:Unix:` is the correct extfs write path; worker can't fetch()
+*(Historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A); `reader.c` no longer exists. The `:Unix:` vs `:Shared:` and worker-can't-fetch findings still hold.)*
 **Context:** Implementing issue #14 (Reader URL bar). We needed Mac C code to write a
 request file, and JS code to read it, fetch the URL, and write back the result.
 **Finding:** Two distinct extfs volumes exist at runtime:
@@ -351,6 +527,7 @@ for all host-side network I/O.
 FS operations. This is the canonical pattern for any future Mac↔JS data exchange.
 
 ### 2026-05-09 — Request-ID correlation prevents stale result files
+*(Historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A); the URL bar and `reader.c` are gone. The request-ID pattern is still the right shape for any file-based request/response.)*
 **Context:** Reader URL bar needs to handle rapid URL submissions (user types fast, or
 retries quickly).
 **Finding:** Without a request ID, a result file from a previous fetch could be read by a
@@ -362,6 +539,7 @@ arrives.
 and `shared-poller.ts` (AbortController + per-ID file naming).
 
 ### 2026-05-09 — Classic Mac dialog pattern: SetDialogDefaultItem / SetDialogCancelItem
+*(The API lesson holds; the `reader.c` reference is historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A). No current sample calls these; `src/app/wasm-dialog/` is the nearest place to add them.)*
 **Context:** Implementing the "Open URL" modal dialog for Reader (DLOG 131).
 **Finding:** After `GetNewDialog()`, you must explicitly call:
   - `SetDialogDefaultItem(dlg, 1)` to wire Return/Enter to button 1
@@ -373,6 +551,7 @@ and `shared-poller.ts` (AbortController + per-ID file naming).
 calls for any future modal dialog with a text input field.
 
 ### 2026-05-09 — HCreate/HDelete before HOpen for file-write on `:Unix:`
+*(The API sequence holds; the `reader.c` reference is historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A).)*
 **Context:** Mac side needs to write a new file (or overwrite an existing one) to `:Unix:`.
 **Finding:** `HOpen(..., fsWrPerm, &refNum)` will fail with `fnfErr` if the file doesn't
 exist. The correct sequence is:
@@ -417,6 +596,7 @@ activate on the next CLI restart. If upgrading to v1.0.44+, remove the patch fro
 binary (or just ignore it since the patched binary is not used).
 
 ### 2026-05-08 — Phase-2 precompiled `.code.bin` missing in production
+*(Historical — the precompiled `.code.bin` "Path C" splice was removed in #130 and `app.dsk` in #276; every sample now compiles fully in-browser. The CI-ordering generalisation still applies.)*
 **Context:** The Build button on the deployed playground was 404'ing on
 `precompiled/<project>.code.bin`, killing the headline Phase-2 feature
 in production even though local `npm run dev` worked fine.
@@ -446,6 +626,7 @@ invariant that nothing enforces; output-dir writes are checked by the
 next step's `test -s` assertion.
 
 ### 2026-05-08 — MacWeather "(baked)" caption was misleading users
+*(Historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A); `macweather.c` no longer exists. The "render-nothing > render-wrong" lesson stands.)*
 **Context:** Live-deployed MacWeather always rendered "(baked)" under
 the timestamp even when the host page had successfully fetched
 open-meteo (visible in network tab as HTTP 200). Code-side state
@@ -497,6 +678,7 @@ memory, and hands the bytes to the worker via a new `InMemoryDisk`
 class that lives next to `ChunkedDisk`.
 
 ### 2026-05-08 — Worker reboot lifecycle: tear down the weather poller too
+*(Historical — the weather poller went with MacWeather in #277. The "track every stop function in teardown" lesson stands.)*
 **Context:** Phase 3's `reboot(diskBytes)` path tears down the running
 emulator session and spawns a fresh worker with the new secondary
 disk. The existing `dispose()` killed the worker, the rAF loop, the
@@ -553,6 +735,7 @@ variadic macros, `#x` stringification, or `##` token-paste — none of
 which our existing apps use.
 
 ### 2026-05-08 — `.code.bin` is misnamed: it's resource-fork-heavy, not data-fork-only
+*(Historical — the `.code.bin` splice ("Path C") was removed in #130; `Reader.bin` is gone with #277. The two-fork merge in `build.ts` described here still exists — see the 2026-09-24 entry on its opposite-precedence twin in `resourceForkMerger.mjs`.)*
 **Context:** Phase 2 spec for Issue #30 Track 7 said "splice the
 freshly-WASM-Rez-compiled resource fork onto the precompiled `.code.bin`
 (the data-fork-only intermediate)". I trusted the description and built
@@ -660,6 +843,7 @@ releases). Document the carve-out in `index.html` so the next agent
 doesn't re-derive it.
 
 ### 2026-05-08 — Retro68 RIncludes ship no `Finder.r`; BNDL/FREF/ICN# must be raw `data` resources
+*(The BNDL/FREF/ICN# lesson holds; the Reader examples, CMake `add_application(Reader …)` and `build/Reader.bin` are historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A).)*
 **Context:** Adding the standard Finder-binding resource set (signature
 + BNDL + FREF + ICN# + STR ) to Reader so double-clicking `.html` files
 on the boot disk would route to us instead of triggering the Finder's
@@ -699,6 +883,7 @@ keyed on the file's Type/Creator, not its resources.
 <!-- Newest entries on top. -->
 
 ### 2026-05-08 — Network fetch must run on main thread; the WASM worker's microtask queue is starved
+*(The lesson holds; the MacWeather poller it describes was retired in #277.)*
 **Context:** MacWeather needs live weather JSON written into the Mac's
 extfs-mounted `/Shared/` tree. First attempt: run the `fetch()` poller
 inside the BasiliskII Web Worker (where `Module.FS` lives) so we could
@@ -745,6 +930,7 @@ the fetch call uses `mode: "cors", credentials: "omit"` so the same
 code path works in both contexts.
 
 ### 2026-05-08 — System 7 Startup Items: every app runs concurrently, but the LAST one launched is frontmost
+*(The System 7 behaviour holds; the Reader/MacWeather setup is historical — Startup Items auto-launch was disabled in #76 and Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A).)*
 **Context:** Multi-app boot: I want both Reader and MacWeather to
 auto-launch on boot, both visible. First version: copy both .bin files
 into `:System Folder:Startup Items:` and let Finder run them.
@@ -764,6 +950,7 @@ goes to Startup Items. CI orders the list so the demo we want
 front-most is last.
 
 ### 2026-05-08 — extfs `Unix:` volume isn't reliably mountable in System 7.5.5; bake samples onto `:Shared:` for first-boot reliability
+*(Historical context — MacWeather and its baked `weather.json` were retired in #277. The extfs mount-reliability observation is still unresolved background.)*
 **Context:** MacWeather opens `weather.json` from the extfs-mounted
 `/Shared/` tree (BasiliskII surfaces it as `Unix:` per the existing
 LEARNINGS entry). The JS poller writes `/Shared/weather.json` after
@@ -789,6 +976,7 @@ is future work. UI shows `(baked)` or `(live)` next to the time so
 the data source is visible.
 
 ### 2026-05-08 — extfs surfaces as Mac volume `Unix:`, not `Shared:` (bake :Shared: onto the boot disk instead)
+*(The `Unix:` volume-name finding holds; the Reader content it served is historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A).)*
 **Context:** Reader was launching from Startup Items but logging "no
 content found" — every `HOpen(0, 0, ":Shared:index.html", fsRdPerm, ...)`
 call was failing. The premise from the earlier "Seeding the Shared Mac
@@ -831,6 +1019,7 @@ upstream "premise" was correct *for upstream* because no upstream
 software reads from `:Shared:` by name.
 
 ### 2026-05-08 — Seeding the Shared Mac volume from JS via Emscripten FS
+*(The preRun seeding technique holds; the Reader / `app.dsk` context is historical — Reader, MacWeather and HelloMac were retired in #277 (#276 Phase 1A).)*
 **Context:** The C-side Reader app (commit 46fe8c4) reads HTML files from
 `:Shared:index.html`. We needed to wire BasiliskII's `extfs /Shared/` pref
 (already in `BASE_PREFS`) so the host page's `src/web/public/shared/*.html`
@@ -1221,6 +1410,7 @@ upstream paths are pinned in comments at
 pick up the trail without re-deriving.
 
 ### 2026-05-08 — Boot disk: build our own (System 7.5.5 from archive.org)
+*("Path C" here means "defer the boot disk" — unrelated to the later Path C `.code.bin` splice retired in #130.)*
 **Context:** Decision point on Path A (single bootable disk),
 Path B (chunked manifest), or Path C (defer). Path B is the "right"
 answer for the WASM init contract but requires the same worker port
@@ -1320,7 +1510,7 @@ re-fetches the page and injects the COOP/COEP headers on the way back, so
 the second load is cross-origin-isolated. There's a Vite plugin wrapper. The
 emulator-integration-engineer owns wiring it in; the build pipeline only
 flags the constraint via an inline comment in the deploy job and a note in
-PRD.md Component 4. If coi-serviceworker proves flaky, fallback is to host
+[`docs/archive/PRD.md`](docs/archive/PRD.md) Component 4. If coi-serviceworker proves flaky, fallback is to host
 on Cloudflare Pages (`_headers` file) or Netlify (`netlify.toml`) — both let
 you set arbitrary response headers, GH Pages can't.
 
@@ -1360,6 +1550,7 @@ guaranteed, the next step is to vendor a GPL-clean Chicago `.woff2` under
 later.
 
 ### 2026-05-08 — Installing hfsutils inside the Retro68 container
+*(The hfsutils-vs-hfsprogs lesson holds; `dist/app.dsk` and the Minesweeper build are historical — `app.dsk` was retired with Reader in #276.)*
 **Context:** Wiring `scripts/build-disk-image.sh` into `.github/workflows/build.yml`
 as a follow-on step to the CMake build. The script needs `hformat`/`hmount`/
 `hcopy` from the `hfsutils` Debian package, which is not preinstalled in
@@ -1416,6 +1607,7 @@ OS 9 stretch goal.
 src/app/CMakeLists.txt.
 
 ### 2026-05-07 — "Startup Items" only auto-launches from the boot volume's blessed System Folder
+*(The System 7 lesson holds; the secondary `app.dsk` plan is historical — retired with Reader in #276. Built apps now hot-load on an in-memory disk via `hfs-patcher.ts`.)*
 **Context:** PRD plan was to ship a tiny secondary `app.dsk` containing a
 `Startup Items` folder, mount it next to Infinite Mac's CDN-hosted System 7.5.5
 boot disk, and let the app auto-launch on boot.
