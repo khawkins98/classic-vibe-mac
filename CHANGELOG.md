@@ -14,15 +14,23 @@ new dated section.
 
 ## [Unreleased]
 
-### Pending (in review)
+### Added
 
-- Agent sweep, open in [#358](https://github.com/khawkins98/classic-vibe-mac/pull/358):
-  - Fixed: Pascal-string bugs in several sample apps, overlapping builds when
-    Build & Run is clicked twice, and the HFS date offset in the in-browser disk
-    patcher.
-  - Added: friendlier compiler error hints ([#334](https://github.com/khawkins98/classic-vibe-mac/issues/334)).
-  - Changed: AppleTalk relay hardening, accessibility improvements, heavy
-    playground modules now lazy-load, docs refresh.
+- Plain-English hints under common compiler and linker errors in the build log ([#334](https://github.com/khawkins98/classic-vibe-mac/issues/334), [#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- `CHANGELOG.md`; the original PRD is archived at `docs/archive/PRD.md` ([#359](https://github.com/khawkins98/classic-vibe-mac/pull/359)).
+
+### Changed
+
+- Build tools and the zip library now load on first use; the entry chunk is ~15% smaller ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- Ethernet relay hardened: frame/size/rate limits, per-zone socket cap, MAC validation, Durable Object hibernation, client backoff ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- Accessibility: palettes behave as dialogs (focus, Escape, focus return), keyboard-operable window controls, labelled menus, focus rings, AA-contrast muted text ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- Docs brought in line with the in-browser pipeline: ARCHITECTURE, HOW-IT-WORKS, PLAYGROUND, DEVELOPMENT, TROUBLESHOOTING, CONTRIBUTING, `src/app/README.md` ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358), [#359](https://github.com/khawkins98/classic-vibe-mac/pull/359)).
+
+### Fixed
+
+- Wrong length bytes in 16 hand-written Pascal strings across the samples, plus an out-of-bounds write in wasm-multiwin and a disposed-port draw in wasm-dialog ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- Double-clicking Build / Build & Run could start overlapping builds ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
+- The disk patcher corrupted the root folder's dates; the resource-fork decoder misread forks with a non-standard type-list offset ([#358](https://github.com/khawkins98/classic-vibe-mac/pull/358)).
 
 ## 2026-06: Maintenance
 
