@@ -64,7 +64,7 @@
 QDGlobals qd;
 
 static const unsigned char STARTER_TEXT[] = {
-    65,
+    60,
     'N','o','t','e','p','a','d',' ','-','-',' ','t','y','p','e',' ',
     'a','w','a','y','.',13,
     13,
