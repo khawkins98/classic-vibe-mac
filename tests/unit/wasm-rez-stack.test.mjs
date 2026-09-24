@@ -28,8 +28,13 @@ const REPO = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 
 function runStress(inputPath) {
   return spawnSync(
-    "node",
-    [join(REPO, "scripts/stress-wasm-rez.mjs"), inputPath],
+    process.execPath,
+    // Node 24's default V8 stack limit (~984 KB) is exhausted by the
+    // Glypha .r evaluator recursion (wasm frames count against the host
+    // stack), while Node 20/22 pass. 2 MB is well under the 8 MB OS
+    // main-thread stack, so this is safe and keeps the test
+    // node-version-independent.
+    ["--stack-size=2000", join(REPO, "scripts/stress-wasm-rez.mjs"), inputPath],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   );
 }
