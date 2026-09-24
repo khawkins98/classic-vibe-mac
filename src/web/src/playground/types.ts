@@ -7,9 +7,9 @@
  */
 
 /**
- * One sample project that ships in the bundle. The first cut covers the
- * two existing demo apps (`reader`, `macweather`) with their `.c` / `.r` /
- * `.h` source files only — no build outputs, no boot disks.
+ * One sample project that ships in the bundle. Each entry maps to a
+ * `src/app/wasm-<name>/` directory and lists its `.c` / `.r` / `.h`
+ * source files only — no build outputs, no boot disks.
  *
  * `files` is the canonical, bundle-version source. We persist a per-file
  * copy in IndexedDB the first time the user opens the project so edits
@@ -92,9 +92,9 @@ export interface SampleProject {
    * Filenames sort case-insensitively *after* the main app's
    * filename in HFS catalog key order (same constraint as
    * `PatchOptions.extraFiles`). For most apps this is satisfied
-   * naturally — app names start with a capital letter (e.g.
-   * "Reader" or no-affix "wasm-icon-gallery" project's output
-   * "WasmIconGallery") and asset filenames start lower-case.
+   * naturally — app names start with a capital letter (e.g. the
+   * "wasm-icon-gallery" project's output "WasmIconGallery") and
+   * asset filenames start lower-case.
    */
   binaryAssets?: string[];
   /**
@@ -164,15 +164,10 @@ export function complexityStars(level: 1 | 2 | 3 | 4 | 5 | 6): string {
 
 /**
  * The demo projects we expose. Order matches the order the dropdown
- * shows. `reader.c` is intentionally the first file revealed — that's
- * where the inline `// ← try changing this` comment lives, per the
- * editor reviewer's "discoverable, not in your face" recommendation.
- *
- * Hello Mac (added later) is a deliberately simpler third sample —
- * one window, one string, no parsing, no I/O — so visitors can verify
- * the playground's full edit-and-rebuild flow on something with
- * almost no surface area, and so the friendliest first read of "what
- * does a System 7 app look like?" is one click away.
+ * shows. Each project's first file is the one revealed on open, so
+ * put the file carrying the inline `← try changing this` comment
+ * first (per the editor reviewer's "discoverable, not in your face"
+ * recommendation). wasm-hello leads the list as the smallest on-ramp.
  */
 export const SAMPLE_PROJECTS: readonly SampleProject[] = [
   // Three legacy splice-path projects (reader, macweather, hello-mac)
@@ -180,9 +175,8 @@ export const SAMPLE_PROJECTS: readonly SampleProject[] = [
   // .code.bin data forks that the playground couldn't actually rebuild
   // in-browser — only the .r resource fork was editable, which
   // surprised users who edited the .c expecting their changes to show
-  // up. Their source files still live under src/app/<name>/ and the
-  // CI-built binaries still ship on the boot disk (so the Mac
-  // auto-launches them on startup as showcase apps). The Path-C splice
+  // up. The apps themselves (and their CMake builds) were retired
+  // entirely in #276, so no source remains under src/app/. The Path-C splice
   // dispatch + precompiledName field were retired in a follow-up to
   // #125; every project in this list now compiles end-to-end in the
   // browser, distinguished only by whether it has an `.r` resource

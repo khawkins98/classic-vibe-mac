@@ -61,14 +61,14 @@ static void DrawHint(void) {
      * startup + on each Clear. Subtle, doesn't compete with the user's
      * scribbles since the user is expected to draw further down. */
     unsigned char hint[] = {
-        24,
+        27,
         'D','r','a','g',' ','i','n','s','i','d','e',' ','t','o',' ',
         'd','r','a','w','.',' ','C','l','i','c','k',' '
     };
     MoveTo(8, gClearRect.bottom + 14);
     DrawString(hint);
     unsigned char hint2[] = {
-        21,
+        22,
         'C','l','e','a','r',' ','t','o',' ','w','i','p','e',';',' ',
         'c','l','o','s','e',' ','='
     };
@@ -190,6 +190,7 @@ int main(void) {
                      * Clear is the only way to wipe. Update events
                      * just redraw the chrome. */
                     DrawClearButton();
+                    DrawHint();
                     EndUpdate(gWin);
                 }
                 break;

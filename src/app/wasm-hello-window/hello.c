@@ -63,11 +63,17 @@ int main(void) {
         EventRecord ev;
         WaitNextEvent(everyEvent, &ev, 60, NULL);
         switch (ev.what) {
-            case mouseDown:
-                if (FindWindow(ev.where, &win) == inGoAway) {
+            case mouseDown: {
+                /* FindWindow writes the hit window into its out-param, so
+                 * give it its own variable. Passing &win would overwrite
+                 * our only reference to the app window, and the updateEvt
+                 * check below would then compare against the wrong one. */
+                WindowPtr hitWin;
+                if (FindWindow(ev.where, &hitWin) == inGoAway) {
                     return 0;  /* click close box → exit */
                 }
                 return 0;  /* any other click exits too */
+            }
             case updateEvt:
                 if ((WindowPtr)ev.message == win) {
                     BeginUpdate(win);

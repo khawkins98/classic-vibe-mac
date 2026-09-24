@@ -1,9 +1,9 @@
 /**
  * Emulator configuration — typed shape consumed by emulator-loader.ts.
  *
- * Files referenced here are placed by `scripts/fetch-emulator.sh` (binaries),
- * `scripts/build-disk-image.sh` (app.dsk), and `scripts/build-boot-disk.sh`
- * (system755-vibe.dsk). The build pipeline copies the .dsk artifacts next
+ * Files referenced here are placed by `scripts/fetch-emulator.sh` (binaries)
+ * and `scripts/build-boot-disk.sh` (system755-vibe.dsk). The build pipeline
+ * copies the .dsk artifacts next
  * to index.html post-`vite build`. Everything is served as static GH Pages
  * assets at the Vite `base` path.
  */
@@ -25,8 +25,6 @@ export interface EmulatorConfig {
    * EmulatorWorkerChunkedDisk (worker/chunked-disk.ts upstream).
    */
   bootDiskUrl: string | null;
-  /** Our generated app.dsk (HFS, ~1MB) — sits next to index.html. */
-  appDiskUrl: string;
   /** Logical screen size for the emulated Mac. 512x342 = original Mac. */
   screen: { width: number; height: number };
   /**
@@ -70,7 +68,6 @@ export const emulatorConfig: EmulatorConfig = {
   // Loader resolves `${bootDiskUrl}.json` for the chunked manifest and
   // `${bootDiskUrl-without-.dsk}-chunks/<sig>.chunk` for chunk fetches.
   bootDiskUrl: `${BASE}system755-vibe.dsk`,
-  appDiskUrl: `${BASE}app.dsk`,
   screen: { width: 640, height: 480 },
   // Shared volume seed list. The /Shared/ mount itself is still needed —
   // it's the back-channel for cvm_log (Debug Console pane). But no app

@@ -39,8 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Install hfsutils into the Retro68 container so scripts/build-disk-image.sh
-      # can produce our custom app.dsk. The Retro68 image is Debian-based and runs
+      # Install hfsutils into the Retro68 container so scripts/build-boot-disk.sh
+      # (below) can build the System 7.5.5 boot disk. The Retro68 image is Debian-based and runs
       # as root in GH Actions (no sudo needed / available). hfsutils is the classic
       # HFS toolkit (hformat/hmount/hcopy); do NOT substitute hfsprogs — that is
       # HFS+ and Basilisk II / classic Mac OS cannot read it (see LEARNINGS.md).

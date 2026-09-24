@@ -70,7 +70,10 @@ static void DrawWin(WindowPtr w) {
     unsigned char label[] = {
         8, 'W','i','n','d','o','w',' ','?'
     };
-    label[9] = '1' + (idx % 3);
+    /* The '?' placeholder is the LAST character, at index label[0] (== 8).
+     * Pascal-string characters live at indices 1..length, so writing
+     * label[9] would scribble one byte past the end of this 9-byte array. */
+    label[label[0]] = '1' + (idx % 3);
     short w_ = StringWidth(label);
     MoveTo((r.right - r.left - w_) / 2, 20);
     DrawString(label);

@@ -80,7 +80,7 @@ static void DrawIntro(void) {
     intro.right = gWin->portRect.right; intro.bottom = 36;
     EraseRect(&intro);
     unsigned char l1[] = {
-        29,
+        30,
         'S','o','u','n','d',' ','M','a','n','a','g','e','r',':',' ',
         'S','y','s','B','e','e','p',' ','x',' ','1',' ','o','r',' '
     };

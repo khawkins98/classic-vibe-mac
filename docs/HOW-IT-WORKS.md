@@ -1,6 +1,6 @@
 # How It Works
 
-_Last updated: 2026-05-15._
+_Last updated: 2026-09-24._
 
 A guided tour for the curious developer. What actually happens when
 you load `https://khawkins98.github.io/classic-vibe-mac/`, what you
@@ -42,13 +42,15 @@ required headers faked client-side. After that, `crossOriginIsolated
 striped title bar, menu bar, period background. `emulator-loader.ts`
 mounts a period progress bar inside `#emulator-canvas-mount`,
 HEAD-checks the chunked manifest at `${bootDiskUrl}.json`, then
-spawns `emulator-worker.ts` as a `type: 'module'` Web Worker and
-hands it the canvas via `OffscreenCanvas`.
+spawns `emulator-worker.ts` as a `type: 'module'` Web Worker. The
+canvas stays on the main thread: a `requestAnimationFrame` loop copies
+the worker's SAB framebuffer into an `ImageData` and `putImageData`s
+it.
 
 ### 4. Worker boots BasiliskII against System 7.5.5
 
 The worker allocates three SharedArrayBuffers — video framebuffer,
-videoMode metadata, and a 256-byte input ring whose offsets match
+videoMode metadata, and a 400-byte (100 × Int32) input ring whose offsets match
 Infinite Mac's `InputBufferAddresses` byte-for-byte. It fetches the
 Quadra-650 ROM, renders a prefs template (`modelid 30`, load-bearing
 — see [`LEARNINGS.md`](../LEARNINGS.md)), mounts the boot disk via
@@ -72,7 +74,6 @@ cache.
 |     :System Folder:Startup Items: (empty — visitor    |
 |       picks a sample and clicks Build & Run; the      |
 |       compiled .bin mounts on a fresh secondary disk) |
-|     :Shared: HTML pages baked at build time           |
 +-------------------------------------------------------+
 ```
 
@@ -89,10 +90,12 @@ boot disk and finish in ~1 second.
 26 wasm-* samples ship today — a Toolbox-surface ladder from
 `wasm-hello` (one `DrawString`) through `wasm-mdpad` (split-pane
 Markdown editor + live preview) up to `wasm-glypha3` (John Calhoun's
-1992 arcade game, 6,600 LOC, vendored whole). Each sample is a
+1992 arcade game, ~6,300 lines of C across nine files plus a 2.7 MB
+upstream `.r`, vendored whole). Each sample is a
 self-contained subdirectory under `src/app/wasm-<name>/` with C
 source + an optional `.r` resource file + occasionally a precompiled
-binary resource bundle (`precompiledForkAssets`). See
+binary resource file shipped beside the app (`binaryAssets`, e.g.
+`wasm-icon-gallery`'s `icons.rsrc.bin`). See
 [`src/app/README.md`](../src/app/README.md) for the per-sample
 matrix.
 
@@ -137,7 +140,9 @@ The **Download** button packages the current project as a `.zip` the
 user can re-import via File → Open .zip.
 
 The CodeMirror editor inside Playground seeds from
-`src/web/public/sample-projects/` on first load and rehydrates from
+`/sample-projects/<project>/<file>` on first load (a Vite plugin in
+`src/web/vite.config.ts` copies those out of `src/app/wasm-*/` at
+build time; they aren't checked in) and rehydrates from
 IndexedDB on subsequent loads, so edits survive reloads. Editor
 niceties land via the standard CodeMirror 6 extension stack:
 syntax highlighting for `.c` and `.r` (warm earth-tone palette
@@ -170,30 +175,42 @@ session-level payoff is observable.
 
 ### 7. Build & Run: the full toolchain runs in the tab
 
-Click Build. The page does, for every sample project in the picker:
+Click Build. For the project open in the editor, the page:
 
-1. Reads the user's source from IndexedDB.
+1. Collects the project's `.c`/`.h` files: the open file straight
+   from the editor buffer, the rest from IndexedDB (seeded from the
+   bundled defaults on first touch).
 2. Compiles every `.c` through the in-browser toolchain
    ([wasm-retro-cc](https://github.com/khawkins98/wasm-retro-cc)'s
    Retro68 GCC ported to wasm): cc1 → as → ld → Elf2Mac, yielding a
    complete MacBinary II APPL.
 3. If the project has an `.r` file (most do — `wasm-hello-window`,
    `wasm-snake`, `wasm-textedit`, `wasm-mdpad`, `wasm-glypha3`, etc),
-   compiles it through the ~100 KB Apple Rez wasm and splices the
+   runs it through a small TypeScript preprocessor (`preprocessor.ts`,
+   for `.r` files only; cc1 does its own C preprocessing), compiles
+   it through the ~100 KB Apple Rez wasm, and splices the
    resulting resource fork over the C-built fork — user resources
    (WIND, MENU, SIZE) win on (type, id) collision. Vendored apps
-   that also ship a precompiled resource bundle (`precompiledForkAssets`
-   in `SAMPLE_PROJECTS`) get that merged in too — see
+   can also declare a precompiled resource bundle (`precompiledForkAssets`
+   in `SAMPLE_PROJECTS`) that gets merged in underneath the user's
+   fork; no sample uses it today — see
    [`ARCHITECTURE.md`'s vendored-app section](./ARCHITECTURE.md#vendored-app-fork-composition-pathb).
 4. Patches the merged MacBinary into an in-memory HFS disk image
-   (template-splice path: ship one empty `.dsk` as a CI artifact,
-   patch the catalog leaf + bitmap + MDB to insert one file).
-5. Calls the emulator worker's `dispose()` + `boot()` to re-spawn
-   BasiliskII on the new disk.
+   (template-splice path: fetch the committed
+   `playground/empty-secondary.dsk`, patch the catalog leaf + bitmap +
+   MDB to insert one file; see `hfs-patcher.ts`). Any `binaryAssets`
+   the project declares go onto the same disk as separate files.
+5. Hands the disk bytes to the emulator handle's `boot()` (in
+   `emulator-loader.ts`), which terminates the running worker outright
+   and spawns a fresh one with the new disk mounted as a secondary.
 
-Warm round trip: **~820 ms in production today**, well under the
-"sub-second" goal. First click after page load is ~1.5 s (WASM-Rez
-instantiation + RIncludes parse).
+For a resource-only edit the warm round trip was measured at
+**~820 ms**; first click after page load is ~1.5 s (WASM-Rez
+instantiation + RIncludes parse). When C changed too, expect the
+~1.5 s warm figure in the next section. An unchanged C source set
+skips the compile entirely: `editor.ts` keeps an in-memory cache
+(`cBuildCache`) keyed on a SHA-256 of the sources + optimisation
+level, which is where the `[cvm-stats]` "cache hits" come from.
 
 That's the loop. Edit a string, watch the Mac re-launch with your
 change. Single tab, no install, no auth, no server.
@@ -227,14 +244,21 @@ The page reaches into the wasm toolchain like so:
 6. Splices a default SIZE resource (libretrocrt needs the heap
    sized properly).
 7. Hands the resulting `.bin` to the same in-memory HFS patcher
-   the `.r` path uses, calls `dispose()` + `boot()` on the worker.
+   the `.r` path uses, then `boot()`s the emulator on the result.
 
 Warm round trip: **~1.5s** (cc1+as+ld+Elf2Mac runs in 30-50ms
 total once the modules are loaded; the rest is HFS-patch + worker
 respawn). Cold first-click: ~3-5s (lazy-load the toolchain).
 
-The orchestration layer is `src/web/src/playground/cc1.ts`'s
-`compileToBin()` function. The wasm modules themselves come from
+The entry point is `compileToBin()` in
+`src/web/src/playground/cc1.ts`, which takes a list of source files,
+so multi-file projects like `wasm-glypha3` go through the same path
+(#100). It loads the wasm modules and hands the per-stage sequencing
+to `runCompilePipeline()` in `compilePipeline.mjs` (#271), which is
+plain JS so the Node-side audit scripts can drive the same code.
+`toolchain.ts` wraps all of this behind a small backend interface
+(`getToolchain()`, one `retro68-68k` entry today) so a second
+toolchain could slot in later. The wasm modules themselves come from
 [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc) and
 are vendored as binary assets under
 `src/web/public/wasm-cc1/`. The cv-mac side does not implement
@@ -274,20 +298,22 @@ your idea fits one of these, you'll have fun:
   forks, the System 7 Toolbox, MacBinary, BNDL/FREF/ICN# Finder
   binding, the event loop — all visible and inspectable here in a
   way they're not on a real machine in a museum.
-- **Interactive content rendered through the Mac.** An HTML viewer
-  (Reader does this — it parses a tiny HTML subset and renders with
-  QuickDraw), a Markdown viewer, a Lisp REPL, a small game with
-  arrow-key controls. The Mac is the "screen" for content the host
-  page hands it via `:Shared:`.
+- **Interactive content rendered through the Mac.** A Markdown
+  editor with live preview (`wasm-mdpad`), an HTML viewer (the retired
+  Reader app parsed a tiny HTML subset and rendered it with QuickDraw),
+  a Lisp REPL, a small game with arrow-key controls (`wasm-snake`,
+  `wasm-arkanoid`). The Mac is the "screen" for content the host page
+  hands it via extfs.
 - **Peer-to-peer AppleTalk apps.** If you deploy the optional
   Cloudflare zone relay (see [`docs/NETWORKING.md`](./NETWORKING.md)),
   multiple visitors can join a shared zone for Mac-to-Mac networking.
   That keeps the internet-facing part on the host side while still
   letting the guest Macs talk to each other like Macs.
 - **QuickDraw period-art experiments.** 1-bit dithered glyphs,
-  patterns, fills, the QuickDraw region calculus. The MacWeather
-  app's `weather_glyphs.c` is exactly this — sun/cloud/rain icons
-  drawn pixel-by-pixel with `MoveTo` + `Line` + `PaintRect`.
+  patterns, fills, the QuickDraw region calculus. `wasm-patterns`
+  and `wasm-scribble` are small examples; the retired MacWeather
+  app drew its sun/cloud/rain icons pixel-by-pixel with `MoveTo` +
+  `Line` + `PaintRect`.
 - **Anything where the aesthetic _is_ the message.** A System 7
   About box for your portfolio site. A 1-bit dithered headline. A
   "this looks like the '90s because it _is_ running the '90s" demo. The
@@ -306,17 +332,14 @@ trade.
   dependencies are: the Mac Toolbox (frozen mid-90s), Retro68's
   RIncludes, what you write yourself in C.
 - **RAM.** ~16 MB for the whole guest Mac. Each app gets a
-  partition declared in `SIZE -1`; Reader runs with ~512KB
-  preferred. There is no garbage collector, no
+  partition declared in `SIZE -1`; most shelf samples ask for a few
+  hundred KB. There is no garbage collector, no
   malloc-without-thinking-about-it.
-- **Build speed.** The 68k cross-compile in CI is ~3-4 minutes end
-  to end. The in-browser Rez loop is ~1s for resource edits;
-  **the in-browser C compile loop is ~1.5s warm** (cold first-click
-  is ~3-5s for the lazy-load of the 3.9 MB brotli toolchain). For
-  the bundled boot-disk apps (Reader, MacWeather, etc.) C source
-  changes still go through CI — they're built into the boot disk
-  before the page boots. For in-browser projects like `wasm-hello`,
-  everything is in-tab.
+- **Build speed.** The in-browser Rez loop is ~1s for resource
+  edits; **the in-browser C compile loop is ~1.5s warm** (cold
+  first-click is ~3-5s for the lazy-load of the 3.9 MB brotli
+  toolchain). Every sample on the shelf builds in-tab; the old
+  CI-built boot-disk apps (Reader, MacWeather, etc.) retired in #276.
 - **`console.log`.** No stdout in System 7. Debugging is
   `DebugStr`, `MoveTo` + `DrawString` to a debug window, or
   recompile-and-launch.
@@ -329,9 +352,9 @@ trade.
 - **A modern editing experience.** CodeMirror 6 with C
   highlighting, IndexedDB persistence, download-as-zip. Edit in
   the same tab as the running Mac.
-- **A real CI pipeline.** Push to `main`, GitHub Actions runs
-  Retro68 in a container, builds the boot disk with `hfsutils`,
-  Vite-builds the page, deploys to Pages. ~3-4 minutes end to end.
+- **A real CI pipeline.** Push to `main`, GitHub Actions builds the
+  (vanilla) boot disk with `hfsutils`, Vite-builds the page, deploys
+  to Pages. ~3-4 minutes end to end.
 - **The URL-anyone-can-visit endpoint.** No "send me your
   binary," no "pull my repo and run `make`," no "install
   Mini vMac and download a ROM." Just a link.
@@ -352,8 +375,8 @@ If you want to do this _properly_, the established paths today are:
   constraints. You can build apps of any size.
 
 **Where this project sits on that spectrum:** a _playground_, not
-a dev environment. You can poke at and rebuild the resource fork
-of a tightly-scoped sample app with a ~1-second loop, in a single
+a dev environment. You can edit the C and resources of a sample app
+and rebuild it with a ~1-second loop, in a single
 browser tab, with zero install. That's the differentiator.
 
 What you **can't** do here today:
@@ -362,17 +385,11 @@ What you **can't** do here today:
   This used to be "killed in Epic #19" — 4-9 engineer-months
   to port GCC + linker to WASM. **Shipped 2026-05-15** via a
   different path (wasm-compile Retro68's existing toolchain
-  instead of porting GCC from scratch). For projects like
-  `wasm-hello` you can now edit C source and rebuild end-to-end
-  in the browser in ~1.5s. The bundled boot-disk apps still go
-  through CI (their resource forks have CMake recipes the
-  in-browser path doesn't yet handle) — see
+  instead of porting GCC from scratch). It started with
+  `wasm-hello`; multi-file C plus a `.r` in one build landed under
   [#100](https://github.com/khawkins98/classic-vibe-mac/issues/100)
-  for the mixed C + `.r` roadmap.
-- **Multi-file C projects, mixed C + `.r` in one in-browser build.**
-  Single C source file in, single MacBinary II out — the current
-  limit of the in-browser pipeline. Multi-file support is the next
-  step ([#100](https://github.com/khawkins98/classic-vibe-mac/issues/100)).
+  (now closed), and the same path now builds `wasm-glypha3`, a
+  vendored nine-file period game, in the tab.
 - **Debug with breakpoints.** No source-level debugger. Add
   `DrawString` calls or run the binary under MacsBug locally.
 - **Use Inside Macintosh's full API surface interactively.** You
@@ -433,11 +450,11 @@ the rest of the docs:
   `modelid 30`, BNDL/FREF/ICN# raw bytes, COEP `credentialless` in
   dev, extfs surfacing as `Unix:`, the input-ring lock layout.
   Skim this before you debug anything weird.
-- [`src/app/README.md`](../src/app/README.md) — Per-app
-  explanation. How `add_application()` wires creator codes through
-  Rez, how to add a new app to the boot disk, how the Toolbox
-  shell + pure-C engine split works in practice.
+- [`src/app/README.md`](../src/app/README.md) — Per-sample
+  explanation. The wasm-shelf matrix, how to add a wasm-shelf sample,
+  and the Toolbox shell + pure-C engine split. (It still carries
+  sections on the retired CMake apps.)
 
 That should be enough to get from "I read the doc on the home page"
-to "I'm modifying the worker and the boot disk." Have fun. Don't
+to "I'm modifying the worker and the samples." Have fun. Don't
 forget to read [`LEARNINGS.md`](../LEARNINGS.md) before you debug.

@@ -9,7 +9,7 @@
 // Side-effect import the WinBox bundle (broken main field) and reach
 // for the global at runtime. See projectPicker.ts for the trail.
 import "winbox/dist/winbox.bundle.min.js";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 import { BUNDLE_VERSION, BUILT_AT, TOOLCHAIN_VERSION } from "./playground/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -38,6 +38,7 @@ export function openAbout(): void {
     },
   });
   enableShade(wb);
+  enableWindowA11y(wb, { dialog: true });
   active = { focus: () => wb.focus(), close: () => wb.close() };
 }
 
