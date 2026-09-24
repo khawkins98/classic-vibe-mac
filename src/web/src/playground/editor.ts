@@ -58,7 +58,14 @@ import {
 // Build pipeline (cc1 driver, Rez, HFS patcher, fork splicers) is only
 // needed once the user builds, so it lives in its own lazily-loaded
 // chunk. The module loader memoises the import; repeat calls are cheap.
-const loadBuildPipeline = () => import("./buildPipeline");
+// If the tab outlived a redeploy, the old hashed chunk 404s; say so
+// plainly instead of surfacing "Failed to fetch dynamically imported module".
+const loadBuildPipeline = () =>
+  import("./buildPipeline").catch((err) => {
+    throw new Error(
+      `Couldn't load the build tools — the playground may have been updated since this tab opened. Reload the page and try again. (${err instanceof Error ? err.message : String(err)})`,
+    );
+  });
 
 import {
   SAMPLE_PROJECTS,

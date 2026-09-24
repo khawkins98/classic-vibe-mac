@@ -182,10 +182,15 @@ export class EthernetZoneProvider {
       console.warn("[ethernet] WebSocket error");
     });
 
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (ev) => {
       // Ignore closes from sockets we've already replaced or disposed.
       if (this.#closed || this.#ws !== ws) return;
       this.#ws = null;
+      // 1008 = the relay rejected us (bad MAC / policy); retrying won't help.
+      if (ev.code === 1008) {
+        console.warn(`[ethernet] relay rejected connection: ${ev.reason}`);
+        return;
+      }
       this.#scheduleReconnect();
     });
   }
