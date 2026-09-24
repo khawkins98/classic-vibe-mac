@@ -35,18 +35,14 @@
  *     extract-resource-fork.mjs or for any tool that just reads the
  *     resource fork. BasiliskII / real Mac OS may complain — for that
  *     use the browser path.
- *   - Uses `resourceForkMerger.mjs`'s "first-fork wins" merger called
- *     with `[user, code]` to get "user wins" semantics. Stays in
- *     lockstep with the browser merger automatically.
+ *   - Calls `resourceForkMerger.mjs`'s `mergeResourceForks` exactly
+ *     as build.ts does (`[code, user]`, `onConflict: "last"`), so the
+ *     merged fork is byte-identical to the browser's.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  decodeResourceFork,
-  encodeResourceFork,
-  mergeResourceForks,
-} from "../src/web/src/playground/resourceForkMerger.mjs";
+import { mergeResourceForks } from "../src/web/src/playground/resourceForkMerger.mjs";
 
 const HEADER_SIZE = 128;
 const padBytes = (n) => Math.ceil(n / 128) * 128;
@@ -81,9 +77,11 @@ const rsrc = extractRsrcFork(resolve(rsrcPath));
 console.log(`[splice]    code: data=${code.dataLen}B rsrc=${code.rsrcFork.length}B`);
 console.log(`[splice]    rsrc: data=${rsrc.dataLen}B rsrc=${rsrc.rsrcFork.length}B`);
 
-// "first-fork wins" called with [user, code] = user wins on collisions,
-// matching the browser's spliceResourceFork semantics.
-const merged = mergeResourceForks([rsrc.rsrcFork, code.rsrcFork]);
+// Same call as build.ts's spliceResourceFork: code fork first (its types
+// lead the type list), user fork wins every (type, id) collision.
+const merged = mergeResourceForks([code.rsrcFork, rsrc.rsrcFork], {
+  onConflict: "last",
+});
 console.log(`[splice]  merged: rsrc=${merged.length}B`);
 
 // Compose output: code's header (with patched rsrc length) + code's data

@@ -11,6 +11,32 @@ export interface DecodedResource {
   data: Uint8Array;
 }
 
-export function mergeResourceForks(forks: Uint8Array[]): Uint8Array;
+export interface DecodedResourceFork {
+  /** Resource-map attributes word (map+22). */
+  mapAttrs: number;
+  resources: DecodedResource[];
+}
+
+export interface MergeOptions {
+  /**
+   * Which occurrence of a duplicate `(type, id)` survives: "first"
+   * (default) keeps the earliest fork's, "last" keeps the latest's.
+   */
+  onConflict?: "first" | "last";
+}
+
+export interface EncodeOptions {
+  /** Resource-map attributes word to write at map+22. Default 0. */
+  mapAttrs?: number;
+}
+
+export function mergeResourceForks(
+  forks: Uint8Array[],
+  options?: MergeOptions,
+): Uint8Array;
 export function decodeResourceFork(fork: Uint8Array): DecodedResource[];
-export function encodeResourceFork(resources: DecodedResource[]): Uint8Array;
+export function decodeResourceForkMap(fork: Uint8Array): DecodedResourceFork;
+export function encodeResourceFork(
+  resources: DecodedResource[],
+  options?: EncodeOptions,
+): Uint8Array;
