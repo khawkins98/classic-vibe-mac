@@ -131,7 +131,7 @@ static Boolean   gHasFile = FALSE;
 /* Starter doc — Pascal-string layout: first byte is the length-1 of
  * the rest. Keeps the buffer flat and avoids strlen at runtime. */
 static const unsigned char STARTER[] = {
-    243,
+    249,
     '#',' ','M','a','r','k','d','o','w','n',' ','i','n',' ','S','y',
     's','t','e','m',' ','7',13,
     13,
@@ -621,7 +621,7 @@ static void DoFileSaveAs(void) {
     /* Pascal strings — first byte is length. Kept ASCII-only so the
      * source compiles to identical bytes regardless of editor encoding
      * (cv-mac #297 / #291: UTF-8 ellipses round-trip badly through Rez). */
-    unsigned char prompt[] = { 18,
+    unsigned char prompt[] = { 19,
         'S','a','v','e',' ','a','s',' ','M','a','r','k','d','o','w','n','.','.','.' };
     unsigned char dflt[]   = { 11,
         'U','n','t','i','t','l','e','d','.','m','d' };

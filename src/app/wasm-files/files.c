@@ -58,7 +58,7 @@ static Boolean gDone = 0;
 static Rect gBtnOpen, gBtnSave, gBtnQuit;
 
 static const unsigned char kStarter[] = {
-    62,
+    63,
     'T','y','p','e',' ','h','e','r','e',',',' ',
     'h','i','t',' ','S','a','v','e',' ','t','o',' ','w','r','i','t','e',' ',
     't','o',' ','d','i','s','k','.',13,
@@ -141,13 +141,19 @@ static void DoOpen(void) {
     }
     FSClose(refNum);
     TESetSelect(0, 0, gTE);
-    InvalRect(&(**gTE).viewRect);
+    /* Copy viewRect out of the TERec before calling InvalRect.
+     * `&(**gTE).viewRect` points *inside* a relocatable block; InvalRect
+     * can allocate (it grows the update region), which may move that
+     * block and leave the pointer dangling. Copying to a stack local is
+     * the classic safe idiom. */
+    Rect view = (**gTE).viewRect;
+    InvalRect(&view);
 }
 
 /* Save: StandardPutFile -> FSpCreate (overwriting if needed) -> FSWrite. */
 static void DoSave(void) {
     StandardFileReply reply;
-    unsigned char prompt[] = { 11, 'S','a','v','e',' ','a','s','.','.','.' };
+    unsigned char prompt[] = { 10, 'S','a','v','e',' ','a','s','.','.','.' };
     unsigned char dflt[] = { 8, 'U','n','t','i','t','l','e','d' };
     StandardPutFile(prompt, dflt, &reply);
     if (!reply.sfGood) return;
