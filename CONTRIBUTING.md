@@ -92,8 +92,8 @@ spawns its child process with that flag, so there's nothing to set).
    the same workflow deploys from your fork's `main`.)
 
 Adding a *new* sample (rather than editing an existing one) takes
-four registrations: the source under `src/app/wasm-<name>/`, a
-`SEED_FILES` entry in `src/web/vite.config.ts`, a `SAMPLE_PROJECTS`
+three steps: the source under `src/app/wasm-<name>/` (picked up
+automatically by `src/web/vite.config.ts`), a `SAMPLE_PROJECTS`
 entry in `src/web/src/playground/types.ts`, and a `PICKER_ENTRIES`
 blurb in `src/web/src/projectPicker.ts`. The step-by-step is in
 [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md#add-a-new-sample-to-the-shelf);

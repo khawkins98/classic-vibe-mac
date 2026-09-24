@@ -158,8 +158,8 @@ comfort level. Highlights:
 Full inventory + coverage matrix in
 [`src/app/README.md`](./src/app/README.md). Adding a sample is a
 new `src/app/wasm-<name>/` directory + a `SAMPLE_PROJECTS` entry
-in `src/web/src/playground/types.ts` + a SEED_FILES entry in
-`src/web/vite.config.ts` — no CMake, no CI step, no toolchain
+in `src/web/src/playground/types.ts` + a picker blurb in
+`src/web/src/projectPicker.ts` — no CMake, no CI step, no toolchain
 install. The audit at `npm run audit:wasm-e2e` compiles every
 sample headlessly on every PR so regressions surface at review
 time, not at "user clicks Build."
@@ -430,13 +430,14 @@ with the deploy.
    minimum: one `.c` file with a `main()` and one `.r` file (SIZE,
    WIND if you want a window, signature data). Pick a 4-letter
    creator code. See
-   [`src/app/README.md` § How to add a new app](./src/app/README.md#how-to-add-a-new-app).
-3. **Register the sample.** Two short entries:
+   [`src/app/README.md` § Adding a sample](./src/app/README.md#adding-a-sample).
+3. **Register the sample.** Two short entries (the source files
+   themselves are picked up automatically from `src/app/wasm-*/`):
    - `src/web/src/playground/types.ts` → push a `SampleProject`
      entry (id, label, files, rezFile, outputName, appType,
-     appCreator, complexity).
-   - `src/web/vite.config.ts` → push the same files into the
-     `SEED_FILES` map so they get copied into the playground bundle.
+     appCreator, complexity). The creator code must be unique —
+     the audit fails on duplicates.
+   - `src/web/src/projectPicker.ts` → add a `PICKER_ENTRIES` blurb.
 4. **Verify locally.** `npm run audit:wasm-e2e -- wasm-<your-name>`
    runs both halves of the build (`.c` + `.r`) for your sample.
    If it goes green, the
