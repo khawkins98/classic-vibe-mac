@@ -18,7 +18,7 @@ playground for resource-fork edits to classic Mac apps. Companion docs:
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the system this playground
 plugs into, and [`AGENT-PROCESS.md`](./AGENT-PROCESS.md) for the
 five-reviewer pass that produced this design. See also
-[`PRD.md`](../PRD.md), [`LEARNINGS.md`](../LEARNINGS.md), and
+[`archive/PRD.md`](./archive/PRD.md) (archived original plan), [`LEARNINGS.md`](../LEARNINGS.md), and
 [`src/app/README.md`](../src/app/README.md) for the apps the playground
 edits.
 
@@ -112,8 +112,8 @@ hardened compile sandbox." 2F walks away from that.
 
 ## Status
 
-_Canonical shipped-state record. README.md and PRD.md point here;
-don't duplicate this in either file._
+_Canonical shipped-state record. README.md points here;
+don't duplicate this there._
 
 | Phase | What | State |
 |-------|------|-------|

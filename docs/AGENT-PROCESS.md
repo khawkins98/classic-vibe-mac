@@ -146,9 +146,12 @@ Hard-won rules for parallel agents in the same session.
 - **Every PR can update `LEARNINGS.md` and the relevant
   `docs/*.md`.** The cost is small (a paragraph) and the
   compounding return is large.
-- **PRD reflects current scope.** When the scope of an Epic
-  changes — closed, refined, deferred — `PRD.md` gets the
-  edit in the same session. Not later.
+- **Docs reflect current scope.** When the scope of an Epic
+  changes — closed, refined, deferred — `docs/PLAYGROUND.md`
+  (status) and `docs/ARCHITECTURE.md` (constraints, non-goals)
+  get the edit in the same session. Not later. (`PRD.md` was
+  archived to `docs/archive/` on 2026-09-24 and is no longer
+  maintained.)
 - **README screenshots stay current.** When the deployed
   page changes meaningfully, regenerate
   `public/screenshot-deployed.png`. The screenshot is the
@@ -165,7 +168,7 @@ Hard-won rules for parallel agents in the same session.
   [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the system as it is,
   [`PLAYGROUND.md`](./PLAYGROUND.md) for the design rationale of
   the active Epic, [`AGENT-PROCESS.md`](./AGENT-PROCESS.md) for
-  this workflow. Cross-link between them and back to PRD /
+  this workflow. Cross-link between them and back to
   README / LEARNINGS so a contributor entering from any door can
   navigate.
 

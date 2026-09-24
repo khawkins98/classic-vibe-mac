@@ -8,7 +8,7 @@ resource-fork editor design rationale (Epic #21), and
 [`AGENT-PROCESS.md`](./AGENT-PROCESS.md) for the dev workflow this
 project has converged on. See also
 [`DEVELOPMENT.md`](./DEVELOPMENT.md) for the actual iteration loops,
-[`PRD.md`](../PRD.md) for product intent, and [`LEARNINGS.md`](../LEARNINGS.md)
+[`archive/PRD.md`](./archive/PRD.md) for the original (archived) product plan, and [`LEARNINGS.md`](../LEARNINGS.md)
 for the running gotcha log.
 
 ## The big picture
@@ -443,3 +443,9 @@ shared databases, anything that puts the maintainer's account or
 infra on the line for an abuse complaint. If you find yourself
 proposing a worker that proxies anything, stop and re-read this
 section.
+
+Two more standing non-goals: editor state stays in the visitor's
+IndexedDB with no cloud sync, and the emulated target stays System
+7.5.5 on 68k (Basilisk II). Mac OS 9 / PPC via SheepShaver is a
+stretch goal at most, because it needs a ROM that isn't freely
+redistributable.

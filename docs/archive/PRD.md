@@ -1,5 +1,29 @@
 # PRD: classic-vibe-mac
 
+> **Archived 2026-09-24.** This is the original product requirements
+> doc, kept as a historical record of the plan. It is no longer
+> maintained, and several parts of it no longer describe the project.
+> The main ways things turned out differently:
+>
+> - **In-browser wasm toolchain, not CI cross-compile.** Apps are
+>   compiled in the visitor's tab by Retro68's cc1/as/ld/Elf2Mac built
+>   to WebAssembly (via
+>   [`wasm-retro-cc`](https://github.com/khawkins98/wasm-retro-cc), #97).
+>   Retro68 in GitHub Actions no longer builds any shipped app.
+> - **The precompiled demo apps are gone.** Reader, MacWeather,
+>   HelloMac, PixelPad and MarkdownViewer, plus `app.dsk`,
+>   `build-disk-image.sh` and the apps baked into Startup Items, were
+>   all retired in #276. The Mac now boots on demand (#279) and runs
+>   whichever in-browser-built sample the visitor picks.
+> - **Multi-file C and mixed C + `.r` builds** work in the browser
+>   (#100). The PRD describes a single-file, resource-fork-only editor.
+> - The "Open work" and "Demo apps roadmap" sections below are stale.
+>
+> For how the project works now, read [`README.md`](../../README.md),
+> [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) and
+> [`docs/HOW-IT-WORKS.md`](../HOW-IT-WORKS.md). Shipped state is
+> tracked in [`docs/PLAYGROUND.md`](../PLAYGROUND.md#status).
+
 _Last updated: 2026-05-18._
 
 ## Problem Statement
@@ -55,7 +79,7 @@ The hard architectural constraint, restated every design review:
 **everything runs as JavaScript in the visitor's browser. No
 backend, no relay, no auth, no compile service, no database.** The
 playground is shaped around that. See
-[`docs/ARCHITECTURE.md` § What we deliberately avoid](./docs/ARCHITECTURE.md#what-we-deliberately-avoid)
+[`docs/ARCHITECTURE.md` § What we deliberately avoid](../ARCHITECTURE.md#what-we-deliberately-avoid)
 and [Closed-Epic graveyard](#closed-epic-graveyard) below.
 
 ### The template (riding along)
@@ -122,7 +146,7 @@ panel for free.
 ```
 
 The byte-by-byte version of this is in
-[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). Boot pipeline,
+[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Boot pipeline,
 SAB layout, the four-state input lock, the chunked disk reader, the
 two-way `:Shared:` data flow, and the multi-app model are all there.
 
@@ -158,11 +182,11 @@ The samples form a deliberate Toolbox-surface ladder: `wasm-hello`
 (productivity-app exhibit, split-pane Markdown editor) →
 `wasm-glypha3` (full vendored 1992 game, ~6,600 LOC). Per-sample
 Toolbox-surface matrix + the add-your-own-sample guide live in
-[`src/app/README.md`](./src/app/README.md); the vendor-a-third-party
+[`src/app/README.md`](../../src/app/README.md); the vendor-a-third-party
 recipe is in
-[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md);
+[`docs/VENDORING-A-MAC-APP.md`](../VENDORING-A-MAC-APP.md);
 the debug recipe for when a vendored sample fails silently is in
-[`docs/DEBUGGING-VENDORED-APPS.md`](./docs/DEBUGGING-VENDORED-APPS.md).
+[`docs/DEBUGGING-VENDORED-APPS.md`](../DEBUGGING-VENDORED-APPS.md).
 
 ### 2. Build Pipeline (`.github/workflows/build.yml`)
 
@@ -186,7 +210,7 @@ the debug recipe for when a vendored sample fails silently is in
   ported from `mihaip/infinite-mac@30112da0db`).
 
 Full pipeline diagram + worker-glue details in
-[`docs/ARCHITECTURE.md` § The CI pipeline](./docs/ARCHITECTURE.md#the-ci-pipeline).
+[`docs/ARCHITECTURE.md` § The CI pipeline](../ARCHITECTURE.md#the-ci-pipeline).
 
 ### 3. Web Execution Layer (`src/web/`)
 
@@ -218,7 +242,7 @@ GitHub Pages can't set COOP/COEP, so we ship the ~3KB MIT
 isolated. Vite dev sets the headers itself.
 
 Byte-by-byte version in
-[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
+[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ### 4. Testing (`tests/`)
 
@@ -253,7 +277,7 @@ Phase 3 is hot-load via a template-splice HFS patcher, an
 
 Full design rationale, the option-2F architecture-review summary,
 and the gotchas the spike will hit are in
-[`docs/PLAYGROUND.md`](./docs/PLAYGROUND.md). Don't duplicate that
+[`docs/PLAYGROUND.md`](../PLAYGROUND.md). Don't duplicate that
 content here.
 
 ### 6. GitHub Pages Deployment
@@ -280,7 +304,7 @@ content here.
 
 ### Milestones — shipped
 
-> See [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
+> See [`docs/PLAYGROUND.md § Status`](../PLAYGROUND.md#status)
 > for the full shipped-state table. Summary:
 
 - ✅ Boot loop, 26-sample wasm-shelf with in-browser compile, GitHub Pages deploy
@@ -362,7 +386,7 @@ content here.
 
 ## Open work
 
-> **Current shipped-state:** see [`docs/PLAYGROUND.md § Status`](./docs/PLAYGROUND.md#status)
+> **Current shipped-state:** see [`docs/PLAYGROUND.md § Status`](../PLAYGROUND.md#status)
 > for the canonical table of what's live, what's closed, and what's next.
 > The list below is the _intent_ layer — design decisions and
 > non-goals. Don't duplicate factual shipped/not-shipped claims here;
@@ -414,7 +438,7 @@ All planned playground polish shipped. Summary:
 
 Two Epics that died honestly. Pointer rather than duplication —
 the full reasoning is in
-[`docs/PLAYGROUND.md` § Closed-Epic graveyard](./docs/PLAYGROUND.md#closed-epic-graveyard).
+[`docs/PLAYGROUND.md` § Closed-Epic graveyard](../PLAYGROUND.md#closed-epic-graveyard).
 
 - **[Epic #12](https://github.com/khawkins98/classic-vibe-mac/issues/12)
   — Real Mac TCP/IP via WebSocket relay (closed).** Architecture

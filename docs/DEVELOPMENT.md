@@ -500,8 +500,8 @@ for the root, `hls ":System Folder:"` for a subdirectory. See
   naming, squash-merge policy.
 - [`LEARNINGS.md`](../LEARNINGS.md) — running log of gotchas. Worth
   skimming once; very worth searching when something behaves oddly.
-- [`PRD.md`](../PRD.md) — architecture intent, milestones, risks
-  register.
+- [`docs/archive/PRD.md`](./archive/PRD.md) — the original product
+  plan and risks register (archived; historical only).
 - [`docs/NETWORKING.md`](./NETWORKING.md) — deploying the optional
   Cloudflare DO Ethernet relay for `?zone=` networking.
 - [`docs/HANDBOOK.md`](./HANDBOOK.md) — end-user manual for the
