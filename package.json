@@ -8,6 +8,7 @@
     "src/web"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev": "npm run dev --workspace=src/web",
     "build": "npm run build --workspace=src/web",
     "fetch:emulator": "bash scripts/fetch-emulator.sh",

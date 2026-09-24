@@ -181,6 +181,24 @@ Use `!` after the type or a `BREAKING CHANGE:` footer for breaking changes:
 feat(api)!: rename disk image output path
 ```
 
+### No AI co-author trailers
+
+Commit messages don't carry AI attribution. `npm install` runs a
+`prepare` script that sets `core.hooksPath` to `.githooks/`, whose
+`commit-msg` hook strips `Co-authored-by: … @anthropic.com` trailers
+and "Generated with Claude Code" footers. Human co-authors are left
+alone.
+
+Two things to know:
+
+- Setting `core.hooksPath` for this repo means any hooks you keep in
+  `.git/hooks/` (or a global `core.hooksPath`) won't run here. Put
+  them in `.githooks/`, or run `git config --unset core.hooksPath`
+  to opt out.
+- The hook only sees local commits. GitHub squash-merge messages and
+  PR descriptions don't pass through it, so leave those lines out
+  there by hand.
+
 ## Pull requests
 
 - Open a PR against `main` for any non-trivial change
