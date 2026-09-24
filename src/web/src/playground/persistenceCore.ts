@@ -175,3 +175,59 @@ export function resolveResetSource(
   );
   return matches.length === 1 ? matches[0]!.id : undefined;
 }
+
+// ── Bundle migration: seed-hash decision ───────────────────────────
+
+/**
+ * What the startup bundle migration should do with one stored file,
+ * given the hash of its stored content and the (tri-state) read of the
+ * seed hash recorded when it was seeded:
+ *   - seed hash `found` and equal → `refresh` (user never edited it);
+ *   - seed hash `found` and different → `preserve` (user edits);
+ *   - seed hash `absent` → `refresh` (files seeded before seed hashes
+ *     existed — no way to tell, historic behaviour);
+ *   - seed hash read `error` → `preserve`: we couldn't find out, and
+ *     overwriting the user's copy on a transient read failure would
+ *     lose their edits.
+ */
+export type MigrationAction = "refresh" | "preserve";
+
+export function migrationActionFor(
+  storedHash: string,
+  seedHash: ReadResult,
+): MigrationAction {
+  switch (seedHash.status) {
+    case "found":
+      return seedHash.content === storedHash ? "refresh" : "preserve";
+    case "absent":
+      return "refresh";
+    case "error":
+      return "preserve";
+  }
+}
+
+// ── Bundled-file fetch classification ──────────────────────────────
+
+/**
+ * Outcome of fetching one bundled sample file:
+ *   - `ok`: got it — `content` may legitimately be the empty string;
+ *   - `missing`: the server says the file doesn't exist (404 / 410) —
+ *     e.g. a duplicated project's file list names a starter file that
+ *     has since been renamed or removed from the sample;
+ *   - `error`: network failure or any other non-OK status — we don't
+ *     know what the bundled copy is.
+ */
+export type BundledFetchResult =
+  | { status: "ok"; content: string }
+  | { status: "missing" }
+  | { status: "error"; error: unknown };
+
+/** Classify a fetch Response's status (before reading its body). */
+export function classifyBundledResponse(res: {
+  ok: boolean;
+  status: number;
+}): "ok" | "missing" | "error" {
+  if (res.ok) return "ok";
+  if (res.status === 404 || res.status === 410) return "missing";
+  return "error";
+}

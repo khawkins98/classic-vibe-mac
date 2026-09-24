@@ -85,6 +85,7 @@ import {
   writeUiState,
   resetProjectToBundled,
   onStorageReadError,
+  isUnreadable,
   getUserFilenames,
   addUserFilename,
 } from "./persistence";
@@ -334,6 +335,12 @@ export async function mountPlayground(
     updateTabBar();
   }
 
+  // Files ("project/file") a Reset is currently overwriting. Saves to
+  // them are dropped while the reset runs: the user just chose to
+  // discard those edits, and a debounced save landing mid-reset would
+  // write the pre-reset buffer over the restored copy.
+  const resetBlockedKeys = new Set<string>();
+
   // Central save point — wraps writeFile() with version-aware dirty clearing.
   async function saveFile(
     projectId: string,
@@ -341,12 +348,24 @@ export async function mountPlayground(
     content: string,
   ): Promise<void> {
     const key = fileKey(projectId, file);
+    if (resetBlockedKeys.has(key)) return;
     const versionAtSave = dirtyVersions.get(key) ?? 0;
     try {
-      await writeFile(projectId, file, content);
-      // Clear dirty only if no new edits arrived during the async write.
-      if ((dirtyVersions.get(key) ?? 0) === versionAtSave) {
-        dirtyVersions.delete(key);
+      const persisted = await writeFile(projectId, file, content);
+      if (persisted) {
+        // Clear dirty only if no new edits arrived during the async write.
+        if ((dirtyVersions.get(key) ?? 0) === versionAtSave) {
+          dirtyVersions.delete(key);
+        }
+      } else if (!isUnreadable(projectId, file)) {
+        // Unreadable files already got their "won't be saved this
+        // session" message from onStorageReadError; a failed put is new.
+        setStatus(
+          statusEl,
+          `Couldn't save ${file} to browser storage — your edits are kept ` +
+            `in this tab only for now.`,
+          "err",
+        );
       }
     } catch {
       // IDB write failed; keep dirty so the user knows the save didn't land.
@@ -1320,18 +1339,39 @@ export async function mountPlayground(
               `projects' edits are kept.`,
       );
       if (!ok) return;
+      // Pending debounced save: if it's for a file being reset, drop it
+      // (those edits are being discarded on purpose — letting it fire
+      // mid-reset would write the old buffer over the restored copy);
+      // otherwise (a user-added file, which Reset keeps) flush it now.
+      const resetFiles = [...proj.files];
+      if (saveTimer) {
+        if (current.project === projectId && resetFiles.includes(current.filename)) {
+          clearTimeout(saveTimer);
+          saveTimer = null;
+        } else {
+          await flushSave();
+        }
+      }
+      for (const f of resetFiles) resetBlockedKeys.add(fileKey(projectId, f));
+      // Invalidate any in-flight switchTo(): it may be awaiting a
+      // pre-reset read and would dispatch stale content.
+      switchSeq++;
       resetting = true;
       updateResetButton();
       setStatus(statusEl, "Resetting to bundled defaults…", "info");
       try {
         // Fetches every starter file first, then overwrites IDB — a
-        // failed fetch throws before anything is written.
-        const fresh = await resetProjectToBundled(
+        // failed fetch throws before anything is written. Files the
+        // bundle no longer has (404) are skipped and left as they are.
+        const { restored: fresh, missing, unsaved } = await resetProjectToBundled(
           baseUrl,
           projectId,
           sourceId,
-          proj.files,
+          resetFiles,
         );
+        // A switchTo() started while the reset ran may have read a
+        // pre-reset copy — invalidate it too.
+        switchSeq++;
         // Refresh the editor if the active file was one of those reset
         // (a user-added file stays as it is).
         const activeFresh =
@@ -1355,17 +1395,30 @@ export async function mountPlayground(
           }
         }
         // Clear dirty markers for every reset file — they now match the
-        // bundled source.
-        for (const f of proj.files) {
-          dirtyVersions.delete(fileKey(projectId, f));
+        // bundled source (unless the write didn't persist).
+        for (const f of fresh.keys()) {
+          if (!unsaved.includes(f)) dirtyVersions.delete(fileKey(projectId, f));
         }
         updateTabBar();
+        const n = fresh.size;
+        let msg =
+          `${proj.label} reset to bundled defaults` +
+          (fromSample ? ` from ${sourceLabel}` : "") +
+          ` (${n} file${n === 1 ? "" : "s"} reloaded).`;
+        if (missing.length > 0) {
+          msg +=
+            ` Kept your copy of ${missing.join(", ")} — no longer in the ` +
+            `bundled sample.`;
+        }
+        if (unsaved.length > 0) {
+          msg +=
+            ` Couldn't save ${unsaved.join(", ")} to browser storage ` +
+            `(restored in this tab only).`;
+        }
         setStatus(
           statusEl,
-          `${proj.label} reset to bundled defaults` +
-            (fromSample ? ` from ${sourceLabel}` : "") +
-            ` (${proj.files.length} file${proj.files.length === 1 ? "" : "s"} reloaded).`,
-          "ok",
+          msg,
+          unsaved.length > 0 ? "err" : missing.length > 0 ? "info" : "ok",
         );
       } catch (err) {
         setStatus(
@@ -1374,6 +1427,12 @@ export async function mountPlayground(
           "err",
         );
       } finally {
+        for (const f of resetFiles) resetBlockedKeys.delete(fileKey(projectId, f));
+        // Edits typed while the reset ran had their save dropped; if the
+        // active file is still dirty (e.g. the reset failed), re-queue it.
+        if (!saveTimer && isDirty(current.project, current.filename)) {
+          scheduleSave();
+        }
         resetting = false;
         updateResetButton();
       }

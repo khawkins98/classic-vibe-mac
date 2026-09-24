@@ -34,7 +34,10 @@ import {
   runInTransaction,
   readWithRetry,
   seedActionFor,
+  migrationActionFor,
+  classifyBundledResponse,
   type ReadResult,
+  type BundledFetchResult,
 } from "./persistenceCore";
 
 const DB_NAME = "cvm-playground";
@@ -171,9 +174,21 @@ export function onStorageReadError(listener: ReadErrorListener): () => void {
   return () => readErrorListeners.delete(listener);
 }
 
+/** True if `project/filename` is one whose stored copy we couldn't read
+ *  this session (see `unreadableKeys`): the editor shows, and saves go
+ *  to, an in-memory copy only. */
+export function isUnreadable(project: string, filename: string): boolean {
+  return unreadableKeys.has(fileKey(project, filename));
+}
+
 /**
  * Read one file, distinguishing a genuine not-found (`absent`) from a
  * failed read (`error`). The in-memory fallback never errors.
+ *
+ * For a key in `unreadableKeys` this returns the in-memory copy (the
+ * bundled default plus any in-session edits) — exactly what the editor
+ * shows — so builds, duplication, etc. see the same content the user
+ * sees, rather than a stored copy that may appear readable later.
  */
 export async function readFileResult(
   project: string,
@@ -187,6 +202,7 @@ export async function readFileResult(
       : { status: "found", content: v };
   };
   if (!persistent) return fromMem();
+  if (unreadableKeys.has(k) && memFiles.has(k)) return fromMem();
   let fromIdb: { content: string } | undefined;
   try {
     fromIdb = await withStore(STORE_FILES, "readonly", (s) =>
@@ -214,23 +230,31 @@ export async function readFile(
 
 /** Write one file's content. Idempotent. IDB failures are logged, not
  *  thrown (pre-existing contract: callers treat persistence as best-
- *  effort and the in-memory copy keeps the session working). */
+ *  effort and the in-memory copy keeps the session working).
+ *
+ *  Resolves `true` when the write landed in this session's backing
+ *  store (IDB, or the in-memory map when IDB is unavailable for the
+ *  whole session — the "not persistent" banner covers that), `false`
+ *  when it was kept in memory only: the key is unreadable (see
+ *  `unreadableKeys`) or the IDB put failed. */
 export async function writeFile(
   project: string,
   filename: string,
   content: string,
-): Promise<void> {
+): Promise<boolean> {
   const k = fileKey(project, filename);
   memFiles.set(k, content);
-  if (!persistent) return;
-  if (unreadableKeys.has(k)) return; // see unreadableKeys
+  if (!persistent) return true;
+  if (unreadableKeys.has(k)) return false; // see unreadableKeys
   try {
     await withStore(STORE_FILES, "readwrite", (s) => {
       s.put({ content }, k);
       return undefined;
     });
+    return true;
   } catch (err) {
     console.warn(`[cvm] persistence: failed to save ${k}`, err);
+    return false;
   }
 }
 
@@ -247,6 +271,28 @@ export async function readUiState<T = unknown>(
     // UI state is cosmetic (last project, cursor, …): a failed read
     // just means "use the default".
     return undefined;
+  }
+}
+
+/** Read a UI-state value, distinguishing a genuine not-found
+ *  (`absent`) from a failed read (`error`). Only string values count as
+ *  `found`; anything else stored under the key reads as `absent`. */
+async function readUiStringResult(key: string): Promise<ReadResult> {
+  if (!persistent) {
+    const v = memUi.get(key);
+    return typeof v === "string"
+      ? { status: "found", content: v }
+      : { status: "absent" };
+  }
+  try {
+    const v = await withStore(STORE_UI, "readonly", (s) =>
+      reqToPromise<unknown>(s.get(key)),
+    );
+    return typeof v === "string"
+      ? { status: "found", content: v }
+      : { status: "absent" };
+  } catch (error) {
+    return { status: "error", error };
   }
 }
 
@@ -341,14 +387,17 @@ async function recordSeedHash(
 }
 
 /**
- * Retrieve a previously recorded seed hash. Returns `undefined` if none
- * was stored (e.g., files seeded before this feature was deployed).
+ * Retrieve a previously recorded seed hash: `absent` if none was stored
+ * (e.g., files seeded before this feature was deployed), `error` if the
+ * read failed (after one retry) — callers must not treat that as absent.
  */
 async function readSeedHash(
   project: string,
   filename: string,
-): Promise<string | undefined> {
-  return readUiState<string>(SEED_HASH_PREFIX + fileKey(project, filename));
+): Promise<ReadResult> {
+  return readWithRetry(() =>
+    readUiStringResult(SEED_HASH_PREFIX + fileKey(project, filename)),
+  );
 }
 
 /**
@@ -362,24 +411,31 @@ async function smartMigrateFiles(baseUrl: string): Promise<number> {
   let preservedCount = 0;
   for (const project of SAMPLE_PROJECTS) {
     for (const filename of project.files) {
-      const stored = await readFile(project.id, filename);
-      if (stored === undefined) continue; // not seeded yet — skip
+      const stored = await readWithRetry(() =>
+        readFileResult(project.id, filename),
+      );
+      // Not seeded yet → nothing to migrate. Couldn't read → leave it
+      // alone; readOrSeedFile will handle it when the file is opened.
+      if (stored.status !== "found") continue;
 
       const seedHash = await readSeedHash(project.id, filename);
-      if (seedHash !== undefined && hashString(stored) !== seedHash) {
-        // User has edited this file — preserve it.
+      if (migrationActionFor(hashString(stored.content), seedHash) === "preserve") {
+        // User has edited this file, or we couldn't read its seed hash
+        // and so can't tell — preserve it.
         preservedCount++;
         continue;
       }
 
       // No edits detected (or first migration with no seed hash history):
       // silently refresh to the new bundled version.
-      const newBundled = await fetchBundledFile(baseUrl, project.id, filename);
-      if (newBundled) {
-        await writeFile(project.id, filename, newBundled);
-        await recordSeedHash(project.id, filename, newBundled);
+      const newBundled = await fetchBundledFileResult(baseUrl, project.id, filename);
+      if (newBundled.status === "ok") {
+        if (await writeFile(project.id, filename, newBundled.content)) {
+          await recordSeedHash(project.id, filename, newBundled.content);
+        }
       }
-      // If fetch failed, keep the existing content — better than an empty editor.
+      // If fetch failed (or the file is no longer bundled), keep the
+      // existing content — better than an empty editor.
     }
   }
   return preservedCount;
@@ -413,25 +469,43 @@ export async function initPersistence(
  * sample-projects directory. We always go through `fetch` so the same
  * code path works in dev and prod, and so the browser caches it.
  *
- * Returns the empty string on failure — the editor will show an empty
- * buffer and the next save will populate IDB. Easier than throwing.
+ * Distinguishes success (content may be empty — a legitimately empty
+ * file), `missing` (404/410) and `error` (network / other status).
  */
-export async function fetchBundledFile(
+export async function fetchBundledFileResult(
   baseUrl: string,
   project: string,
   filename: string,
-): Promise<string> {
+): Promise<BundledFetchResult> {
   // Use a relative, base-aware URL. Vite injects `import.meta.env.BASE_URL`
   // (which respects the configured `base`), so this works under
   // /classic-vibe-mac/ on GitHub Pages too.
   const url = `${baseUrl}sample-projects/${project}/${filename}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) return "";
-    return await res.text();
-  } catch {
-    return "";
+    const kind = classifyBundledResponse(res);
+    if (kind === "missing") return { status: "missing" };
+    if (kind === "error") {
+      return { status: "error", error: new Error(`HTTP ${res.status}`) };
+    }
+    return { status: "ok", content: await res.text() };
+  } catch (error) {
+    return { status: "error", error };
   }
+}
+
+/**
+ * Like `fetchBundledFileResult` but returns the empty string on any
+ * failure — the editor will show an empty buffer and the next save will
+ * populate IDB. For callers that just need something to display.
+ */
+export async function fetchBundledFile(
+  baseUrl: string,
+  project: string,
+  filename: string,
+): Promise<string> {
+  const r = await fetchBundledFileResult(baseUrl, project, filename);
+  return r.status === "ok" ? r.content : "";
 }
 
 /**
@@ -478,8 +552,7 @@ export async function readOrSeedFile(
   }
   // Genuine not-found: seed IDB so subsequent reads are local. Record
   // the seed hash so we can later detect whether the user has edited it.
-  if (bundled) {
-    await writeFile(project, filename, bundled);
+  if (bundled && (await writeFile(project, filename, bundled))) {
     await recordSeedHash(project, filename, bundled);
   }
   return bundled;
@@ -490,31 +563,50 @@ export async function readOrSeedFile(
  * bundled defaults of shipped sample `sourceId` — the project itself for
  * a shipped sample, or the sample it was duplicated from for a user
  * project. Every file is fetched BEFORE anything is written, so a
- * network failure leaves the user's copies untouched instead of
- * half-resetting to empty buffers. User-added files (#319) aren't in
- * `files` and are kept.
+ * network failure (or any non-404 error) throws and leaves the user's
+ * copies untouched instead of half-resetting. User-added files (#319)
+ * aren't in `files` and are kept.
  *
- * Returns the restored contents keyed by filename.
+ * A file the bundle no longer has (404 — e.g. a duplicated project's
+ * file list, copied at duplication time, names a starter file that has
+ * since been renamed or removed) is skipped: the user's copy stays and
+ * the filename is reported in `missing`. An empty bundled file is valid.
+ *
+ * Returns the restored contents keyed by filename, the skipped
+ * (missing) filenames, and any filenames whose write didn't persist.
  */
 export async function resetProjectToBundled(
   baseUrl: string,
   projectId: string,
   sourceId: string,
   files: readonly string[],
-): Promise<Map<string, string>> {
-  const fetched = new Map<string, string>();
+): Promise<{
+  restored: Map<string, string>;
+  missing: string[];
+  unsaved: string[];
+}> {
+  const restored = new Map<string, string>();
+  const missing: string[] = [];
+  const unsaved: string[] = [];
   for (const filename of files) {
-    const content = await fetchBundledFile(baseUrl, sourceId, filename);
-    if (!content) {
+    const r = await fetchBundledFileResult(baseUrl, sourceId, filename);
+    if (r.status === "error") {
       throw new Error(`couldn't fetch the bundled copy of ${filename}`);
     }
-    fetched.set(filename, content);
+    if (r.status === "missing") {
+      missing.push(filename);
+      continue;
+    }
+    restored.set(filename, r.content);
   }
-  for (const [filename, content] of fetched) {
+  for (const [filename, content] of restored) {
     // Explicit overwrite: lift the unreadable-key guard for this file.
     unreadableKeys.delete(fileKey(projectId, filename));
-    await writeFile(projectId, filename, content);
-    await recordSeedHash(projectId, filename, content);
+    if (await writeFile(projectId, filename, content)) {
+      await recordSeedHash(projectId, filename, content);
+    } else {
+      unsaved.push(filename);
+    }
   }
-  return fetched;
+  return { restored, missing, unsaved };
 }

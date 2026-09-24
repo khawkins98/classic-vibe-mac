@@ -6,6 +6,8 @@ import {
   mkdirSync,
   writeFileSync,
   existsSync,
+  rmSync,
+  rmdirSync,
 } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 
@@ -197,6 +199,37 @@ function writeSeedToPublic(
     }
     if (needsWrite) writeFileSync(out, body);
   }
+  pruneStaleSeeds(new Set([...contents.keys(), ...binaries.keys()]));
+}
+
+/**
+ * Remove files under `public/sample-projects/` that are no longer in the
+ * seed set (a sample file or whole sample dir deleted/renamed in
+ * src/app), plus any directories left empty. `public/sample-projects/`
+ * is gitignored generated output that `vite build` copies verbatim into
+ * dist, so without this a deleted sample file keeps being served in dev
+ * and keeps shipping from a dirty tree.
+ */
+function pruneStaleSeeds(keep: ReadonlySet<string>): void {
+  const root = join(PUBLIC_DIR, "sample-projects");
+  if (!existsSync(root)) return;
+  const walk = (dir: string, rel: string): void => {
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      const abs = join(dir, d.name);
+      const key = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) {
+        walk(abs, key);
+        try {
+          if (readdirSync(abs).length === 0) rmdirSync(abs);
+        } catch {
+          // best-effort
+        }
+      } else if (!keep.has(key)) {
+        rmSync(abs, { force: true });
+      }
+    }
+  };
+  walk(root, "");
 }
 
 function playgroundSeedPlugin(): Plugin {
@@ -236,17 +269,32 @@ function playgroundSeedPlugin(): Plugin {
       } catch {
         // best-effort
       }
+      const reseed = (): void => {
+        const { contents, binaries, hash } = readSeedContents();
+        bundleHash = hash;
+        writeSeedToPublic(contents, binaries);
+        server.ws.send({ type: "full-reload" });
+      };
       const onChange = (path: string) => {
         if (path.startsWith(APP_DIR)) SEED_FILES = discoverSeedFiles();
-        if (SEED_FILES.some((s) => s.sourcePath === path)) {
-          const { contents, binaries, hash } = readSeedContents();
-          bundleHash = hash;
-          writeSeedToPublic(contents, binaries);
-          server.ws.send({ type: "full-reload" });
-        }
+        if (SEED_FILES.some((s) => s.sourcePath === path)) reseed();
+      };
+      // A deleted sample file (or whole sample dir): rediscover and, if
+      // it was seeded, re-seed so the stale copy is pruned from
+      // public/sample-projects/ (writeSeedToPublic prunes).
+      const onRemove = (path: string) => {
+        if (!path.startsWith(APP_DIR)) return;
+        const before = SEED_FILES;
+        SEED_FILES = discoverSeedFiles();
+        const removed = before.some(
+          (s) => s.sourcePath === path || s.sourcePath.startsWith(path + "/"),
+        );
+        if (removed) reseed();
       };
       watcher.on("change", onChange);
       watcher.on("add", onChange);
+      watcher.on("unlink", onRemove);
+      watcher.on("unlinkDir", onRemove);
     },
     // Surface the hash in build logs so it's visible to humans.
     closeBundle() {

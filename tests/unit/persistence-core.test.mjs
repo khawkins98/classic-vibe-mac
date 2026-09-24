@@ -9,7 +9,9 @@
  *   - the not-found vs read-error decision (retry once, never seed over
  *     an error);
  *   - resolveResetSource for samples, recorded duplicates and legacy
- *     duplicates.
+ *     duplicates;
+ *   - the bundle-migration seed-hash decision (found / absent / error);
+ *   - bundled-fetch response classification (ok / missing / error).
  *
  * Run as: node --test tests/unit/persistence-core.test.mjs
  */
@@ -18,8 +20,14 @@ import assert from "node:assert/strict";
 import { transpileWeb } from "./_transpile.mjs";
 
 const url = transpileWeb(["playground/persistenceCore.ts"]);
-const { runInTransaction, readWithRetry, seedActionFor, resolveResetSource } =
-  await import(url("playground/persistenceCore.ts"));
+const {
+  runInTransaction,
+  readWithRetry,
+  seedActionFor,
+  resolveResetSource,
+  migrationActionFor,
+  classifyBundledResponse,
+} = await import(url("playground/persistenceCore.ts"));
 
 // ── Fake IDB transaction ─────────────────────────────────────────────
 // Just enough surface for runInTransaction: objectStore(), abort(), and
@@ -177,4 +185,48 @@ test("resolveResetSource: legacy duplicate that's ambiguous or unmatched → und
   assert.equal(resolveResetSource(ambiguous, SAMPLES), undefined);
   const unmatched = { ...SAMPLES[0], id: "user-old-2", files: ["snake.c"] };
   assert.equal(resolveResetSource(unmatched, SAMPLES), undefined);
+});
+
+// ── migrationActionFor (seed-hash tri-state) ─────────────────────────
+
+test("migrationActionFor: unedited file (hash matches) is refreshed", () => {
+  assert.equal(
+    migrationActionFor("abcd1234", { status: "found", content: "abcd1234" }),
+    "refresh",
+  );
+});
+
+test("migrationActionFor: edited file (hash differs) is preserved", () => {
+  assert.equal(
+    migrationActionFor("abcd1234", { status: "found", content: "ffff0000" }),
+    "preserve",
+  );
+});
+
+test("migrationActionFor: no recorded seed hash (legacy) refreshes", () => {
+  assert.equal(migrationActionFor("abcd1234", { status: "absent" }), "refresh");
+});
+
+test("migrationActionFor: seed-hash read error preserves (never overwrite on error)", () => {
+  assert.equal(
+    migrationActionFor("abcd1234", { status: "error", error: new Error("boom") }),
+    "preserve",
+  );
+});
+
+// ── classifyBundledResponse ──────────────────────────────────────────
+
+test("classifyBundledResponse: 2xx is ok (empty body is still ok)", () => {
+  assert.equal(classifyBundledResponse({ ok: true, status: 200 }), "ok");
+});
+
+test("classifyBundledResponse: 404 / 410 are missing", () => {
+  assert.equal(classifyBundledResponse({ ok: false, status: 404 }), "missing");
+  assert.equal(classifyBundledResponse({ ok: false, status: 410 }), "missing");
+});
+
+test("classifyBundledResponse: other failures are errors", () => {
+  for (const status of [0, 403, 500, 502, 503]) {
+    assert.equal(classifyBundledResponse({ ok: false, status }), "error", `status ${status}`);
+  }
 });
