@@ -1,0 +1,42 @@
+name: pr-title
+
+# Every PR is squash-merged, so the PR title becomes the commit subject
+# on main. This check makes sure that title follows Conventional Commits
+# (see CONTRIBUTING.md#commit-messages--conventional-commits).
+#
+# pull_request_target so the check also runs on PRs from forks. It never
+# checks out or runs PR code; it only reads the title from the event
+# payload, so the usual pull_request_target risks don't apply. `edited`
+# re-runs the check when the title is fixed.
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional-title:
+    name: conventional PR title
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to a full commit SHA (not a movable tag) because this job
+      # runs in the pull_request_target context.
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            test
+            ci
+            build
+            perf
+            style
+            revert
+          requireScope: false

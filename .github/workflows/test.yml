@@ -19,6 +19,12 @@ jobs:
       # invokes `tsc` from the workspace, so we install deps too.
       - name: Install dependencies
         run: npm ci
+      # Vite strips types without checking them, so type errors only
+      # surface here. tsc exits non-zero on any error (including the
+      # noUnusedLocals/noUnusedParameters ones src/web/tsconfig.json
+      # enables), which fails the job.
+      - name: Typecheck src/web
+        run: npm run typecheck
       - name: Run host-compiled C unit tests + JS preprocessor tests
         run: npm run test:unit
 
