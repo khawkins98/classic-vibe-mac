@@ -105,6 +105,11 @@ is: zero-friction loop for the common case, normal-friction loop
 for the deep case. Nobody loses anything they had; some people gain
 the fast loop.
 
+(That was the 2F scope at the time. C compilation came to the browser
+later by a different route, see the Epic #19 follow-up below, and
+Reader itself retired in #276. Every sample on the shelf now builds
+C + `.r` in the tab.)
+
 This is a deliberate scope cut. The previous Epic (#19) was killed
 in part for trying to cover both cases with a single mechanism and
 arriving at "needs an HFS writer we don't have, plus OAuth, plus a
@@ -117,7 +122,7 @@ don't duplicate this in either file._
 
 | Phase | What | State |
 |-------|------|-------|
-| Boot loop + multi-app demo | System 7.5.5 boots in browser, Reader + MacWeather auto-launch, two-way data flow live, mouse + keyboard input | ✅ shipped |
+| Boot loop + multi-app demo | System 7.5.5 boots in browser, Reader + MacWeather auto-launch, two-way data flow live, mouse + keyboard input | ✅ shipped; apps retired in #276 (boot disk now vanilla, deferred boot) |
 | Playground Phase 1 — editor + persistence | CodeMirror 6, C syntax, single-file editor, IndexedDB persistence, download-as-zip, sample projects seeded at build time, strict CSP | ✅ shipped (PR #32) |
 | Playground Phase 2 — in-browser Rez compilation | WASM-Rez source vendored under `tools/wasm-rez/`; Build button preprocesses → WASM-Rez → resource fork splice → `.bin` download; output bytes SHA-256-identical to native Retro68 Rez at 103KB gzipped | ✅ shipped on `main` |
 | Playground Phase 3 — hot-load into the running Mac | Template-splice HFS patcher + `InMemoryDisk` + worker re-spawn; Build & Run round-trips ~820ms warm in production | ✅ shipped on `main` |
@@ -129,13 +134,22 @@ don't duplicate this in either file._
 | Smart bundle migration | Preserve user-edited files across `bundleVersion` bumps | ✅ shipped (#24) |
 | Hello, Mac! starter sample | Minimal WIND+DrawString+WNE starter project in the playground | ✅ shipped (#26) |
 | Architecture review | 5-reviewer pass; all critical findings resolved | ✅ closed (#49) |
-| Pixel Pad (#17) | QuickDraw drawing app; live PNG preview via drawing-watcher extfs bridge | ✅ shipped |
-| Reader URL bar (#14) | URL fetch via Mac→JS request/response over extfs; request-ID correlation; AbortController | ✅ shipped |
-| Markdown Viewer (#9) | Reads .md from :Shared:, renders with C Markdown parser | ✅ shipped |
+| Pixel Pad (#17) | QuickDraw drawing app; live PNG preview via drawing-watcher extfs bridge | ✅ shipped; retired in #276 |
+| Reader URL bar (#14) | URL fetch via Mac→JS request/response over extfs; request-ID correlation; AbortController | ✅ shipped; Reader retired in #276 (host-side `shared-poller.ts` still runs) |
+| Markdown Viewer (#9) | Reads .md from :Shared:, renders with C Markdown parser | ✅ shipped; retired in #276 (`wasm-mdpad` covers Markdown now) |
 | Ethernet relay (#15) | Opt-in AppleTalk zone networking via ?zone=; SPSC ring SAB; Cloudflare DO relay in worker/ | ✅ shipped |
 | Epic #12 — Real Mac TCP/IP via relay | Closed after review (architecture wrong + ToS violation) | ❌ closed |
 | Epic #19 — Full in-browser IDE with C compilation | Original framing closed after review; **capability shipped 2026-05-15 via a different path** (wasm-compile Retro68's existing toolchain instead of porting GCC from scratch). See Epic #19 post-mortem below. | ✅ shipped (different path) |
 | In-browser C compilation (`compileToBin`) | cc1 + as + ld + Elf2Mac wasm-compiled from Retro68, orchestrated from `cc1.ts`; SIZE-resource splice, `--emit-relocs` for runtime relocation; end-to-end Build & Run for `wasm-hello/hello.c` boots cleanly in BasiliskII | ✅ shipped 2026-05-15 (#97) |
+| Multi-file C + mixed C/`.r` builds, toolchain backend interface | `compileToBin` takes N sources; `.r` spliced onto the C-built fork in-tab; `toolchain.ts` abstraction | ✅ closed 2026-05-16 (#100) |
+| Retire precompiled-app path + deferred boot | Reader / MacWeather / HelloMac / PixelPad / MarkdownViewer removed; vanilla boot disk; Mac boots on first Build & Run | ✅ closed 2026-05-17 (#276) |
+| Glypha III vendored + playable | First third-party period app on the shelf, full upstream `.r` compiled in-tab | ✅ closed 2026-05-17 (#256) |
+
+This table stops at Epic-scale milestones. Later work (vendoring
+recipe, debugging toolkit, `wasm-mdpad`, the wasm-rez / e2e audit
+scripts) is in the issue tracker and in
+[`VENDORING-A-MAC-APP.md`](./VENDORING-A-MAC-APP.md) /
+[`DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md).
 
 For the full issue tracker (open Epics, child issues, roadmap) see
 <https://github.com/khawkins98/classic-vibe-mac/issues>.
@@ -172,7 +186,9 @@ onboarding affordance.
 
 Status (2026-05-08): ✅ shipped on main. Files live under
 `src/web/src/playground/` (`editor.ts`, `persistence.ts`, `types.ts`)
-plus sample bundles under `src/web/public/sample-projects/`.
+plus sample bundles copied at build time by a Vite plugin
+(`src/web/vite.config.ts`) from `src/app/<name>/` and served at
+`/sample-projects/<name>/`; they aren't committed.
 
 ### Phase 2 — Rez compilation in-browser (~4-6 weeks, gated on spike)
 
@@ -213,6 +229,8 @@ under `tools/wasm-rez/`; compiled artefacts under
 `src/web/public/wasm-rez/`. The Build button on the playground
 preprocesses, runs WASM-Rez, splices a fresh resource fork onto the
 CI-precompiled `.code.bin`, and downloads the resulting MacBinary.
+(The CI-precompiled `.code.bin` half went away in #117/#276; the
+Rez output now splices onto a MacBinary built in-tab by the C path.)
 See [#30](https://github.com/khawkins98/classic-vibe-mac/issues/30)
 for the build-out tracker.
 
@@ -240,7 +258,7 @@ Status (2026-05-08): ✅ shipped on main. Build & Run round-trips
 [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29)
 (weather poller teardown on re-spawn) and
 [#31](https://github.com/khawkins98/classic-vibe-mac/issues/31)
-(lock Type/Creator editing); the core path landed via
+(lock Type/Creator editing), both since closed; the core path landed via
 [#27](https://github.com/khawkins98/classic-vibe-mac/issues/27)
 + [#28](https://github.com/khawkins98/classic-vibe-mac/issues/28).
 
@@ -332,6 +350,8 @@ From the hot-load reviewer.
   [#29](https://github.com/khawkins98/classic-vibe-mac/issues/29).
   Phase 3's `dispose()` path needs to call into a poller-stop
   hook before spinning up the new worker.
+  (Fixed under #29; the weather poller itself went away with
+  MacWeather in #276.)
 - **In-memory disk class.** The existing `ChunkedDisk` is wired
   for read-only XHR. We need a parallel `InMemoryDisk` backed by
   a `Uint8Array` that satisfies the same disks-API contract.
@@ -438,7 +458,7 @@ A few things still hold from the original closure:
   patcher), not commits back to your repo. The "edit in browser,
   PR to your fork" flow remains out of scope.
 - **In-browser HFS writer was still needed** — solved separately
-  via the template-splice patcher (#46) for Phase 3 hot-loading.
+  via the template-splice patcher (#27) for Phase 3 hot-loading.
 - **`cc1.wasm` is genuinely ~12 MB** — the size estimate was
   right; the 4-9 month effort estimate assumed we'd have to
   fork/exec-emulate it, which turned out unnecessary.

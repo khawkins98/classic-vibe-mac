@@ -1,6 +1,6 @@
 # Architecture
 
-_Last updated: 2026-05-15._
+_Last updated: 2026-09-24._
 
 The technical shape of `classic-vibe-mac` as it stands today. Companion
 docs: [`PLAYGROUND.md`](./PLAYGROUND.md) for the in-browser
@@ -31,10 +31,10 @@ present and a relay base URL was compiled in.
   |   - HEAD-checks chunked manifest                             |
   |   - spawns Web Worker (type:'module')                        |
   |   - rAF loop: SAB framebuffer -> putImageData                |
-  |   - main-thread weather poller (fetch open-meteo)            |
+  |   - main-thread pollers (console log, URL-request inbox)     |
   |   - optional ?zone=<name> -> EthernetZoneProvider            |
   |       |                              |                       |
-  |       | postMessage({ weather_data, bytes })                 |
+  |       | postMessage({ poll_console / poll_url_request })     |
   |       |                              | WebSocket frames      |
   |       v                              v                       |
   |  +--------------------------------------------------------+  |
@@ -57,7 +57,7 @@ present and a relay base URL was compiled in.
   |  |  |  |     (sample's .bin lives on a secondary    | |  |  |
   |  |  |  |     disk mounted at Build & Run time —     | |  |  |
   |  |  |  |     boot disk stays clean across samples)  | |  |  |
-  |  |  |  |   :Shared: (HTML pages baked at build)     | |  |  |
+  |  |  |  |   vanilla image, no apps preinstalled      | |  |  |
   |  |  |  +--------------------------------------------+ |  |  |
   |  |  +--------------------------------------------------+  |  |
   |  +--------------------------------------------------------+  |
@@ -73,10 +73,12 @@ optional `ethernetRxBuffer` `SharedArrayBuffer` (~24.3 KiB) and passes
 it in the worker `start` message. If not, that path stays stubbed.
 
 Data flows both ways across the JS/Mac boundary, but the rule is:
-**JS owns the network**, Mac owns the rendering and event loop. The
-weather poller hits `api.open-meteo.com` from the page's main thread
-and ships bytes into the worker; the Mac side polls a file's modtime
-and redraws. There is no socket inside the Mac.
+**JS owns the network**, Mac owns the rendering and event loop. Any
+fetch happens on the page's main thread and the bytes get written into
+the worker's `/Shared/` extfs mount; the Mac side polls for the file
+and reads it. There is no socket inside the Mac. (The original driver
+for this, the MacWeather poller hitting `api.open-meteo.com`, retired
+with MacWeather in #276.)
 
 ## The boot pipeline
 
@@ -101,10 +103,11 @@ Welcome placeholder, ready for Build & Run."
    import.meta.url), { type: 'module' })`. The loader posts a start
    message with manifest URL, ROM URL, screen + RAM config, and — if
    zone networking is active — the optional `ethernetRxBuffer` SAB.
-4. **Worker init.** Allocates three `SharedArrayBuffer`s:
+4. **Worker init.** Allocates three `SharedArrayBuffer`s (plus a
+   4-byte pause flag, which the main thread normally supplies):
    - **video framebuffer** — sized to `screenWidth * screenHeight * 4`
      (BGRA out of WASM, RGBA into canvas; the loop does the swizzle).
-   - **videoMode** — 16 bytes of metadata so a mid-boot resolution
+   - **videoMode** — 40 bytes (10 × Int32) of metadata so a mid-boot resolution
      change can be relayed without re-allocating.
    - **input ring** — `Int32Array` whose offsets match Infinite Mac's
      `InputBufferAddresses` exactly. The four-state cyclical lock
@@ -141,12 +144,15 @@ same.
 
 ### JS → Mac: `:Shared:` baked at build time (works)
 
-`scripts/build-boot-disk.sh` mounts the System 7.5.5 image with
-`hmount`, copies `src/web/public/shared/*.html` into the boot
-volume's `:Shared:` folder, and re-chunks. At guest boot, Reader does
-`HOpen(0, 0, "\p:Shared:index.html", fsRdPerm, ...)` and reads
-straight off the boot disk. **Reliable. This is the path Reader
-uses.**
+`scripts/build-boot-disk.sh` takes a `--shared-dir` argument (CI
+passes `src/web/public/shared`), `hmount`s the System 7.5.5 image,
+copies that directory's files into the boot volume's `:Shared:`
+folder, and re-chunks. The guest then reads them with a plain
+`HOpen(0, 0, "\p:Shared:<name>", fsRdPerm, ...)` straight off the
+boot disk. **Reliable.** Reader used this for its bundled HTML pages;
+since Reader retired (#276) and `src/web/public/shared/` no longer
+exists, the step is a no-op and the boot disk ships vanilla. The
+plumbing is still there if a sample needs baked data again.
 
 ### JS → Mac: `/Shared/` extfs runtime (partial)
 
@@ -157,26 +163,30 @@ convention; see [`LEARNINGS.md`](../LEARNINGS.md) `extfs surfaces as
 Mac volume Unix:`). The plumbing works, but in System 7.5.5 the
 volume isn't always in the VCB chain at app launch — `HOpen` returns
 `-35 nsvErr` non-deterministically. **Treat this as best-effort.**
-MacWeather two-tiers: try `:Unix:weather.json` live first, fall back
-to baked `:Shared:weather.json`.
+The retired MacWeather app two-tiered around this: try
+`:Unix:weather.json` live first, fall back to baked
+`:Shared:weather.json`.
 
 ### Mac → JS: extfs writes the host polls (works)
 
 Same `/Shared/` mount, other direction. The Mac writes a file via
 `FSWrite` to `:Unix:foo`; the host page polls for it through the
 worker's postMessage bridge and reads `/Shared/foo`. This is the base
-primitive both the Reader URL bar (#14) and Pixel Pad export (#17)
-build on.
+primitive under the URL-bar request/response channel (built for Reader,
+#14) and the `cvm_log()` debug console below. Pixel Pad's drawing
+export (#17) used it too, before Pixel Pad retired in #276.
 
 ### Mac → JS: URL bar request/response
 
-Reader's URL bar uses `:Unix:__url-request.txt` as a request inbox. The
+Reader (retired in #276) was the only app that used this, but the host
+side still runs: `emulator-loader.ts` starts `shared-poller.ts` on
+every boot. Reader's URL bar used `:Unix:__url-request.txt` as a request inbox. The
 Mac writes `<requestId>\n<url>\n` via `FSWrite`; `shared-poller.ts`
 asks the worker to `poll_url_request` every 500 ms. When a request
 appears, the main thread fetches the URL, cancelling any older in-flight
 fetch with an `AbortController`, and writes the HTML response to
-`:Unix:__url-result-<id>.html`. Reader polls for that exact filename and
-reads it when it appears. The request ID is load-bearing: it correlates
+`:Unix:__url-result-<id>.html`. Reader polled for that exact filename and
+read it when it appeared. The request ID is load-bearing: it correlates
 replies and prevents stale responses from a previous URL from being
 misread as the current one.
 
@@ -185,14 +195,20 @@ long stretches in `Atomics.wait`; a worker-local `fetch()` needs
 microtasks to resolve, so the worker can starve its own network
 promises. Let the main thread own the network.
 
-### Mac → JS: Pixel Pad drawing export
+### Mac → JS: `cvm_log()` debug console
 
-Pixel Pad writes `:Unix:__drawing.bin` via `FSWrite`. The file is a
-fixed 64×64 1-bit bitmap: 512 bytes total, MSB-first, `0 = white`,
-`1 = black`. `drawing-watcher.ts` asks the worker to `poll_drawing`;
-the worker reads `/Shared/__drawing.bin` and posts `{ type:
-"drawing_data", bytes }` back to the main thread. The host expands the
-bits to pixels and renders a live PNG preview below the emulator.
+Samples that `#include "cvm_log.h"` (from `src/app/wasm-debug-console/`;
+`wasm-bounce`, `wasm-mdpad`, `wasm-glypha3` and a handful of others use it) append lines to
+`:Unix:__cvm_console.log` via `FSWrite`. `console-watcher.ts` posts
+`{ type: "poll_console", fromOffset }` to the worker once a second; the
+worker reads `/Shared/__cvm_console.log` from that offset and replies
+with `{ type: "console_data", bytes, totalSize }` carrying only the new
+tail. The host decodes MacRoman, splits on newlines, and appends to the
+Output panel's Console tab. If `totalSize` shrinks (the guest called
+`cvm_log_reset()`), the watcher clears and starts over.
+
+(This replaced the Pixel Pad `__drawing.bin` / `drawing-watcher.ts`
+channel, which went away with Pixel Pad in #276.)
 
 ### The visibility issue is real
 
@@ -204,8 +220,8 @@ two-tier with a baked fallback. There's a long-standing question on
 whether it's a 7.5.5 trap-table issue, a pref-syntax issue, or a
 timing issue (`extfs` mount happening after `:System Folder:Startup
 Items:` scan). Resolving it is on the TODO list but not blocking the
-playground (which uses worker re-spawn + a fresh boot disk per
-edit — see [`PLAYGROUND.md`](./PLAYGROUND.md) Phase 3).
+playground (which uses worker re-spawn + a fresh secondary disk per
+build — see [`PLAYGROUND.md`](./PLAYGROUND.md) Phase 3).
 
 ## The Ethernet relay (optional)
 
@@ -317,40 +333,52 @@ Local pre-push smoke test for either case: `npm run audit:wasm-e2e --
 
 ### Vendored-app fork composition (PathB)
 
-The simple case is "one user `.r` per sample" — wasm-rez compiles it,
-the result splices over the C-built fork from Elf2Mac. For large
+The simple case is "one user `.r` per sample": wasm-rez compiles it,
+and the result splices over the resource fork of the MacBinary that
+cc1 → as → ld → Elf2Mac just produced in memory. For large
 third-party apps that ship their own precompiled resource bundle
-alongside the user's editable `.r`, the playground supports a
-`precompiledForkAssets` list in `SAMPLE_PROJECTS`. The pipeline:
+alongside the user's editable `.r`, a `SAMPLE_PROJECTS` entry can
+declare a `precompiledForkAssets` list. The pipeline
+(`runBuildMixedCAndR` in `editor.ts`):
 
 ```
-   user .r  -> wasm-rez ----+
-                            |
-   .code.bin (from cc1+ld+Elf2Mac) --+----> spliceResourceFork
-                            |        |
-   precompiledForkAssets ---+--------+      (user wins on collision)
-   (e.g. icons.rsrc.bin)
+   user .r -> wasm-rez --+
+                         +--> mergeUserForkWithPrecompiledAssets
+   precompiledForkAssets +       (resourceForkMerger.mjs,
+   (fetched from                  first fork wins = user wins)
+    sample-projects/)                     |
+                                          v
+   Elf2Mac MacBinary (in memory) --> spliceResourceFork (build.ts)
+                                     (own private merger; second
+                                      fork = user fork wins)
 ```
 
-The merger
+Two mergers, same outcome. The shared one
 ([`src/web/src/playground/resourceForkMerger.mjs`](../src/web/src/playground/resourceForkMerger.mjs),
-#285) treats "first fork wins on (type, id) collision" as the
-contract; the splice in `build.ts` orders the user's fork first so
-their edits override the precompiled fork's entries. The same merger
-is reused offline by
+#285) takes N forks and treats "first fork wins on (type, id)
+collision" as the contract, so `editor.ts` passes the user's fork
+first. `build.ts`'s `spliceResourceFork` then folds that onto the
+C-built fork with its own two-fork merge where the second argument
+(the user side) wins, which is how libretrocrt's CODE / RELA / SIZE
+survive unless the `.r` overrides them. `resourceForkMerger.mjs` is
+also reused offline by
 [`scripts/splice-bin.mjs`](../scripts/splice-bin.mjs) (#294) for
-inspection — see
+inspection; see
 [`docs/DEBUGGING-VENDORED-APPS.md`](./DEBUGGING-VENDORED-APPS.md)
 Recipe 3.
 
-When this matters in practice: `wasm-icon-gallery` ships an
-`icons.rsrc.bin` of pre-built `cicn`/`ICN#`/`ics#` resources alongside
-its editable `gallery.r`. Glypha III briefly had a more elaborate
-version of this story (#280) before it turned out wasm-rez could just
-compile the full upstream `.r` directly after #287's `STACK_SIZE`
-bump — the infrastructure stays useful for future binary-only
-imports, but no current sample needs it as critical-path. (See
-LEARNINGS Key Story #10.)
+No sample declares `precompiledForkAssets` today. Glypha III briefly
+needed it (#280) before it turned out wasm-rez could just compile the
+full upstream `.r` directly after #287's `STACK_SIZE` bump; the
+infrastructure stays for future binary-only imports. (See LEARNINGS
+Key Story #10.)
+
+A related but separate mechanism is `binaryAssets`. `wasm-icon-gallery`
+ships `icons.rsrc.bin` that way: it is not merged into the app's
+fork at all. The HFS patcher writes it to the secondary disk as its
+own resource-only file (`Icons`, suffix dropped) next to the app, and
+the app opens it with `OpenResFile`. Samples with `binaryAssets` skip
+the custom floppy icon.
 
 ## The CI pipeline
 
@@ -362,27 +390,34 @@ push / PR ----+-> Retro68 container (ghcr.io/autc04/retro68:latest)
               |     - apt install hfsutils
               |     - cmake -S src/app -B build (Retro68 toolchain file)
               |     - cmake --build build --parallel
-              |       => build/<app>/<App>.{bin,dsk,APPL}
+              |       => nothing today: the aggregator has no apps since
+              |          #276; kept as scaffolding
               |
-              +-> scripts/build-disk-image.sh => dist/app.dsk (~1.4MB, secondary)
-              |
-              +-> scripts/build-boot-disk.sh:
+              +-> NO_STARTUP_ITEMS=1 scripts/build-boot-disk.sh "" ... \
+              |       --shared-dir src/web/public/shared
               |     - download System 7.5.5 from archive.org (cached, SHA-256 pinned)
-              |     - hmount + hcopy each .bin into Startup Items + Applications
-              |     - hcopy src/web/public/shared/*.html into :Shared:
+              |     - no apps to install (first arg is empty)
+              |     - :Shared: seeding is a no-op while that dir is absent
               |     - scripts/write-chunked-manifest.py: 256KiB chunks,
               |       blake2b-16 salted "raw", JSON manifest matching
               |       EmulatorChunkedFileSpec
               |       => dist/system755-vibe.dsk{,.json}, dist/system755-vibe-chunks/
               |
               +-> Vite build (src/web/) with VITE_BASE=/<repo>/
-              |     - copies dist/app.dsk + dist/system755-vibe.dsk{,.json}
-              |       + chunks into src/web/dist/
+              |     - verifies the vendored wasm-rez blobs
+              |     - copies dist/system755-vibe.dsk{,.json} + chunks
+              |       into src/web/dist/
               |
               +-> if main + non-PR:
                     actions/upload-pages-artifact + actions/deploy-pages
                     => https://<user>.github.io/<repo>/
 ```
+
+The samples themselves are not built in CI. Their sources ship with
+the site and compile in the visitor's tab at Build & Run time; the
+secondary disk they land on starts from `empty-secondary.dsk`
+(committed under `src/web/public/playground/`, regenerated by
+`scripts/bake-empty-secondary.sh`).
 
 PRs run the full build for CI signal; only `main` deploys. Algorithm
 for the chunked manifest is ported from
