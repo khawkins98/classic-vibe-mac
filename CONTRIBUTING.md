@@ -8,28 +8,38 @@ No install required. You can change a string in a running Mac app
 in under a minute using the playground:
 
 1. Open <https://khawkins98.github.io/classic-vibe-mac/> and pick a
-   sample from the **Project** dropdown — **Wasm Hello** is the
-   smallest. Click **Build & Run**.
-2. ~15s later (first time, cold cache) the Mac boots into System
-   7.5.5 with your app's disk on the desktop and the app
+   sample — from the welcome gallery on first visit, the project
+   dropdown in the **Project** pane, or **File → Open Project…**
+   (⌘O). **Wasm Hello** is the smallest. Click **Build & Run**.
+2. The first build takes a few seconds longer while the page
+   fetches the compiler toolchain and boots the Mac. Then System
+   7.5.5 comes up with your app's disk on the desktop and the app
    auto-launched.
 3. In the editor, change the string in the app's `.c` source
-   (Wasm Hello's `DrawString` argument is one line — hard to miss).
-4. Click **Build & Run** again. About 1 second later the Mac
+   (in Wasm Hello it's `kHelloStr`, the Pascal string `DrawString`
+   paints — a byte array whose first byte is the length, so update
+   that when you change the characters).
+4. Click **Build & Run** again. About a second later the Mac
    reboots with your change applied — no fork, no push, no
-   toolchain.
+   toolchain install.
 5. That's it. Your edit lived only in your browser; nothing was
    sent to a server.
 
-Edits persist across page reloads (IndexedDB). "Download as zip"
-bags your whole working tree. **Build** (without "Run") gives you a
-`.bin` you can run in any Basilisk II.
+Edits persist across page reloads (IndexedDB). The toolbar's
+**Download** button (also **File → Download .zip**, ⌘S) saves the
+current project's sources as a `.zip`; **Share** copies a URL that
+reopens the project with your edits. **Build** (without "Run")
+downloads a MacBinary `.bin` you can run in any Basilisk II. The
+[handbook](./docs/HANDBOOK.md) covers every button and shortcut.
 
 ## Your first code contribution
 
 From fork to live page in one afternoon. The in-browser pipeline
-compiles every sample directly in the visitor's tab — no
-cross-compile in CI, no Docker, no precompiled binaries to vendor.
+compiles every sample directly in the visitor's tab, so you don't
+need Retro68, Docker, or a cross-compile step to work on a sample.
+CI uses Node 20; any current Node LTS works locally (on Node 24 the
+`wasm-rez` stack test needs a larger `--stack-size`; the test
+spawns its child process with that flag, so there's nothing to set).
 
 1. **Fork and clone.**
    ```sh
@@ -43,16 +53,23 @@ cross-compile in CI, no Docker, no precompiled binaries to vendor.
    ```sh
    npm run dev        # http://localhost:5173
    ```
+   To boot the Mac locally (not just the editor), also run
+   `npm run fetch:emulator` and build the boot disk once — see
+   [First-time setup](./docs/DEVELOPMENT.md#first-time-setup).
 
 3. **Make a change.** A safe first target: open
-   `src/app/wasm-hello/hello.c`, find the `DrawString` call, change
-   the message. Save the file. Hard-reload the tab, pick **Wasm
-   Hello**, click Build & Run — your new string is on the screen.
+   `src/app/wasm-hello/hello.c`, find `kHelloStr` (the Pascal
+   string `DrawString` paints), change the characters and the
+   leading length byte. Save the file.
+   Hard-reload the tab, pick **Wasm Hello**, click Build & Run —
+   your new string is on the screen. (If your browser already has
+   an edited copy of that project in IndexedDB, use the toolbar's
+   **Reset** to re-seed it from disk.)
 
 4. **Verify the build locally before pushing.**
    ```sh
-   npm run audit:wasm-e2e -- wasm-hello   # both .c + .r, ~1.5s
-   npm run test:unit                       # host C + JS tests
+   npm run audit:wasm-e2e -- wasm-hello   # .c + .r compile, a few seconds
+   npm run test:unit                       # JS pipeline unit tests
    ```
 
 5. **Push to a feature branch on your fork.**
@@ -64,17 +81,24 @@ cross-compile in CI, no Docker, no precompiled binaries to vendor.
    ```
 
 6. **Open a PR** from your fork's branch to `khawkins98/classic-vibe-mac:main`.
-   CI runs the wasm-shelf audit and the unit tests (~3 min).
+   The PR template asks for a summary, a type, and a test plan. CI
+   runs, in a few minutes: unit tests, the wasm-shelf compile audit,
+   Playwright e2e, a markdown link check, and the full site build
+   (boot disk + Vite). The vision-LLM tests are skipped on fork PRs.
 
-7. **Once CI is green, squash-merge.** The deploy job publishes to
-   GitHub Pages. Your change is live at your fork's Pages URL.
+7. **A maintainer squash-merges once CI is green.** The push to
+   `main` triggers the deploy job, which publishes to GitHub Pages.
+   (To preview on your own fork first, enable Pages on the fork —
+   the same workflow deploys from your fork's `main`.)
 
-Adding a *new* sample (rather than editing an existing one) is its
-own recipe — see
-[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md) for
-the third-party-app path, or
-[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md) for the general
-flow.
+Adding a *new* sample (rather than editing an existing one) takes
+four registrations: the source under `src/app/wasm-<name>/`, a
+`SEED_FILES` entry in `src/web/vite.config.ts`, a `SAMPLE_PROJECTS`
+entry in `src/web/src/playground/types.ts`, and a `PICKER_ENTRIES`
+blurb in `src/web/src/projectPicker.ts`. The step-by-step is in
+[`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md#add-a-new-sample-to-the-shelf);
+for porting a third-party period app, see
+[`docs/VENDORING-A-MAC-APP.md`](./docs/VENDORING-A-MAC-APP.md).
 
 For the full iteration-loop reference and common-task recipes, see
 [`docs/DEVELOPMENT.md`](./docs/DEVELOPMENT.md). For the commit
@@ -86,10 +110,12 @@ message format this project uses (Conventional Commits), see
 ## Branching
 
 - Branch from `main` for each piece of work
-- Use short, descriptive branch names. Conventional prefixes the
-  project uses today: `feat/<thing>`, `fix/<thing>`, `docs/<thing>`,
-  `chore/<thing>`, `refactor/<thing>`, `spike/<thing>` (research,
-  do-not-merge).
+- Use short, descriptive, kebab-case branch names. A type prefix
+  (`feat/`, `fix/`, `docs/`, `chore/`, `refactor/`) is welcome but
+  not required — most branches in practice are a bare slug
+  (`open-quickly`), optionally led by the issue number
+  (`256-glypha-heap-size`). Use `spike/<thing>` for research branches
+  that won't be merged. `dependabot/…` branches are automated.
 - Never commit directly to `main`. Open a PR.
 
 For the multi-agent dispatch hygiene the project has converged on
@@ -99,8 +125,15 @@ five-reviewer Epic pass), see
 
 ## Commit messages — Conventional Commits
 
-All commits follow the [Conventional Commits](https://www.conventionalcommits.org/)
-spec:
+Commit subjects on `main` follow the
+[Conventional Commits](https://www.conventionalcommits.org/) spec.
+Because every PR is squash-merged, **the PR title becomes the commit
+subject on `main`** — so the title is the thing to get right; commits
+on your branch can be as messy as you like. Nothing enforces this
+automatically, and a stretch of history from May 2026 drifted to
+`area: summary` subjects (`playground: …`, `wasm-glypha3: …`) or
+bare sentences (`Add …`). Please don't copy those; use a type, and
+put the area in the scope instead: `feat(playground): …`.
 
 ```
 <type>(<optional scope>): <short summary>
@@ -121,12 +154,16 @@ Common types:
 - `ci` — CI/CD pipeline changes
 - `build` — build system or external dependency changes
 
+`test` is singular — `tests: …` doesn't parse as a type. Common
+scopes: `playground`, `samples`, `wasm-<name>`, `deps`, `ci`.
+Dependabot PRs are configured to title themselves `chore(deps): …`.
+
 Examples:
 
 ```
-feat(builder): pack compiled binary into HFS disk image
-fix(ci): use Retro68 release tag instead of main
-docs: link PRD from README
+feat(playground): Open Quickly (⌘P) fuzzy file-jump palette
+fix(wasm-notepad): define FALSE/TRUE locally so in-browser compile works
+docs: recipe for vendoring a period Mac app
 ```
 
 Use `!` after the type or a `BREAKING CHANGE:` footer for breaking changes:
@@ -140,24 +177,30 @@ feat(api)!: rename disk image output path
 - Open a PR against `main` for any non-trivial change
 - Keep PRs focused — one logical change per PR when practical
 - Include a brief description of *why*, not just *what*
-- Link related issues
+- Link related issues (`closes #123` in the body auto-closes on merge)
+- Fill in the PR template's test plan
 
 ### Merging
 
-- **Squash and merge** is the default for larger PRs or any branch with
-  noisy work-in-progress commits. The squash commit message must itself
-  follow Conventional Commits — this keeps `main`'s history clean and
-  changelog-friendly.
-- For small PRs that already consist of a single well-formed Conventional
-  Commit, a regular merge is fine.
-- Avoid merge commits from `main` into feature branches; rebase instead.
+- **Squash and merge**, always. `main` has no merge commits; every
+  commit on it is one PR, with the PR number appended to the subject.
+  The squash subject (the PR title) must follow Conventional Commits.
+- To catch up with `main`, rebase your branch rather than merging
+  `main` into it.
 
 ## Before opening a PR
 
 - Make sure the build passes locally (or in CI on your branch). For
   `wasm-*` sample changes, run `npm run audit:wasm-e2e -- <sample>`
-  — the combined `.c` + `.r` audit catches most regressions in ~1.5s
-- Update `README.md` / `PRD.md` if behavior or architecture changed
+  — the combined `.c` + `.r` audit catches most regressions in
+  seconds. Run `npm run test:unit` for anything touching the host C
+  or the JS pipeline modules
+- Update `README.md` if behavior changed, and
+  [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) /
+  [`docs/HOW-IT-WORKS.md`](./docs/HOW-IT-WORKS.md) if the architecture
+  or build pipeline changed
+- Add an entry under `[Unreleased]` in `CHANGELOG.md` for
+  user-visible changes
 - **Update [`docs/HANDBOOK.md`](./docs/HANDBOOK.md) when a user-facing
   thing changes** — a new menu item, a new keyboard shortcut, a new
   toolbar button, a new pane, a behavioural change to Build & Run, a
