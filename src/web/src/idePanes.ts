@@ -22,7 +22,7 @@
 // import the bundle and reach for the global at runtime. Same pattern as
 // projectPicker / helpPalette / build-explainer.
 import "winbox/dist/winbox.bundle.min.js";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 import { SAMPLE_PROJECTS, complexityStars } from "./playground/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -272,6 +272,9 @@ export function mountIdePanes(): IdePaneHandles {
       class: ["no-close", "no-full", "cvm-mac-winbox", s.cssClass],
     });
     enableShade(wb);
+    // Docked panes: named landmark regions + keyboard-operable
+    // title-bar controls; not dialogs (no Escape-to-close / focus move).
+    enableWindowA11y(wb);
     handles[s.key] = wb;
   }
 

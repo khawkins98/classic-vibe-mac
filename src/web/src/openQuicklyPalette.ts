@@ -44,6 +44,8 @@ export function openOpenQuickly(): void {
   const files = collectProjectFiles();
   if (files.length === 0) return;
 
+  // Remember the opener so focus can go back there on close.
+  const opener = document.activeElement as HTMLElement | null;
   const overlay = document.createElement("div");
   overlay.className = "cvm-openquickly-overlay";
   overlay.innerHTML = /* html */ `
@@ -51,11 +53,16 @@ export function openOpenQuickly(): void {
       <input
         type="text"
         class="cvm-openquickly__input"
+        role="combobox"
+        aria-label="File name"
+        aria-autocomplete="list"
+        aria-expanded="true"
+        aria-controls="cvm-openquickly-list"
         placeholder="Open Quickly: type a filename…"
         autocomplete="off"
         spellcheck="false"
       />
-      <ul class="cvm-openquickly__list" role="listbox"></ul>
+      <ul class="cvm-openquickly__list" id="cvm-openquickly-list" role="listbox" aria-label="Matching files"></ul>
       <div class="cvm-openquickly__hint">
         <kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>↵</kbd> open · <kbd>esc</kbd> dismiss
       </div>
@@ -73,9 +80,14 @@ export function openOpenQuickly(): void {
     list.innerHTML = entries
       .map(
         (e, i) =>
-          `<li class="cvm-openquickly__row${i === cursor ? " cvm-openquickly__row--active" : ""}" data-i="${i}" role="option">${escapeHtml(e.filename)}</li>`,
+          `<li class="cvm-openquickly__row${i === cursor ? " cvm-openquickly__row--active" : ""}" id="cvm-openquickly-opt-${i}" data-i="${i}" role="option" aria-selected="${i === cursor}">${escapeHtml(e.filename)}</li>`,
       )
       .join("");
+    if (entries.length > 0) {
+      input.setAttribute("aria-activedescendant", `cvm-openquickly-opt-${cursor}`);
+    } else {
+      input.removeAttribute("aria-activedescendant");
+    }
     // Scroll active row into view if list is taller than the visible
     // area (e.g. user pressed ↓ past the bottom).
     list.querySelector<HTMLLIElement>(".cvm-openquickly__row--active")
@@ -100,6 +112,9 @@ export function openOpenQuickly(): void {
     overlay.remove();
     document.removeEventListener("keydown", onDocKey, true);
     active = null;
+    if (opener && opener !== document.body && document.contains(opener)) {
+      try { opener.focus(); } catch { /* unfocusable now */ }
+    }
   }
 
   function commit(): void {
@@ -136,6 +151,12 @@ export function openOpenQuickly(): void {
     if (e.key === "Escape") {
       e.preventDefault();
       close();
+      return;
+    }
+    // Modal: the input is the only focus stop, so keep Tab inside.
+    if (e.key === "Tab") {
+      e.preventDefault();
+      input.focus();
       return;
     }
     if (e.key === "Enter") {
