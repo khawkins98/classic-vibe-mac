@@ -13,7 +13,7 @@
  */
 
 import "winbox/dist/winbox.bundle.min.js";
-import { enableShade } from "./winboxChrome";
+import { enableShade, enableWindowA11y } from "./winboxChrome";
 import {
   getOptLevel,
   setOptLevel,
@@ -55,6 +55,7 @@ export function openPreferences(): void {
     },
   });
   enableShade(wb);
+  enableWindowA11y(wb, { dialog: true, initialFocus: "#cvm-prefs-opt-level" });
 
   const detach = wireControls(content);
 

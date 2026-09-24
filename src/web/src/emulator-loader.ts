@@ -809,6 +809,14 @@ export function mountCanvas(
   canvas.height = screen.height;
   canvas.className = "emulator-canvas";
   canvas.tabIndex = 0;
+  // The canvas is an interactive surface (it takes mouse + keyboard
+  // input for the emulated Mac), so expose it as an application region
+  // with a name rather than leaving an unlabelled focus stop.
+  canvas.setAttribute("role", "application");
+  canvas.setAttribute(
+    "aria-label",
+    "Emulated Macintosh screen (System 7.5.5). Keyboard and mouse input go to the Mac while this is focused.",
+  );
   mount.appendChild(canvas);
   return canvas;
 }

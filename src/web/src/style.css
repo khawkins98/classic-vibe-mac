@@ -23,6 +23,9 @@
   --ink: #000000;
   --paper: #ffffff;
   --selection: #0000aa;
+  /* Secondary text. --shadow (#666) is only ~3.6:1 on platinum, below
+     WCAG AA for small text; this darker grey clears 5:1 on #ccc. */
+  --ink-muted: #4d4d4d;
   /* Chrome/border aliases used by the tab bar and other widget chrome. */
   --chrome: #cccccc;   /* same as --platinum; window-chrome fill */
   --border: #808080;   /* medium-gray border for widget outlines */
@@ -125,7 +128,7 @@ body {
    a discoverable About shortcut. Slightly muted so it doesn't compete
    with the clock for visual weight. */
 #cvm-menubar-version {
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 #cvm-menubar-version:hover {
   color: var(--paper);
@@ -196,7 +199,7 @@ body {
 }
 .cvm-menu-dropdown__shortcut {
   flex: 0 0 auto;
-  color: var(--shadow);
+  color: var(--ink-muted);
   font-family: var(--font-chrome);
   font-size: 11.5px;
   margin-left: auto;
@@ -495,7 +498,7 @@ body.cvm-paused .emulator-canvas {
      toggles on/off. */
   min-width: 80px;
   text-align: right;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 
 .emulator-caption__status--paused {
@@ -997,7 +1000,7 @@ body.cvm-paused .emulator-canvas {
 }
 
 .cvm-pg-button:disabled {
-  color: var(--shadow);
+  color: var(--ink-muted);
   cursor: default;
 }
 
@@ -1046,7 +1049,7 @@ body.cvm-paused .emulator-canvas {
   display: none;
   font-family: var(--font-chrome);
   font-size: 11px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   margin: 8px 0 0;
 }
 
@@ -1100,7 +1103,7 @@ body.cvm-paused .emulator-canvas {
 .cvm-pg-asm-stderr-wrap > summary {
   cursor: pointer;
   padding: 4px 0;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-pg-asm-stderr {
   background: #fff7e6;
@@ -1304,7 +1307,7 @@ body.cvm-paused .emulator-canvas {
   border: 1px solid var(--shadow);
   font-family: var(--font-chrome);
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   padding: 1px 7px;
   height: 18px;
   cursor: default;
@@ -1400,7 +1403,7 @@ body.cvm-paused .emulator-canvas {
   font-size: 11px;
 }
 .cvm-pg-routines-label {
-  color: var(--shadow);
+  color: var(--ink-muted);
   white-space: nowrap;
 }
 .cvm-pg-routines-select {
@@ -1598,7 +1601,7 @@ body.cvm-paused .emulator-canvas {
   padding-top: 6px;
   border-top: 1px solid var(--shadow);
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   text-align: center;
 }
 .cvm-openquickly__hint kbd {
@@ -1620,7 +1623,7 @@ body.cvm-paused .emulator-canvas {
   font-size: 14px;
   font-weight: bold;
   line-height: 18px;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-pg-tab--new:hover {
   background: var(--platinum-light);
@@ -1870,7 +1873,7 @@ body.cvm-paused .emulator-canvas {
   margin: 0;
   font-size: 10px;
   line-height: 1.5;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-files__hint a {
   color: var(--accent, #336699);
@@ -1893,7 +1896,7 @@ body.cvm-paused .emulator-canvas {
   margin: 0 0 12px;
   font-family: var(--font-body);
   font-size: 12px;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-picker__grid {
   display: grid;
@@ -1943,7 +1946,7 @@ body.cvm-paused .emulator-canvas {
 .cvm-picker__desc {
   font-size: 10px;
   font-family: var(--font-body);
-  color: var(--shadow);
+  color: var(--ink-muted);
   line-height: 1.5;
 }
 .cvm-picker__rule {
@@ -1973,7 +1976,7 @@ body.cvm-paused .emulator-canvas {
 .cvm-picker__note {
   font-family: var(--font-body);
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   margin-left: auto;
 }
 
@@ -1993,7 +1996,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-help__tagline {
   margin: 0 0 14px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   font-style: italic;
 }
 .cvm-help h3 {
@@ -2024,7 +2027,7 @@ body.cvm-paused .emulator-canvas {
 .cvm-help__credit {
   margin: 18px 0 4px;
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   border-top: 1px solid var(--shadow);
   padding-top: 8px;
 }
@@ -2047,7 +2050,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-help__kbd td:first-child {
   white-space: nowrap;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-help__kbd kbd {
   font-family: var(--font-chrome);
@@ -2061,7 +2064,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-help__kbd-note {
   font-size: 10.5px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   margin-top: 4px;
 }
 
@@ -2131,7 +2134,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-welcome__card-stars {
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   letter-spacing: 1px;
 }
 .cvm-welcome__card-blurb {
@@ -2160,7 +2163,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-welcome__footnote {
   font-size: 11px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   margin: 0 0 12px;
 }
 .cvm-welcome__footnote a {
@@ -2175,7 +2178,7 @@ body.cvm-paused .emulator-canvas {
 }
 .cvm-welcome__again {
   font-size: 11px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2368,7 +2371,7 @@ body[data-active-pane="editor"]
      where the recessed-paper border only appears on the focused
      window. */
   border-color: transparent !important;
-  color: var(--shadow) !important;
+  color: var(--ink-muted) !important;
 }
 
 /* Build-progress dialog — Mac OS 8 "File Copy"-style window. The
@@ -2594,7 +2597,7 @@ body[data-active-pane="editor"]
 .cvm-about__credit {
   margin-top: 10px;
   font-size: 11px;
-  color: var(--shadow);
+  color: var(--ink-muted);
   border-top: 1px solid var(--shadow);
   padding-top: 8px;
 }
@@ -2609,7 +2612,7 @@ body[data-active-pane="editor"]
   padding: 6px 10px;
 }
 .cvm-about__build dt {
-  color: var(--shadow);
+  color: var(--ink-muted);
   font-weight: bold;
 }
 .cvm-about__build dd {
@@ -2652,7 +2655,7 @@ body[data-active-pane="editor"]
   gap: 2px;
 }
 .cvm-prefs__label small {
-  color: var(--shadow);
+  color: var(--ink-muted);
   font-size: 10.5px;
 }
 .cvm-prefs__select {
@@ -2946,7 +2949,7 @@ body[data-active-pane="editor"]
   font-weight: bold;
 }
 .cvm-output__log-warn {
-  color: #a07a00;
+  color: #7a5c00; /* was #a07a00 (~3.7:1 on paper); darkened for AA */
   font-weight: bold;
 }
 /* Clickable diagnostic entry inside the Build log. Looks like a
@@ -2983,7 +2986,7 @@ body[data-active-pane="editor"]
   background: var(--platinum-light);
   font-size: 11px;
   line-height: 1.5;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-output__hint strong {
   color: var(--ink);
@@ -3292,7 +3295,7 @@ body[data-active-pane="editor"]
 .cvm-tt__include {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-tt__sig {
   margin: 4px 0;
@@ -3317,7 +3320,7 @@ body[data-active-pane="editor"]
   padding-top: 4px;
   border-top: 1px dotted var(--shadow);
   font-size: 10.5px;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-tt__see-also-label {
   font-family: var(--font-chrome);
@@ -3356,7 +3359,7 @@ body[data-active-pane="editor"]
 .cvm-toolbox-ref__include {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--shadow);
+  color: var(--ink-muted);
 }
 .cvm-toolbox-ref__sig {
   margin: 6px 0;
@@ -3406,7 +3409,7 @@ body[data-active-pane="editor"]
   text-decoration: none;
 }
 .cvm-toolbox-ref__see-also-stub {
-  color: var(--shadow);
+  color: var(--ink-muted);
   font-style: italic;
 }
 .cvm-toolbox-ref__footer {
@@ -3415,5 +3418,45 @@ body[data-active-pane="editor"]
   border-top: 1px dotted var(--shadow);
   font-size: 10.5px;
   font-style: italic;
-  color: var(--shadow);
+  color: var(--ink-muted);
+}
+
+/* --- Accessibility: keyboard focus rings ---------------------------- */
+/* Classic-Mac 1px dotted ink ring for keyboard focus on chrome widgets
+   that didn't carry their own :focus-visible style. Mouse clicks don't
+   trigger :focus-visible, so the System 7 look is unchanged for pointer
+   users. */
+.cvm-picker__card:focus-visible,
+.cvm-picker__action:focus-visible,
+.cvm-welcome__try:focus-visible,
+.cvm-welcome__cta:focus-visible,
+.cvm-files__btn:focus-visible,
+.cvm-files__select:focus-visible,
+.cvm-output__tab:focus-visible,
+.cvm-output__btn:focus-visible,
+.emulator-caption__btn:focus-visible,
+.cvm-mac-reserved-keys-note__close:focus-visible,
+.cvm-mac-winbox .wb-control > span:focus-visible,
+.cvm-about a:focus-visible,
+.cvm-help a:focus-visible,
+.cvm-welcome a:focus-visible,
+.cvm-picker a:focus-visible,
+.cvm-files a:focus-visible,
+.cvm-output a:focus-visible,
+.cvm-prefs select:focus-visible,
+.cvm-prefs input:focus-visible {
+  outline: 1px dotted var(--ink);
+  outline-offset: 2px;
+}
+/* The emulator canvas suppresses its outline (it'd frame the 1-bit
+   display on every click). Keyboard users tabbing in still need to see
+   that keystrokes now go to the Mac, so draw an inset ring then. */
+.emulator-canvas:focus-visible {
+  outline: 2px solid var(--selection);
+  outline-offset: -2px;
+}
+/* Palette bodies get tabindex=-1 so focus can land there on open; no
+   ring for that programmatic focus. */
+.cvm-mac-winbox .wb-body:focus {
+  outline: none;
 }
