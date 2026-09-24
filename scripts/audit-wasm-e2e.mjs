@@ -62,9 +62,11 @@ if (allSamples.length === 0) {
  * We collect each into a Map keyed by sample name.
  */
 function runAudit(label, scriptName) {
-  const args = [join(REPO, "scripts", scriptName)];
+  // --stack-size: Node 24's default V8 stack is too small for wasm-rez's
+  // recursive evaluator on Glypha's .r (see LEARNINGS, 2026-09-24).
+  const args = ["--stack-size=2000", join(REPO, "scripts", scriptName)];
   if (filter) args.push(filter);
-  const res = spawnSync("node", args, { encoding: "utf8" });
+  const res = spawnSync(process.execPath, args, { encoding: "utf8" });
   const lines = (res.stdout || "").split("\n");
   const out = new Map();
   for (const line of lines) {
