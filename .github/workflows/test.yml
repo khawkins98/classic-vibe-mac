@@ -10,7 +10,7 @@ jobs:
     name: unit (host C + JS preprocessor)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
@@ -38,7 +38,7 @@ jobs:
     # toolchain in src/web/public/wasm-cc1/. Cheap (~5s wall on
     # GH runners) — runs every PR.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
@@ -52,7 +52,7 @@ jobs:
     name: e2e (playwright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
